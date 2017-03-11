@@ -57,7 +57,9 @@ static unsigned char CTPM_FW_FT3267[] = {
 	//#include "ASUS_HADES_3267_0x05_NON16CH_20161011_app.cfg"
 	//#include "ASUS_HADES_3267_0x06_NON16CH_20161013_app.cfg"
 	//#include "ASUS_HADES_3267_0x07_NON16CH_20161018_app.cfg"
-	  #include "ASUS_HADES_3267_0x08_NON16CH_20161123_app.cfg"
+	//#include "ASUS_HADES_3267_0x08_NON16CH_20161123_app.cfg"
+	//#include "ASUS_HADES_3267_0x09_NON16CH_20170109_app.cfg"
+	  #include "ASUS_HADES_3267_0x0A_NON16CH_20170213_app.cfg"
 };
 //static unsigned char *CTPM_FW = NULL;
 
