@@ -2043,7 +2043,8 @@ static void msm_vfe_iommu_fault_handler(struct iommu_domain *domain,
 		}
 
 		mutex_lock(&vfe_dev->core_mutex);
-		if (vfe_dev->vfe_open_cnt > 0) {
+		if (vfe_dev->vfe_open_cnt > 0 &&
+			(atomic_read(&vfe_dev->error_info.overflow_state) != OVERFLOW_DETECTED)) {
 			pr_err("%s: overflow_state = %d\n",
 				__func__, atomic_read(&vfe_dev->error_info.overflow_state));
 			atomic_set(&vfe_dev->error_info.overflow_state,
@@ -2052,8 +2053,9 @@ static void msm_vfe_iommu_fault_handler(struct iommu_domain *domain,
 				__func__, iova);
 			msm_isp_process_iommu_page_fault(vfe_dev);
 		} else {
-			pr_err("%s: no handling, vfe open cnt = %d\n",
-				__func__, vfe_dev->vfe_open_cnt);
+			pr_err("%s: no handling, vfe open cnt = %d, overflow_state = %d\n",
+				__func__, vfe_dev->vfe_open_cnt, atomic_read(&vfe_dev->error_info.overflow_state));
+
 		}
 		mutex_unlock(&vfe_dev->core_mutex);
 	} else {

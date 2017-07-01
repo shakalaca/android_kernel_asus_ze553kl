@@ -119,6 +119,10 @@ struct dsi_panel_cmds alpm_on_40nits_cmds;//for tm panel
 struct dsi_panel_cmds hbm_on_cmds;
 struct dsi_panel_cmds hbm_off_cmds;
 /*asus high brightness mode display---*/
+/*asus bsp brightness pwm pulse+++*/
+struct dsi_panel_cmds tm_bkl_pwm_4pulse_cmds;//for tm panel 
+struct dsi_panel_cmds tm_bkl_pwm_6pulse_cmds;//for tm panel
+/*asus bsp brightness pwm pulse---*/
 
 void set_tcon_cmd(char *cmd, short len)
 {
@@ -861,6 +865,17 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 		level1 = level;
 	else
 		level1 = level/16;
+
+	if(TM_PANEL == asus_lcd_id){
+		if((bkl_level_hbm <= 6) && (level1 > 6)){
+			pr_info("%s tm_bkl_pwm_6pulse_cmds\n",__func__);
+			mdss_dsi_panel_cmds_send(ctrl, &tm_bkl_pwm_6pulse_cmds, CMD_REQ_COMMIT);
+		}else if((bkl_level_hbm > 6) && (level1 <= 6)){
+			pr_info("%s tm_bkl_pwm_4pulse_cmds\n",__func__);
+			mdss_dsi_panel_cmds_send(ctrl, &tm_bkl_pwm_4pulse_cmds, CMD_REQ_COMMIT);
+		}
+	}
+
 	led_pwm1[1] = (unsigned char)level1;
 
 	memset(&cmdreq, 0, sizeof(cmdreq));
@@ -1518,7 +1533,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 			(pinfo->mipi.boot_mode != pinfo->mipi.mode))
 		on_cmds = &ctrl->post_dms_on_cmds;
 
-	pr_debug("%s: ndx=%d cmd_cnt=%d\n", __func__,
+	pr_info("%s: ndx=%d cmd_cnt=%d\n", __func__,
 				ctrl->ndx, on_cmds->cmd_cnt);
 
 	if (on_cmds->cmd_cnt)
@@ -1532,6 +1547,8 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	/*need not set cabc_mode for ZE553KL*/
 	if(ASUS_ZE553KL != asus_project_id)
 		set_tcon_cmd(cabc_mode, ARRAY_SIZE(cabc_mode));
+	if(TM_PANEL == asus_lcd_id)
+		bkl_level_hbm = 255;
 end:
 	pr_debug("%s:-\n", __func__);
 	return ret;
@@ -3226,6 +3243,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 			"qcom,mdss-dsi-alpm-on-40nits-command", "");
 		mdss_dsi_parse_dcs_cmds(np, &alpm_on_5nits_cmds,
 			"qcom,mdss-dsi-alpm-on-5nits-command", "");
+		mdss_dsi_parse_dcs_cmds(np, &tm_bkl_pwm_4pulse_cmds,
+			"qcom,mdss-dsi-bkl-pwm-4pulse-command", "");
+		mdss_dsi_parse_dcs_cmds(np, &tm_bkl_pwm_6pulse_cmds,
+			"qcom,mdss-dsi-bkl-pwm-6pulse-command", "");
 	}
 	mdss_dsi_parse_dcs_cmds(np, &alpm_off_cmds,
 		"qcom,mdss-dsi-alpm-off-command", "");
