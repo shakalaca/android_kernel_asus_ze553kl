@@ -655,7 +655,10 @@ int rkpreisp_request_sleep(struct spi_rk_preisp_data *pdata, int32_t mode)
 
     mutex_lock(&pdata->wake_sleep_lock);
     if (atomic_dec_return(&pdata->wake_sleep_cnt) == 0  ||  pdata->do_force_sleep) {
-	pdata->do_force_sleep=false;
+	if(pdata->do_force_sleep){
+               atomic_inc_return(&pdata->wake_sleep_cnt);
+               pdata->do_force_sleep=false;
+       }
         if (mode >= PREISP_SLEEP_MODE_MAX || mode < 0) {
             dev_warn(pdata->dev, "Unkown sleep mode %d\n", mode);
             return -1;
@@ -738,7 +741,10 @@ int rkpreisp_wakeup(struct spi_rk_preisp_data *pdata)
 
     mutex_lock(&pdata->wake_sleep_lock);
     if (atomic_inc_return(&pdata->wake_sleep_cnt) == 1   ||  pdata->do_force_sleep) {
-	pdata->do_force_sleep=false;
+	if(pdata->do_force_sleep){
+               atomic_dec_return(&pdata->wake_sleep_cnt);
+               pdata->do_force_sleep=false;
+       }
         if (pdata->powerdown_gpio > 0) {
             gpio_set_value(pdata->powerdown_gpio, pdata->powerdown_active);
         }
