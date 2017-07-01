@@ -88,17 +88,19 @@ static int spi_download_section(struct spi_device *spi,
 {
     int ret = 0;
 
-    dev_info(&spi->dev, "offset:%x,size:%x,addr:%x,"
+    dev_dbg(&spi->dev, "offset:%x,size:%x,addr:%x,"
             "wait_time:%x,timeout:%x,crc:%x,flag:%x,type:%x",
             sec->offset, sec->size, sec->load_addr, sec->wait_time,
             sec->timeout, sec->crc_16, sec->flag, sec->type);
     if (sec->size > 0) {
+
         ret = spi2apb_safe_write(spi, sec->load_addr,
                 (int32_t*)(data + sec->offset), sec->size);
         if (ret)
+        {
             return ret;
+		}
     }
-
     if (sec->flag & BOOT_FLAG_BOOT_REQUEST) {
         ret = spi_boot_request(spi, sec);
     } else if (sec->flag & BOOT_FLAG_READ_WAIT) {
@@ -117,7 +119,7 @@ static int spi_download_section(struct spi_device *spi,
  *
  * It returns zero on success, else a negative error code.
  **/
-int spi_download_fw(struct spi_device *spi, const char *fw_name)
+int spi_download_fw(struct spi_device *spi, const char *fw_name,uint32_t fw_speed,uint32_t normal_speed)
 {
     const struct rkl_header * head;
     const struct firmware *fw;
@@ -127,7 +129,7 @@ int spi_download_fw(struct spi_device *spi, const char *fw_name)
     if (fw_name == NULL)
         fw_name = RKL_DEFAULT_FW_NAME;
 
-    dev_info(&spi->dev, "before request firmware");
+    //dev_info(&spi->dev, "before request firmware");
     ret = request_firmware(&fw, fw_name, &spi->dev);
     if (ret) {
         dev_err(&spi->dev, "request firmware %s failed!", fw_name);
@@ -137,13 +139,15 @@ int spi_download_fw(struct spi_device *spi, const char *fw_name)
     head = (const struct rkl_header *) fw->data;
 
     dev_info(&spi->dev, "request firmware %s (version:%s) success!", fw_name, head->version);
-
+	spi->max_speed_hz = fw_speed;
+	dev_info(&spi->dev, "spi speed set to %d!", fw_speed);
     for (i = 0; i < head->section_count; i++) {
         ret = spi_download_section(spi, fw->data, &head->sections[i]);
         if (ret)
             break;
     }
-
+    dev_info(&spi->dev, "spi speed restore to %d!", normal_speed);
+	spi->max_speed_hz = normal_speed;
     release_firmware(fw);
     return ret;
 }

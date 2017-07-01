@@ -65,18 +65,18 @@ typedef struct _ST_INI_FILE_DATA
 	int iKeyValueLen;
 }ST_INI_FILE_DATA;
 //extern ST_INI_FILE_DATA g_st_ini_file_data[MAX_KEY_NUM];
-//extern int g_used_key_num;
+//extern int g_used_key_num_cap_sensors;
 
-int ini_get_key(char *filedata, char * section, char * key, char * value);
+int ini_get_key_cap_sensors(char *filedata, char * section, char * key, char * value);
 int ini_get_sections(char *filedata, unsigned char * sections[], int max);
 
 int  ini_split_section(char *section, char **name, char **index);
 //int  ini_join_section(char **section, char *name, char *index);
 
 int atoi(char *nptr);
-char * ini_str_trim_r(char * buf);
-char * ini_str_trim_l(char * buf);
+char * ini_str_trim_r_cap_sensors(char * buf);
+char * ini_str_trim_l_cap_sensors(char * buf);
 
-int init_key_data(void);
-int ini_get_key_data(char *filedata);
+int init_key_data_cap_sensors(void);
+int ini_get_key_data_cap_sensors(char *filedata);
 #endif

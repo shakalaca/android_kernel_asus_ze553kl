@@ -553,11 +553,12 @@ extern int asus_rf_id;
 extern int asus_fp_id;
 
 enum project_pcbid{
+	ASUS_ZD552KL_PHOENIX = 2,
 	ASUS_ZE553KL = 3,
 	ASUS_ZS550KL = 4,
-	ASUS_ZD552KL = 5,
 };
 
+#ifdef ZE553KL
 enum project_stage {
 	ASUS_EVB = 0,
 	ASUS_SR1 = 1,
@@ -567,6 +568,27 @@ enum project_stage {
 	ASUS_PR2  = 2,
 	ASUS_MP  = 7,
 };
+#elif defined ZD552KL_PHOENIX
+enum project_stage {
+	ASUS_EVB = 0,
+	ASUS_SR1 = 1,
+	ASUS_ER1 = 2,
+	ASUS_SR2 = 4,
+	ASUS_ER2 = 5,
+	ASUS_PR  = 6,
+	ASUS_MP  = 7,
+};
+#else
+enum project_stage {
+	ASUS_EVB = 0,
+	ASUS_SR1 = 1,
+	ASUS_PR2 = 3,
+	ASUS_SR2 = 4,
+	ASUS_ER  = 5,
+	ASUS_PR  = 6,
+	ASUS_MP  = 7,
+};
+#endif
 
 enum asus_fpid{
 	SYNAPTICS = 0,
@@ -575,9 +597,15 @@ enum asus_fpid{
 	UNKNOWN_FP_ID = 0xff,
 };
 
-//<ASUS-Lotta_Lu-2015/02/29> Porting ID Information ----
-
+#if defined(ZS550KL)
 //<ASUS-Jessie_Tian-20160517>recive RF ID+++
+enum project_rfid{
+	ASUS_WW = 0,
+	ASUS_CN = 2,
+	ASUS_UNKNOWN= 0xff,
+};
+//<ASUS-Jessie_Tian-20160517>recive RF ID---
+#elif defined(ZE553KL)
 enum project_rfid{
 	ASUS_WW = 0,
 	ASUS_CN = 2,
@@ -588,9 +616,19 @@ enum project_rfid{
 	ASUS_US_BR = 7,
 	ASUS_UNKNOWN= 0xff,
 };
-//<ASUS-Jessie_Tian-20160517>recive RF ID---
-
-
+#elif defined(ZD552KL_PHOENIX)
+enum project_rfid{
+	ASUS_WW = 0,
+	ASUS_IN_ID = 1,
+	ASUS_BR_US = 2,
+	ASUS_IN_ID_SKY77645 = 3,
+	ASUS_WW2 = 4,
+	ASUS_IN_ID2 =5,
+	ASUS_TW_CA = 8,
+	ASUS_CN_CA = 9,
+	ASUS_UNKNOWN= 0xff,
+};
+#endif
 
 #ifdef CONFIG_TRACING
 void tracing_on(void);
@@ -653,7 +691,7 @@ do {							\
 
 #define do_trace_printk(fmt, args...)					\
 do {									\
-	static const char *trace_printk_fmt				\
+	static const char *trace_printk_fmt __used			\
 		__attribute__((section("__trace_printk_fmt"))) =	\
 		__builtin_constant_p(fmt) ? fmt : NULL;			\
 									\
@@ -697,7 +735,7 @@ int __trace_printk(unsigned long ip, const char *fmt, ...);
  */
 
 #define trace_puts(str) ({						\
-	static const char *trace_printk_fmt				\
+	static const char *trace_printk_fmt __used			\
 		__attribute__((section("__trace_printk_fmt"))) =	\
 		__builtin_constant_p(str) ? str : NULL;			\
 									\
@@ -719,7 +757,7 @@ extern void trace_dump_stack(int skip);
 #define ftrace_vprintk(fmt, vargs)					\
 do {									\
 	if (__builtin_constant_p(fmt)) {				\
-		static const char *trace_printk_fmt			\
+		static const char *trace_printk_fmt __used		\
 		  __attribute__((section("__trace_printk_fmt"))) =	\
 			__builtin_constant_p(fmt) ? fmt : NULL;		\
 									\

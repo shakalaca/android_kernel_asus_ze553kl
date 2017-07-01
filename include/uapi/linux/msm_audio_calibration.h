@@ -54,7 +54,6 @@ extern int get_audiomode(void);
 #define AUDIO_SET_AUDIOWIZARD_FORCE_PRESET	_IOWR(CAL_IOCTL_MAGIC, \
  							221, void *)
 //sherry -- for audiowizard
-
 /* ASUS_BSP +++ */
 #define AUDIO_GET_HS_IMP			_IOWR(CAL_IOCTL_MAGIC, \
 							230, void *)

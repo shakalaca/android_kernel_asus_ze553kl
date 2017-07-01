@@ -326,7 +326,7 @@ module_param_named(
 	first_est_dump, fg_est_dump, int, S_IRUSR | S_IWUSR
 );
 
-static char *fg_batt_type= "asus_hades_4850mah_er";
+static char *fg_batt_type;
 module_param_named(
 	battery_type, fg_batt_type, charp, S_IRUSR | S_IWUSR
 );
@@ -338,8 +338,7 @@ module_param_named(
 
 struct fg_irq {
 	int			irq;
-	bool			disabled;
-	bool			wakeup;
+	unsigned long		disabled;
 };
 
 enum fg_soc_irq {
@@ -513,6 +512,7 @@ struct fg_chip {
 	bool			charge_done;
 	bool			resume_soc_lowered;
 	bool			vbat_low_irq_enabled;
+	bool			full_soc_irq_enabled;
 	bool			charge_full;
 	bool			hold_soc_while_full;
 	bool			input_present;
@@ -523,8 +523,6 @@ struct fg_chip {
 	bool			charging_disabled;
 	bool			use_vbat_low_empty_soc;
 	bool			fg_shutdown;
-	bool			use_soft_jeita_irq;
-	bool			allow_false_negative_isense;
 	struct delayed_work	optimize_full_work;
 	struct delayed_work	update_jeita_setting;
 	struct delayed_work	update_sram_data;
@@ -550,7 +548,6 @@ struct fg_chip {
 	int			prev_status;
 	int			health;
 	enum fg_batt_aging_mode	batt_aging_mode;
-	struct alarm		hard_jeita_alarm;
 	/* capacity learning */
 	struct fg_learning_data	learning_data;
 	struct alarm		fg_cap_learning_alarm;
@@ -571,8 +568,6 @@ struct fg_chip {
 	bool			jeita_hysteresis_support;
 	bool			batt_hot;
 	bool			batt_cold;
-	bool			batt_warm;
-	bool			batt_cool;
 	int			cold_hysteresis;
 	int			hot_hysteresis;
 	/* ESR pulse tuning */
@@ -1313,8 +1308,11 @@ static void fg_enable_irqs(struct fg_chip *chip, bool enable)
 	if (enable) {
 		enable_irq(chip->soc_irq[DELTA_SOC].irq);
 		enable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
-		enable_irq(chip->soc_irq[FULL_SOC].irq);
-		enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+		if (!chip->full_soc_irq_enabled) {
+			enable_irq(chip->soc_irq[FULL_SOC].irq);
+			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			chip->full_soc_irq_enabled = true;
+		}
 		enable_irq(chip->batt_irq[BATT_MISSING].irq);
 		if (!chip->vbat_low_irq_enabled) {
 			enable_irq(chip->batt_irq[VBATT_LOW].irq);
@@ -1329,8 +1327,11 @@ static void fg_enable_irqs(struct fg_chip *chip, bool enable)
 	} else {
 		disable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
 		disable_irq_nosync(chip->soc_irq[DELTA_SOC].irq);
-		disable_irq_wake(chip->soc_irq[FULL_SOC].irq);
-		disable_irq_nosync(chip->soc_irq[FULL_SOC].irq);
+		if (chip->full_soc_irq_enabled) {
+			disable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			disable_irq_nosync(chip->soc_irq[FULL_SOC].irq);
+			chip->full_soc_irq_enabled = false;
+		}
 		disable_irq(chip->batt_irq[BATT_MISSING].irq);
 		if (chip->vbat_low_irq_enabled) {
 			disable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
@@ -2286,12 +2287,12 @@ static int get_prop_capacity(struct fg_chip *chip)
 
 	if (chip->charge_full){
 		/*when the heavy loading let the battery discharging, don't keep 100% any more*/
-		if(soc_raw_optimize(chip) <= 251){
+		if(soc_raw_optimize(chip) <= 253){
 			chip->charge_full = 0;	
 			pr_info("relax keep 100\n");
 		}
 		charge_full_status = 1;
-		pr_info("soc_raw:%d\n",soc_raw_optimize(chip));
+		pr_info_ratelimited("soc_raw:%d\n",soc_raw_optimize(chip));
 		return FULL_CAPACITY;
 	}
 
@@ -2392,7 +2393,7 @@ static int get_sram_prop_now(struct fg_chip *chip, unsigned int type)
 	if (type == FG_DATA_CURRENT)
 	{		
 		if((fg_data[type].value <= 5000) && (fg_data[type].value >= -5000)){
-			pr_debug("fake current :%d\n",fg_data[type].value);
+			pr_info("fake current :%d\n",fg_data[type].value);
 			return 0;
 		}
 	}	   
@@ -2443,25 +2444,6 @@ static int set_prop_sense_type(struct fg_chip *chip, int ext_sense_type)
 			EXTERNAL_SENSE_OFFSET);
 	if (rc) {
 		pr_err("failed to write profile rc=%d\n", rc);
-		return rc;
-	}
-
-	return 0;
-}
-
-#define IGNORE_FALSE_NEGATIVE_ISENSE_BIT	BIT(3)
-static int set_prop_ignore_false_negative_isense(struct fg_chip *chip,
-							bool ignore)
-{
-	int rc;
-
-	rc = fg_mem_masked_write(chip, EXTERNAL_SENSE_SELECT,
-			IGNORE_FALSE_NEGATIVE_ISENSE_BIT,
-			ignore ? IGNORE_FALSE_NEGATIVE_ISENSE_BIT : 0,
-			EXTERNAL_SENSE_OFFSET);
-	if (rc) {
-		pr_err("failed to %s isense false negative ignore rc=%d\n",
-				ignore ? "enable" : "disable", rc);
 		return rc;
 	}
 
@@ -3401,8 +3383,6 @@ static enum power_supply_property fg_power_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_CYCLE_COUNT_ID,
 	POWER_SUPPLY_PROP_HI_POWER,
-	POWER_SUPPLY_PROP_IGNORE_FALSE_NEGATIVE_ISENSE,
-	POWER_SUPPLY_PROP_ENABLE_JEITA_DETECTION,
 	POWER_SUPPLY_PROP_SOC_REPORTING_READY,
 };
 
@@ -3433,12 +3413,6 @@ static int fg_power_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = get_sram_prop_now(chip, FG_DATA_CURRENT);
-		break;
-	case POWER_SUPPLY_PROP_IGNORE_FALSE_NEGATIVE_ISENSE:
-		val->intval = !chip->allow_false_negative_isense;
-		break;
-	case POWER_SUPPLY_PROP_ENABLE_JEITA_DETECTION:
-		val->intval = chip->use_soft_jeita_irq;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		val->intval = get_sram_prop_now(chip, FG_DATA_VOLTAGE);
@@ -4214,6 +4188,13 @@ static void status_change_work(struct work_struct *work)
 			enable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
 			chip->vbat_low_irq_enabled = true;
 		}
+
+		if (!chip->full_soc_irq_enabled) {
+			enable_irq(chip->soc_irq[FULL_SOC].irq);
+			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			chip->full_soc_irq_enabled = true;
+		}
+
 		if (!!(chip->wa_flag & PULSE_REQUEST_WA) && capacity == 100)
 			fg_configure_soc(chip);
 	} else if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING) {
@@ -4222,6 +4203,12 @@ static void status_change_work(struct work_struct *work)
 			disable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
 			disable_irq_nosync(chip->batt_irq[VBATT_LOW].irq);
 			chip->vbat_low_irq_enabled = false;
+		}
+
+		if (chip->full_soc_irq_enabled) {
+			disable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			disable_irq_nosync(chip->soc_irq[FULL_SOC].irq);
+			chip->full_soc_irq_enabled = false;
 		}
 	}
 	fg_cap_learning_check(chip);
@@ -4441,67 +4428,6 @@ static int fg_power_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_UPDATE_NOW:
 		if (val->intval)
 			update_sram_data(chip, &unused);
-		break;
-	case POWER_SUPPLY_PROP_IGNORE_FALSE_NEGATIVE_ISENSE:
-		rc = set_prop_ignore_false_negative_isense(chip, !!val->intval);
-		if (rc)
-			pr_err("set_prop_ignore_false_negative_isense failed, rc=%d\n",
-							rc);
-		else
-			chip->allow_false_negative_isense = !val->intval;
-		break;
-	case POWER_SUPPLY_PROP_ENABLE_JEITA_DETECTION:
-		if (chip->use_soft_jeita_irq == !!val->intval) {
-			pr_debug("JEITA irq %s, ignore!\n",
-				chip->use_soft_jeita_irq ?
-				"enabled" : "disabled");
-			break;
-		}
-		chip->use_soft_jeita_irq = !!val->intval;
-		if (chip->use_soft_jeita_irq) {
-			if (chip->batt_irq[JEITA_SOFT_COLD].disabled) {
-				enable_irq(
-					chip->batt_irq[JEITA_SOFT_COLD].irq);
-				chip->batt_irq[JEITA_SOFT_COLD].disabled =
-								false;
-			}
-			if (!chip->batt_irq[JEITA_SOFT_COLD].wakeup) {
-				enable_irq_wake(
-					chip->batt_irq[JEITA_SOFT_COLD].irq);
-				chip->batt_irq[JEITA_SOFT_COLD].wakeup = true;
-			}
-			if (chip->batt_irq[JEITA_SOFT_HOT].disabled) {
-				enable_irq(
-					chip->batt_irq[JEITA_SOFT_HOT].irq);
-				chip->batt_irq[JEITA_SOFT_HOT].disabled = false;
-			}
-			if (!chip->batt_irq[JEITA_SOFT_HOT].wakeup) {
-				enable_irq_wake(
-					chip->batt_irq[JEITA_SOFT_HOT].irq);
-				chip->batt_irq[JEITA_SOFT_HOT].wakeup = true;
-			}
-		} else {
-			if (chip->batt_irq[JEITA_SOFT_COLD].wakeup) {
-				disable_irq_wake(
-					chip->batt_irq[JEITA_SOFT_COLD].irq);
-				chip->batt_irq[JEITA_SOFT_COLD].wakeup = false;
-			}
-			if (!chip->batt_irq[JEITA_SOFT_COLD].disabled) {
-				disable_irq_nosync(
-					chip->batt_irq[JEITA_SOFT_COLD].irq);
-				chip->batt_irq[JEITA_SOFT_COLD].disabled = true;
-			}
-			if (chip->batt_irq[JEITA_SOFT_HOT].wakeup) {
-				disable_irq_wake(
-					chip->batt_irq[JEITA_SOFT_HOT].irq);
-				chip->batt_irq[JEITA_SOFT_HOT].wakeup = false;
-			}
-			if (!chip->batt_irq[JEITA_SOFT_HOT].disabled) {
-				disable_irq_nosync(
-					chip->batt_irq[JEITA_SOFT_HOT].irq);
-				chip->batt_irq[JEITA_SOFT_HOT].disabled = true;
-			}
-		}
 		break;
 	case POWER_SUPPLY_PROP_STATUS:
 		chip->prev_status = chip->status;
@@ -4785,168 +4711,6 @@ static void cc_soc_store_work(struct work_struct *work)
 	}
 
 	fg_relax(&chip->cc_soc_wakeup_source);
-}
-
-#define HARD_JEITA_ALARM_CHECK_NS	10000000000
-static enum alarmtimer_restart fg_hard_jeita_alarm_cb(struct alarm *alarm,
-						ktime_t now)
-{
-	struct fg_chip *chip = container_of(alarm,
-			struct fg_chip, hard_jeita_alarm);
-	int rc, health = POWER_SUPPLY_HEALTH_UNKNOWN;
-	u8 regval;
-	bool batt_hot, batt_cold;
-	union power_supply_propval val = {0, };
-
-	if (!is_usb_present(chip)) {
-		pr_debug("USB plugged out, stop the timer!\n");
-		return ALARMTIMER_NORESTART;
-	}
-
-	rc = fg_read(chip, &regval, BATT_INFO_STS(chip->batt_base), 1);
-	if (rc) {
-		pr_err("read batt_sts failed, rc=%d\n", rc);
-		goto recheck;
-	}
-
-	batt_hot = !!(regval & JEITA_HARD_HOT_RT_STS);
-	batt_cold = !!(regval & JEITA_HARD_COLD_RT_STS);
-	if (batt_hot && batt_cold) {
-		pr_debug("Hot && cold can't co-exist\n");
-		goto recheck;
-	}
-
-	if ((batt_hot == chip->batt_hot) && (batt_cold == chip->batt_cold)) {
-		pr_debug("battery JEITA state not changed, ignore\n");
-		goto recheck;
-	}
-
-	if (batt_cold != chip->batt_cold) {
-		/* cool --> cold */
-		if (chip->batt_cool) {
-			chip->batt_cool = false;
-			chip->batt_cold = true;
-			health = POWER_SUPPLY_HEALTH_COLD;
-		} else if (chip->batt_cold) { /* cold --> cool */
-			chip->batt_cool = true;
-			chip->batt_cold = false;
-			health = POWER_SUPPLY_HEALTH_COOL;
-		}
-	}
-
-	if (batt_hot != chip->batt_hot) {
-		/* warm --> hot */
-		if (chip->batt_warm) {
-			chip->batt_warm = false;
-			chip->batt_hot = true;
-			health = POWER_SUPPLY_HEALTH_OVERHEAT;
-		} else if (chip->batt_hot) { /* hot --> warm */
-			chip->batt_hot = false;
-			chip->batt_warm = true;
-			health = POWER_SUPPLY_HEALTH_WARM;
-		}
-	}
-
-	if (health != POWER_SUPPLY_HEALTH_UNKNOWN) {
-		pr_debug("FG report battery health: %d\n", health);
-		val.intval = health;
-		rc = chip->batt_psy->set_property(chip->batt_psy,
-				POWER_SUPPLY_PROP_HEALTH, &val);
-		if (rc)
-			pr_err("Set batt_psy health: %d failed\n", health);
-	}
-
-recheck:
-	alarm_forward_now(alarm, ns_to_ktime(HARD_JEITA_ALARM_CHECK_NS));
-	return ALARMTIMER_RESTART;
-}
-
-#define BATT_SOFT_COLD_STS	BIT(0)
-#define BATT_SOFT_HOT_STS	BIT(1)
-static irqreturn_t fg_jeita_soft_hot_irq_handler(int irq, void *_chip)
-{
-	int rc;
-	struct fg_chip *chip = _chip;
-	u8 regval;
-	bool batt_warm;
-	union power_supply_propval val = {0, };
-
-	rc = fg_read(chip, &regval, INT_RT_STS(chip->batt_base), 1);
-	if (rc) {
-		pr_err("spmi read failed: addr=%03X, rc=%d\n",
-				INT_RT_STS(chip->batt_base), rc);
-		return IRQ_HANDLED;
-	}
-
-	batt_warm = !!(regval & BATT_SOFT_HOT_STS);
-	if (chip->batt_warm == batt_warm) {
-		pr_debug("warm state not change, ignore!\n");
-		return IRQ_HANDLED;
-	}
-
-	chip->batt_warm = batt_warm;
-	if (batt_warm) {
-		val.intval = POWER_SUPPLY_HEALTH_WARM;
-		chip->batt_psy->set_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_HEALTH, &val);
-		/* kick the alarm timer for hard hot polling */
-		rc = alarm_start_relative(&chip->hard_jeita_alarm,
-				ns_to_ktime(HARD_JEITA_ALARM_CHECK_NS));
-		if (rc)
-			pr_err("start alarm for hard HOT detection failed, rc=%d\n",
-									rc);
-	} else {
-		val.intval = POWER_SUPPLY_HEALTH_GOOD;
-		chip->batt_psy->set_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_HEALTH, &val);
-		/* cancel the alarm timer */
-		alarm_try_to_cancel(&chip->hard_jeita_alarm);
-	}
-
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t fg_jeita_soft_cold_irq_handler(int irq, void *_chip)
-{
-	int rc;
-	struct fg_chip *chip = _chip;
-	u8 regval;
-	bool batt_cool;
-	union power_supply_propval val = {0, };
-
-	rc = fg_read(chip, &regval, INT_RT_STS(chip->batt_base), 1);
-	if (rc) {
-		pr_err("spmi read failed: addr=%03X, rc=%d\n",
-				INT_RT_STS(chip->batt_base), rc);
-		return IRQ_HANDLED;
-	}
-
-	batt_cool = !!(regval & BATT_SOFT_COLD_STS);
-	if (chip->batt_cool == batt_cool) {
-		pr_debug("cool state not change, ignore\n");
-		return IRQ_HANDLED;
-	}
-
-	chip->batt_cool = batt_cool;
-	if (batt_cool) {
-		val.intval = POWER_SUPPLY_HEALTH_COOL;
-		chip->batt_psy->set_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_HEALTH, &val);
-		/* kick the alarm timer for hard cold polling */
-		rc = alarm_start_relative(&chip->hard_jeita_alarm,
-				ns_to_ktime(HARD_JEITA_ALARM_CHECK_NS));
-		if (rc)
-			pr_err("start alarm for hard COLD detection failed, rc=%d\n",
-									rc);
-	} else {
-		val.intval = POWER_SUPPLY_HEALTH_GOOD;
-		chip->batt_psy->set_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_HEALTH, &val);
-		/* cancel the alarm timer */
-		alarm_try_to_cancel(&chip->hard_jeita_alarm);
-	}
-
-	return IRQ_HANDLED;
 }
 
 #define SOC_FIRST_EST_DONE	BIT(5)
@@ -6114,17 +5878,12 @@ wait:
 	if (fg_debug_mask & FG_STATUS)
 		pr_info("battery id = %d\n",
 				get_sram_prop_now(chip, FG_DATA_BATT_ID));
-
 	profile_node = of_batterydata_get_best_profile(batt_node, "bms",
 							fg_batt_type);
-	if (IS_ERR_OR_NULL(profile_node)) {
-		rc = PTR_ERR(profile_node);
-		if (rc == -EPROBE_DEFER) {
-			goto reschedule;
-		} else {
-			pr_err("couldn't find profile handle rc=%d\n", rc);
-			goto no_profile;
-		}
+	if (!profile_node) {
+		pr_err("couldn't find profile handle\n");
+		rc = -ENODATA;
+		goto no_profile;
 	}
 
 	/* read rslow compensation values if they're available */
@@ -6365,8 +6124,8 @@ done:
 	if (chip->power_supply_registered)
 		power_supply_changed(&chip->bms_psy);
 	fg_relax(&chip->profile_wakeup_source);
-	pr_info("Battery SOC: %d, V: %duV\n", get_prop_capacity(chip),
-		fg_data[FG_DATA_VOLTAGE].value);
+	pr_info("Battery SOC: %d, V: %duV, C:%duA\n", get_prop_capacity(chip),
+		fg_data[FG_DATA_VOLTAGE].value,fg_data[FG_DATA_CURRENT].value);
 	complete_all(&chip->fg_reset_done);
 	return rc;
 no_profile:
@@ -7066,6 +6825,9 @@ static int fg_init_irqs(struct fg_chip *chip)
 				return rc;
 			}
 
+			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			chip->full_soc_irq_enabled = true;
+
 			if (!chip->use_vbat_low_empty_soc) {
 				rc = devm_request_irq(chip->dev,
 					chip->soc_irq[EMPTY_SOC].irq,
@@ -7101,7 +6863,6 @@ static int fg_init_irqs(struct fg_chip *chip)
 			}
 
 			enable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
-			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
 			if (!chip->use_vbat_low_empty_soc)
 				enable_irq_wake(chip->soc_irq[EMPTY_SOC].irq);
 			break;
@@ -7125,53 +6886,6 @@ static int fg_init_irqs(struct fg_chip *chip)
 			}
 			break;
 		case FG_BATT:
-			chip->batt_irq[JEITA_SOFT_COLD].irq =
-				spmi_get_irq_byname(chip->spmi, spmi_resource,
-						"soft-cold");
-			if (chip->batt_irq[JEITA_SOFT_COLD].irq < 0) {
-				pr_err("Unable to get soft-cold irq\n");
-				rc = -EINVAL;
-				return rc;
-			}
-			rc = devm_request_threaded_irq(chip->dev,
-					chip->batt_irq[JEITA_SOFT_COLD].irq,
-					NULL,
-					fg_jeita_soft_cold_irq_handler,
-					IRQF_TRIGGER_RISING |
-					IRQF_TRIGGER_FALLING |
-					IRQF_ONESHOT,
-					"soft-cold", chip);
-			if (rc < 0) {
-				pr_err("Can't request %d soft-cold: %d\n",
-					chip->batt_irq[JEITA_SOFT_COLD].irq,
-								rc);
-				return rc;
-			}
-			disable_irq(chip->batt_irq[JEITA_SOFT_COLD].irq);
-			chip->batt_irq[JEITA_SOFT_COLD].disabled = true;
-			chip->batt_irq[JEITA_SOFT_HOT].irq =
-				spmi_get_irq_byname(chip->spmi, spmi_resource,
-					"soft-hot");
-			if (chip->batt_irq[JEITA_SOFT_HOT].irq < 0) {
-				pr_err("Unable to get soft-hot irq\n");
-				rc = -EINVAL;
-				return rc;
-			}
-			rc = devm_request_threaded_irq(chip->dev,
-					chip->batt_irq[JEITA_SOFT_HOT].irq,
-					NULL,
-					fg_jeita_soft_hot_irq_handler,
-					IRQF_TRIGGER_RISING |
-					IRQF_TRIGGER_FALLING |
-					IRQF_ONESHOT,
-					"soft-hot", chip);
-			if (rc < 0) {
-				pr_err("Can't request %d soft-hot: %d\n",
-					chip->batt_irq[JEITA_SOFT_HOT].irq, rc);
-				return rc;
-			}
-			disable_irq(chip->batt_irq[JEITA_SOFT_HOT].irq);
-			chip->batt_irq[JEITA_SOFT_HOT].disabled = true;
 			chip->batt_irq[BATT_MISSING].irq = spmi_get_irq_byname(
 					chip->spmi, spmi_resource,
 					"batt-missing");
@@ -7243,7 +6957,6 @@ static void fg_cancel_all_works(struct fg_chip *chip)
 	cancel_delayed_work_sync(&chip->batt_profile_init);
 	cancel_delayed_work_sync(&chip->optimize_full_work);
 	alarm_try_to_cancel(&chip->fg_cap_learning_alarm);
-	alarm_try_to_cancel(&chip->hard_jeita_alarm);
 	if (!chip->ima_error_handling)
 		cancel_work_sync(&chip->ima_error_recovery_work);
 	cancel_work_sync(&chip->rslow_comp_work);
@@ -8414,7 +8127,7 @@ static void delayed_init_work(struct work_struct *work)
 		update_temp_data(&chip->update_temp_work.work);
 
 	if (!chip->use_otp_profile)
-		schedule_delayed_work(&chip->batt_profile_init, 0);
+		schedule_delayed_work(&chip->batt_profile_init, 8*HZ);
 
 	if (chip->ima_supported && fg_reset_on_lockup)
 		schedule_delayed_work(&chip->check_sanity_work,
@@ -8483,11 +8196,11 @@ static void create_gauge_proc_file(void)
 struct switch_dev batt_dev;
 static ssize_t batt_switch_name(struct switch_dev *sdev, char *buf)
 {
-	const char* bat_model = "C11P1612-";
+	const char* bat_model = "C11P1605-";
 	const char* bat_cell = "O-";
-	const char* bat_id = "01-";
-	const char* bat_profile= "0002-";
-	const char* bat_version= "1.1.1.93";
+	const char* bat_id = "03-";
+	const char* bat_profile= "0001-";
+	const char* bat_version= "10.30.0.28";
 
 	return sprintf(buf, "%s%s%s%s%s\n", bat_model, bat_cell, bat_id, bat_profile, bat_version);
 }
@@ -8592,8 +8305,6 @@ static int fg_probe(struct spmi_device *spmi)
 	INIT_WORK(&chip->cc_soc_store_work, cc_soc_store_work);
 	alarm_init(&chip->fg_cap_learning_alarm, ALARM_BOOTTIME,
 			fg_cap_learning_alarm_cb);
-	alarm_init(&chip->hard_jeita_alarm, ALARM_BOOTTIME,
-			fg_hard_jeita_alarm_cb);
 	init_completion(&chip->sram_access_granted);
 	init_completion(&chip->sram_access_revoked);
 	complete_all(&chip->sram_access_revoked);

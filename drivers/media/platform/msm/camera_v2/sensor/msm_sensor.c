@@ -122,7 +122,7 @@ int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_camera_i2c_client *sensor_i2c_client;
 	int rc = 0; //ASUS_BSP PJ_Ma+++
 
-	pr_err("%s : E\n", __func__); //ASUS_BSP PJ_Ma+++
+	CDBG("%s : E\n", __func__); //ASUS_BSP PJ_Ma+++
 	if (!s_ctrl) {
 		pr_err("%s:%d failed: s_ctrl %pK\n",
 			__func__, __LINE__, s_ctrl);
@@ -153,7 +153,7 @@ int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	rc = msm_camera_power_down(power_info, sensor_device_type,
 		sensor_i2c_client);
 
-	pr_err("%s : rc=(%d) X\n", __func__, rc);
+	CDBG("%s : rc=(%d) X\n", __func__, rc);
 	return rc;
 	//ASUS_BSP PJ_Ma---
 }
@@ -167,7 +167,7 @@ int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 	const char *sensor_name;
 	uint32_t retry = 0;
 
-	pr_err("%s : E\n", __func__); //ASUS_BSP PJ_Ma+++
+	CDBG("%s : E\n", __func__); //ASUS_BSP PJ_Ma+++
 	if (!s_ctrl) {
 		pr_err("%s:%d failed: %pK\n",
 			__func__, __LINE__, s_ctrl);
@@ -217,7 +217,7 @@ int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 		}
 	}
 
-	pr_err("%s : rc=(%d) X\n", __func__, rc); //ASUS_BSP PJ_Ma+++
+	CDBG("%s : rc=(%d) X\n", __func__, rc); //ASUS_BSP PJ_Ma+++
 	return rc;
 }
 
@@ -272,7 +272,7 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		return rc;
 	}
 
-	pr_err("%s: read id: 0x%x expected id 0x%x:\n",
+	CDBG("%s: read id: 0x%x expected id 0x%x:\n",
 			__func__, chipid, slave_info->sensor_id);
 	if (msm_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
 		pr_err("%s chip id %x does not match %x\n",
@@ -814,7 +814,7 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 		} else {
 			rc = -EFAULT;
 		}
-		clear_proc_pdaf_info();
+		//clear_proc_pdaf_info();
 		break;
 	case CFG_SET_STOP_STREAM_SETTING: {
 		struct msm_camera_i2c_reg_setting32 stop_setting32;

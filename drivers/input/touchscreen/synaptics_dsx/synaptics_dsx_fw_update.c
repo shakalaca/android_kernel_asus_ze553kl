@@ -42,12 +42,13 @@
 #include <linux/input/synaptics_dsx.h>
 #include "synaptics_dsx_core.h"
 
+#define BOE_FW_IHEX_NAME "synaptics/PR2463803-BOE-4004F315_0909.hex.bin"
+#define TM_FW_IHEX_NAME "synaptics/PR2486588-TM-4001F318_1018.hex.bin"
 //#define FW_IMAGE_NAME "synaptics/startup_fw_update.img"
-#define AQU_BOE_FW_IMAGE_NAME "synaptics/PR2431803-BOE-4004830A_0729.img"
-#define AQU_TM_FW_IMAGE_NAME "synaptics/PR2431034-TM-4001830B_0728.img"
+#define AQU_BOE_FW_IMAGE_NAME "synaptics/PR2463803-BOE-4004F315_0909.img"
+#define AQU_TM_FW_IMAGE_NAME "synaptics/PR2486588-TM-4001F318_1018.img"
 #define PISCES_BOE_FW_IMAGE_NAME "synaptics/Pisces_BOE_TD4300_PR2330212_80040301.img"
 #define PISCES_TM_FW_IMAGE_NAME "synaptics/Pisces_TM_TD4300_PR2347791_80010301.img"
-#define HADES_FW_IMAGE_NAME "synaptics/PR1959551-s3508r_hybrid_GestureOn_20160919.img"
 
 
 #define DO_STARTUP_FW_UPDATE
@@ -57,7 +58,7 @@
 #ifdef CONFIG_FB
 #define WAIT_FOR_FB_READY
 #define FB_READY_WAIT_MS 100
-#define FB_READY_TIMEOUT_S 30
+#define FB_READY_TIMEOUT_S 50
 #endif
 #endif
 
@@ -105,13 +106,14 @@
 #define V7_PARTITION_SUPPORT_BYTES 4
 
 #define F35_ERROR_CODE_OFFSET 0
+#define F35_FLASH_STATUS_OFFSET 5
 #define F35_CHUNK_NUM_LSB_OFFSET 0
 #define F35_CHUNK_NUM_MSB_OFFSET 1
 #define F35_CHUNK_DATA_OFFSET 2
 #define F35_CHUNK_COMMAND_OFFSET 18
 
 #define F35_CHUNK_SIZE 16
-#define F35_ERASE_ALL_WAIT_MS 3000
+#define F35_ERASE_ALL_WAIT_MS 8000
 #define F35_RESET_WAIT_MS 250
 
 #define SLEEP_MODE_NORMAL (0x00)
@@ -729,6 +731,8 @@ static struct device_attribute attrs[] = {
 static struct synaptics_rmi4_fwu_handle *fwu;
 
 DECLARE_COMPLETION(fwu_remove_complete);
+//DECLARE_COMPLETION(fwu_dsx_remove_complete);
+DEFINE_MUTEX(dsx_fwu_sysfs_mutex);
 
 static unsigned int le_to_uint(const unsigned char *ptr)
 {
@@ -2320,12 +2324,11 @@ static enum flash_area fwu_go_nogo(void)
 		asus_firmware_id = image_fw_id;
 		flash_area = UI_FIRMWARE;
 		goto exit;
-	} else if (image_fw_id < device_fw_id) {
+	} else{
 		dev_info(rmi4_data->pdev->dev.parent,
-				"%s: Image firmware ID older than device firmware ID\n",
+				"%s: Image firmware ID equal device firmware ID\n",
 				__func__);
 		flash_area = NONE;
-		goto exit;
 	}
 
 	/* Get device config ID */
@@ -2345,11 +2348,11 @@ static enum flash_area fwu_go_nogo(void)
 
 	for (ii = 0; ii < config_id_size; ii++) {
 		if (fwu->img.ui_config.data[ii] != fwu->config_id[ii]) {
+			
 			flash_area = UI_CONFIG;
 			goto exit;
-		} else if (fwu->img.ui_config.data[ii] < fwu->config_id[ii]) {
+		} else {
 			flash_area = NONE;
-			goto exit;
 		}
 	}
 
@@ -2456,6 +2459,8 @@ static int fwu_scan_pdt(void)
 						rmi_fd.ctrl_base_addr;
 				fwu->f35_fd.data_base_addr =
 						rmi_fd.data_base_addr;
+				fwu->f35_fd.cmd_base_addr =
+						rmi_fd.cmd_base_addr;
 				break;
 			}
 		} else {
@@ -3433,6 +3438,13 @@ static int fwu_start_reflash(void)
 		return -ENODEV;
 	}
 
+	if (fwu->in_ub_mode) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: In microbootloader mode\n",
+				__func__);
+		return -ENODEV;
+	}
+
 	printk("[TOUCH] : Start FW update !\n");
 
 	rmi4_data->stay_awake = true;
@@ -3485,13 +3497,6 @@ static int fwu_start_reflash(void)
 							printk("[Touch] No this Panel !\n");
 							break;
 					}
-				break;
-			case 3:
-				retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
-							HADES_FW_IMAGE_NAME, sizeof(HADES_FW_IMAGE_NAME),
-							sizeof(HADES_FW_IMAGE_NAME));
-							printk("[Touch] : HADES FW_IMAGE_NAME is %s\n",fwu->image_name);
-							break;
 				break;
 			default :
 					printk("[Touch] Error Project ID !\n");
@@ -3679,6 +3684,81 @@ static int fwu_recovery_check_status(void)
 	return 0;
 }
 
+static int fwu_recovery_erase_completion(void)
+{
+	int retval;
+	unsigned char data_base;
+	unsigned char command;
+	unsigned char status;
+	unsigned int timeout = F35_ERASE_ALL_WAIT_MS / 20;
+	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+
+	data_base = fwu->f35_fd.data_base_addr;
+
+	do {
+		command = 0x01;
+		retval = synaptics_rmi4_reg_write(rmi4_data,
+				fwu->f35_fd.cmd_base_addr,
+				&command,
+				sizeof(command));
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to issue command\n",
+					__func__);
+			return retval;
+		}
+
+		do {
+			retval = synaptics_rmi4_reg_read(rmi4_data,
+					fwu->f35_fd.cmd_base_addr,
+					&command,
+					sizeof(command));
+			if (retval < 0) {
+				dev_err(rmi4_data->pdev->dev.parent,
+						"%s: Failed to read command status\n",
+						__func__);
+				return retval;
+			}
+
+			if ((command & 0x01) == 0x00)
+				break;
+
+			msleep(20);
+			timeout--;
+		} while (timeout > 0);
+
+		if (timeout == 0)
+			goto exit;
+
+		retval = synaptics_rmi4_reg_read(rmi4_data,
+				data_base + F35_FLASH_STATUS_OFFSET,
+				&status,
+				sizeof(status));
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to read flash status\n",
+					__func__);
+			return retval;
+		}
+
+		if ((status & 0x01) == 0x00)
+			break;
+
+		msleep(20);
+		timeout--;
+	} while (timeout > 0);
+
+exit:
+	if (timeout == 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Timed out waiting for flash erase completion\n",
+				__func__);
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
 static int fwu_recovery_erase_all(void)
 {
 	int retval;
@@ -3699,7 +3779,13 @@ static int fwu_recovery_erase_all(void)
 		return retval;
 	}
 
-	msleep(F35_ERASE_ALL_WAIT_MS);
+	if (fwu->f35_fd.cmd_base_addr) {
+		retval = fwu_recovery_erase_completion();
+		if (retval < 0)
+			return retval;
+	} else {
+		msleep(F35_ERASE_ALL_WAIT_MS);
+	}
 
 	retval = fwu_recovery_check_status();
 	if (retval < 0)
@@ -3741,6 +3827,8 @@ static int fwu_recovery_write_chunk(void)
 	chunk_spare = fwu->image_size % F35_CHUNK_SIZE;
 	if (chunk_spare)
 		chunk_total++;
+
+	pr_notice("%s: chunk_total = %d\n", __func__, chunk_total);
 
 	for (chunk = 0; chunk < chunk_total; chunk++) {
 		if (chunk_spare && chunk == chunk_total - 1)
@@ -3806,6 +3894,7 @@ static int fwu_recovery_reset(void)
 static int fwu_start_recovery(void)
 {
 	int retval;
+	const struct firmware *fw_entry = NULL;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
 
 	if (rmi4_data->sensor_sleep) {
@@ -3820,6 +3909,57 @@ static int fwu_start_recovery(void)
 	mutex_lock(&rmi4_data->rmi4_exp_init_mutex);
 
 	pr_notice("%s: Start of recovery process\n", __func__);
+
+	if (fwu->image == NULL) {
+		switch(asus_lcd_id)
+		{
+			case 1 :
+				retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
+							BOE_FW_IHEX_NAME, sizeof(BOE_FW_IHEX_NAME),
+							sizeof(BOE_FW_IHEX_NAME));
+							printk("[Touch] : AQU BOE FW_IMAGE_NAME is %s\n",fwu->image_name);
+				break;
+			case 3 :
+				retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
+							TM_FW_IHEX_NAME, sizeof(TM_FW_IHEX_NAME),
+							sizeof(TM_FW_IHEX_NAME));
+							printk("[Touch] : AQU TM FW_IMAGE_NAME is %s\n",fwu->image_name);
+				break;
+			default :
+				retval = -1;
+				printk("[Touch] No this Panel !\n");
+				break;
+		}
+		
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to copy ihex file name\n",
+					__func__);
+			goto exit;
+		}
+		dev_dbg(rmi4_data->pdev->dev.parent,
+				"%s: Requesting firmware ihex %s\n",
+				__func__, fwu->image_name);
+
+		retval = request_firmware(&fw_entry, fwu->image_name,
+				rmi4_data->pdev->dev.parent);
+		if (retval != 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Firmware ihex %s not available\n",
+					__func__, fwu->image_name);
+			retval = -EINVAL;
+			goto exit;
+		}
+
+		dev_dbg(rmi4_data->pdev->dev.parent,
+				"%s: Firmware image size = %d\n",
+				__func__, (unsigned int)fw_entry->size);
+
+		fwu->image = fw_entry->data;
+		fwu->image_size = fw_entry->size;
+
+		pr_notice("%s: fwu->image_size = %d\n", __func__, fwu->image_size);
+	}
 
 	retval = rmi4_data->irq_enable(rmi4_data, false, false);
 	if (retval < 0) {
@@ -3864,6 +4004,11 @@ static int fwu_start_recovery(void)
 	retval = 0;
 
 exit:
+	if (fw_entry)
+		release_firmware(fw_entry);
+
+	fwu->image = NULL;
+
 	pr_notice("%s: End of recovery process\n", __func__);
 
 	mutex_unlock(&rmi4_data->rmi4_exp_init_mutex);
@@ -3883,12 +4028,16 @@ int synaptics_fw_updater(const unsigned char *fw_data)
 	if (!fwu->initialized)
 		return -ENODEV;
 
-	if (fwu->in_ub_mode)
-		return -ENODEV;
-
 	fwu->image = fw_data;
 
 	retval = fwu_start_reflash();
+
+	if (fwu->in_ub_mode) {
+		fwu->image = NULL;
+		retval = fwu_start_recovery();
+		if (retval < 0)
+			return retval;
+	}
 
 	fwu->image = NULL;
 
@@ -3934,14 +4083,18 @@ static ssize_t fwu_sysfs_show_image(struct file *data_file,
 		struct kobject *kobj, struct bin_attribute *attributes,
 		char *buf, loff_t pos, size_t count)
 {
-	int retval;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	ssize_t retval;
+
+	if (!mutex_trylock(&dsx_fwu_sysfs_mutex))
+		return -EBUSY;
 
 	if (count < fwu->config_size) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Not enough space (%ld bytes) in buffer\n",
 				__func__, count);
-		return -EINVAL;
+		retval = -EINVAL;
+		goto show_image_exit;
 	}
 
 	retval = secure_memcpy(buf, count, fwu->read_config_buf,
@@ -3954,6 +4107,9 @@ static ssize_t fwu_sysfs_show_image(struct file *data_file,
 	}
 
 	return fwu->config_size;
+show_image_exit:
+	mutex_unlock(&dsx_fwu_sysfs_mutex);
+	return retval;
 }
 
 static ssize_t fwu_sysfs_store_image(struct file *data_file,
@@ -3987,9 +4143,12 @@ static ssize_t fwu_sysfs_tpfw_version_show(struct device *dev,
 static ssize_t fwu_sysfs_do_recovery_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	int retval;
+	ssize_t retval;
 	unsigned int input;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+
+	if (!mutex_trylock(&dsx_fwu_sysfs_mutex))
+		return -EBUSY;
 
 	if (sscanf(buf, "%u", &input) != 1) {
 		retval = -EINVAL;
@@ -4032,6 +4191,9 @@ static ssize_t fwu_sysfs_do_reflash_store(struct device *dev,
 	int retval;
 	unsigned int input;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+
+	if (!mutex_trylock(&dsx_fwu_sysfs_mutex))
+		return -EBUSY;
 
 	if (sscanf(buf, "%u", &input) != 1) {
 		retval = -EINVAL;
@@ -4080,6 +4242,9 @@ exit:
 	fwu->image = NULL;
 	fwu->force_update = FORCE_UPDATE;
 	fwu->do_lockdown = DO_LOCKDOWN;
+	fwu->data_pos = 0;
+	fwu->image_size = 0;
+	mutex_unlock(&dsx_fwu_sysfs_mutex);
 	return retval;
 }
 
@@ -4089,6 +4254,9 @@ static ssize_t fwu_sysfs_write_config_store(struct device *dev,
 	int retval;
 	unsigned int input;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+
+	if (!mutex_trylock(&dsx_fwu_sysfs_mutex))
+		return -EBUSY;
 
 	if (sscanf(buf, "%u", &input) != 1) {
 		retval = -EINVAL;
@@ -4151,6 +4319,8 @@ static ssize_t fwu_sysfs_read_config_store(struct device *dev,
 	}
 
 	retval = fwu_do_read_config();
+	mutex_unlock(&dsx_fwu_sysfs_mutex);
+
 	if (retval < 0) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to read config\n",
@@ -4171,7 +4341,10 @@ static ssize_t fwu_sysfs_config_area_store(struct device *dev,
 	if (retval)
 		return retval;
 
+	if (!mutex_trylock(&dsx_fwu_sysfs_mutex))
+		return -EBUSY;
 	fwu->config_area = config_area;
+	mutex_unlock(&dsx_fwu_sysfs_mutex);
 
 	return count;
 }
@@ -4201,9 +4374,12 @@ static ssize_t fwu_sysfs_image_size_store(struct device *dev,
 	unsigned long size;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
 
+	if (!mutex_trylock(&dsx_fwu_sysfs_mutex))
+		return -EBUSY;
+
 	retval = sstrtoul(buf, 10, &size);
 	if (retval)
-		return retval;
+		goto exit;
 
 	fwu->image_size = size;
 	fwu->data_pos = 0;
@@ -4214,10 +4390,14 @@ static ssize_t fwu_sysfs_image_size_store(struct device *dev,
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for image data\n",
 				__func__);
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto exit;
 	}
 
-	return count;
+	retval = count;
+exit:
+	mutex_unlock(&dsx_fwu_sysfs_mutex);
+	return retval;
 }
 
 static ssize_t fwu_sysfs_block_size_show(struct device *dev,

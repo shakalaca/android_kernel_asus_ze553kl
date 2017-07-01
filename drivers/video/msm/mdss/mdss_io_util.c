@@ -282,8 +282,9 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 					in_vreg[i].pre_off_sleep * 1000);
 			regulator_set_optimum_mode(in_vreg[i].vreg,
 				in_vreg[i].disable_load);
-			/*follow qcom code flow:disable vddio for ZE553KL*/
-			if(!(strcmp(in_vreg[i].vreg_name, "vddio")) && (ASUS_ZE553KL != asus_project_id)){
+
+			/*follow qcom code flow:disable vddio for ASUS_ZD552KL_PHOENIX*/
+			if(!(strcmp(in_vreg[i].vreg_name, "vddio")) && (ASUS_ZD552KL_PHOENIX != asus_project_id) && (ASUS_ZE553KL != asus_project_id)){
 				continue;
 			}
 			regulator_disable(in_vreg[i].vreg);

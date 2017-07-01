@@ -80,6 +80,37 @@ struct synaptics_dsx_button_map {
  * @cap_button_map: pointer to 0D button map
  * @vir_button_map: pointer to virtual button map
  */
+#ifdef ZS550KL
+//below for ZS550KL
+struct synaptics_dsx_board_data {
+	bool x_flip;
+	bool y_flip;
+	bool swap_axes;
+	int irq_gpio;
+	int irq_on_state;
+	int power_gpio;
+	int power_on_state;
+	int reset_gpio;
+	int reset_on_state;
+	int max_y_for_2d;
+	unsigned long irq_flags;
+	unsigned short i2c_addr;
+	unsigned short ub_i2c_addr;
+	unsigned short device_descriptor_addr;
+	unsigned int panel_x;
+	unsigned int panel_y;
+	unsigned int power_delay_ms;
+	unsigned int reset_delay_ms;
+	unsigned int reset_active_ms;
+	unsigned int byte_delay_us;
+	unsigned int block_delay_us;
+	const char *pwr_reg_name;
+	const char *bus_reg_name;
+	struct synaptics_dsx_button_map *cap_button_map;
+	struct synaptics_dsx_button_map *vir_button_map;
+};
+#else
+//below for ZE553KL && PHOENIX
 struct synaptics_dsx_board_data {
 	bool x_flip;
 	bool y_flip;
@@ -117,5 +148,7 @@ struct synaptics_dsx_board_data {
 	struct synaptics_dsx_button_map *cap_button_map;
 	struct synaptics_dsx_button_map *vir_button_map;
 };
+
+#endif
 
 #endif

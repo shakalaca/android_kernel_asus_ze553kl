@@ -203,6 +203,7 @@ struct msm_eeprom_memory_block_t {
 	uint32_t num_map;	/* number of map blocks */
 	uint8_t *mapdata;
 	uint32_t num_data;	/* size of total mapdata */
+	uint32_t subdev_id;//asus bsp ralf
 };
 
 struct msm_eeprom_cmm_t {

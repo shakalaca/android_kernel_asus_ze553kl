@@ -31,7 +31,7 @@
 
 #define ADV7533_REG_CHIP_REVISION (0x00)
 #define ADV7533_DSI_CEC_I2C_ADDR_REG (0xE1)
-#define ADV7533_RESET_DELAY (100)
+#define ADV7533_RESET_DELAY (10)
 
 #define PINCTRL_STATE_ACTIVE    "pmx_adv7533_active"
 #define PINCTRL_STATE_SUSPEND   "pmx_adv7533_suspend"
@@ -728,7 +728,7 @@ static void adv7533_notify_clients(struct msm_dba_device_info *dev,
 u32 adv7533_read_edid(struct adv7533 *pdata, u32 size, char *edid_buf)
 {
 	u32 ret = 0, read_size = size / 2;
-	u8 edid_addr;
+	u8 edid_addr = 0;
 	int ndx;
 
 	if (!pdata || !edid_buf)
@@ -821,8 +821,8 @@ static void adv7533_handle_cec_intr(struct adv7533 *pdata, u8 cec_status)
 {
 	u8 cec_int_clear = 0x08;
 	bool cec_rx_intr = false;
-	u8 cec_rx_ready;
-	u8 cec_rx_timestamp;
+	u8 cec_rx_ready = 0;
+	u8 cec_rx_timestamp = 0;
 
 	if (!pdata) {
 		pr_err("%s: Invalid input\n", __func__);
@@ -924,7 +924,7 @@ end:
 
 static void *adv7533_handle_hpd_intr(struct adv7533 *pdata)
 {
-	int ret;
+	int ret = 0;
 	u8 hpd_state;
 	u8 connected = 0, disconnected = 0;
 

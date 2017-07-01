@@ -41,6 +41,7 @@
 
 #include <linux/version.h>
 #include <linux/switch.h>
+#include <linux/wakelock.h>
 #ifdef CONFIG_FB
 #include <linux/notifier.h>
 #include <linux/fb.h>
@@ -115,11 +116,6 @@
 #define MASK_3BIT 0x07
 #define MASK_2BIT 0x03
 #define MASK_1BIT 0x01
-
-#define SYNAP_VDD_MIN_UV		2800000
-#define SYNAP_VDD_MAX_UV		3300000
-#define SYNAP_I2C_VCC_MIN_UV	1800000
-#define SYNAP_I2C_VCC_MAX_UV	1800000
 
 enum exp_fn {
 	RMI_DEV = 0,
@@ -328,6 +324,7 @@ struct synaptics_rmi4_data {
 	struct delayed_work rb_work;
 	struct workqueue_struct *rb_workqueue;
 	struct switch_dev  touch_sdev;
+	struct mutex cover_mutex;
 #ifdef CONFIG_FB
 	struct notifier_block fb_notifier;
 	struct work_struct reset_work;

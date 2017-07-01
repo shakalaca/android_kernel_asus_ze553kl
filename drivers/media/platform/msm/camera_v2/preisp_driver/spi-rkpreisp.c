@@ -39,6 +39,7 @@
 //asus bsp ralf>>
 #include "../common/msm_camera_io_util.h"
 #include "spi2apb.h"
+#include <linux/wakelock.h>//ASUS_BSP Zhengwei "prevent enter suspend when resuming"
 extern int msm_camera_pinctrl_init(
 	struct msm_pinctrl_info *sensor_pctrl, struct device *dev);
 extern int msm_camera_clk_enable(struct device *dev,
@@ -70,6 +71,12 @@ extern int asus_hw_id;
 #define PREISP_MCLK_RATE 24*1000*1000ul
 
 #define PREISP_WAKEUP_TIMEOUT_MS 100
+#define PREISP_REQUEST_SLEEP_TIMEOUT_MS 100
+
+#ifdef ZD552KL_PHOENIX
+#define PREISP_MAX_CORE_VOLTAGE 1300000
+uint32_t g_cur_core_voltage=1100000;
+#endif
 
 typedef struct {
     int8_t id;
@@ -110,6 +117,10 @@ struct spi_rk_preisp_data {
 	bool is_fw_loaded;
 	bool is_core_supply_enabled;
 	bool is_ddr_supply_enabled;
+#ifdef ZD552KL_PHOENIX
+	bool is_ext_buck_supply_enabled;
+	bool is_sleep_requested;
+#endif
 	int dsp_rt_status;
 	bool is_suspend_sleep;
 	int sleep_mode;
@@ -127,10 +138,16 @@ struct spi_rk_preisp_data {
     struct mutex send_msg_lock;
     struct mutex power_lock;
     struct mutex wake_sleep_lock;
+    //ASUS_BSP +++ Zhengwei "prevent enter suspend when resuming"
+    struct wake_lock resume_wake_lock;
+    bool is_resume_processing;
+    //ASUS_BSP --- Zhengwei "prevent enter suspend when resuming"
     uint32_t max_speed_hz;
     uint32_t min_speed_hz;
+    uint32_t fw_speed_hz;
     uint32_t fw_nowait_mode;
     int log_level;
+    int sleep_state_flag;
 };
 
 struct spi_rk_preisp_data *g_preisp_data;
@@ -171,6 +188,23 @@ static int rkpreisp_power_on(struct spi_rk_preisp_data *pdata,int is_download_fw
 static int rkpreisp_power_off(struct spi_rk_preisp_data *pdata);
 static int asus_core_power_supply_control(struct spi_rk_preisp_data *data,int value);
 static int asus_ddr_power_supply_control(struct spi_rk_preisp_data *data,int value);
+
+#ifdef ZD552KL_PHOENIX
+static int asus_ext_buck_power_supply_control(struct spi_rk_preisp_data *data,int value);
+static int asus_vio_en_gpio_control(struct spi_rk_preisp_data *data,int value);
+static int asus_sleep_power_operation(struct spi_rk_preisp_data *data);
+static int asus_wakeup_power_operation(struct spi_rk_preisp_data *data);
+
+typedef struct
+{
+	struct spi_rk_preisp_data *pdata;
+	struct work_struct work;
+}sleep_work_t;
+static struct workqueue_struct *sleep_wq;
+static sleep_work_t sleep_work;
+static void sleep_operation(struct work_struct *work);
+
+#endif
 int rkpreisp_wakeup(struct spi_rk_preisp_data *pdata);
 
 
@@ -254,7 +288,9 @@ vreg_get_fail:
 }
 struct regulator *g_ddr_vdd_vreg;
 struct regulator *g_core_vdd_vreg;
-
+#ifdef ZD552KL_PHOENIX
+struct regulator *g_ext_buck_vreg;
+#endif
 int rkpreisp_gpio_set(int gpio_num,int flags,const char *label)
 {//flags:GPIOF_DIR_IN | GPIOF_INIT_HIGH
 	int rc=0;
@@ -284,7 +320,7 @@ void rkpreisp_init_hw(struct spi_rk_preisp_data *pdata)
             clk_prepare_enable(pdata->mclk);
             clk_set_rate(pdata->mclk, PREISP_MCLK_RATE);
         }
-		if(asus_hw_id>=ASUS_ER)
+		//if(asus_hw_id>=ASUS_ER)
 		{
 			asus_power_config(pdata,3,1);
 		}
@@ -326,7 +362,7 @@ static int rkpreisp_download_fw_late(struct spi_rk_preisp_data *pdata)
     spi2apb_switch_to_msb(pdata->spi);
 	rkpreisp_hw_init(pdata->spi);
     preisp_set_spi_speed(pdata, pdata->max_speed_hz);
-	ret = spi_download_fw(pdata->spi, NULL);
+	ret = spi_download_fw(pdata->spi, NULL,pdata->fw_speed_hz,pdata->max_speed_hz);
     if (ret) {
         dev_err(pdata->dev, "download firmware failed!");
     } else {
@@ -372,8 +408,8 @@ static int rkpreisp_resume(struct spi_device *spi)
 			//	,gpio_get_value(data->irq_gpio),gpio_get_value(data->wakeup_gpio),gpio_get_value(data->sleepst_gpio)
 			//	,gpio_get_value(data->snapshot_gpio),gpio_get_value(data->reset_gpio)
 			//	);
-			if(asus_hw_id<ASUS_ER)
-				asus_power_config(data,3,1);
+			//if(asus_hw_id<ASUS_ER)
+			//	asus_power_config(data,3,1);
 		}
 	}
 	return 0;
@@ -385,12 +421,15 @@ static int asus_core_power_supply_control(struct spi_rk_preisp_data *data,int va
 	int ret=0;
 	if(!data)ret=-EFAULT;
 	else{
-		dev_info(data->dev, "sz_cam_rk_drv core_supply_enabled=%d,value=%d\n",data->is_core_supply_enabled,value);
 		if((!data->is_core_supply_enabled  &&  value)  ||  (data->is_core_supply_enabled  &&  !value)){
 			data->is_core_supply_enabled=(value>0);
-			ret=preisp_config_single_vreg(data->dev,"core_vdd",&g_core_vdd_vreg,1125000,1125000,80000,(value>0));
+			ret=preisp_config_single_vreg(data->dev,"core_vdd",&g_core_vdd_vreg,1100000,1100000,80000,(value>0));
 			if(ret<0)
 				dev_err(data->dev,"%s:%d set core_vdd failed\n",__func__,__LINE__);
+		}
+		else
+		{
+			dev_info(data->dev, "sz_cam_rk_drv core_supply_enabled=%d,value=%d !\n",data->is_core_supply_enabled,value);
 		}
 	}
 	return ret;
@@ -400,17 +439,58 @@ static int asus_ddr_power_supply_control(struct spi_rk_preisp_data *data,int val
 	int ret=0;
 	if(!data)ret=-EFAULT;
 	else{
-		dev_info(data->dev, "sz_cam_rk_drv ddr_supply_enabled=%d,value=%d\n",data->is_ddr_supply_enabled,value);
 		if((!data->is_ddr_supply_enabled  &&  value)  ||  (data->is_ddr_supply_enabled  &&  !value)){
 			data->is_ddr_supply_enabled=(value>0);
 			ret=preisp_config_single_vreg(data->dev,"ddr_vdd",&g_ddr_vdd_vreg,1200000,1200000,80000,(value>0));
 			if(ret<0)
-				dev_err(data->dev,"%s:%d set ddr_vdd failed\n",__func__,__LINE__);
+				dev_err(data->dev,"%s:%d set ddr_vdd failed\n",__func__,__LINE__);		
+		}
+		else
+		{
+			dev_info(data->dev, "sz_cam_rk_drv ddr_supply_enabled=%d,value=%d !\n",data->is_ddr_supply_enabled,value);
+		}
+	}
+	return ret;
+}
+#ifdef ZD552KL_PHOENIX
+static int asus_ext_buck_power_supply_control(struct spi_rk_preisp_data *data,int value)
+{
+	int ret=0;
+	if(!data)ret=-EFAULT;
+	else{
+		if((!data->is_ext_buck_supply_enabled  &&  value)  ||  (data->is_ext_buck_supply_enabled  &&  !value)){
+			data->is_ext_buck_supply_enabled=(value>0);
+			ret=preisp_config_single_vreg(data->dev,"ext_buck",&g_ext_buck_vreg,g_cur_core_voltage,g_cur_core_voltage,80000,(value>0));
+			if(ret<0)
+				dev_err(data->dev,"%s:%d set ext_buck failed\n",__func__,__LINE__);
+		}
+		else
+		{
+			dev_info(data->dev, "sz_cam_rk_drv ext_buck_supply_enabled=%d,value=%d !\n",data->is_ext_buck_supply_enabled,value);
 		}
 	}
 	return ret;
 }
 
+static int asus_vio_en_gpio_control(struct spi_rk_preisp_data *data,int value)
+{
+	int err=0;
+	int flag=GPIOF_DIR_OUT;
+
+	if(value)
+		flag|=GPIOF_INIT_HIGH;
+	else
+		flag|=GPIOF_INIT_LOW;
+
+	err = rkpreisp_gpio_set(data->vio_en_gpio,flag,"GPIO40");
+	if(err<0)
+	{
+		dev_err(data->dev,"%s:%d enable VDD rc=%d FAIL!\n",__func__,__LINE__,err);
+	}
+	return err;
+}
+
+#endif
 static int asus_power_control(struct spi_rk_preisp_data *data,int value)
 {
 	int err=0;
@@ -423,11 +503,15 @@ static int asus_power_control(struct spi_rk_preisp_data *data,int value)
 		//asus bsp ralf:add for enter deep sleep mode when camera close>>
 		//if(value>0){
 			asus_core_power_supply_control(data,value>0);
+#ifdef ZD552KL_PHOENIX
+			asus_ext_buck_power_supply_control(data,value>0);
+#endif
 			asus_ddr_power_supply_control(data,value>0);
 			if(value)
 				flag=GPIOF_DIR_OUT|GPIOF_INIT_HIGH;
 			else
-				flag=GPIOF_DIR_OUT|GPIOF_INIT_LOW;
+			    //flag=GPIOF_DIR_IN;//hades laser require i2c is high, otherwise laser power consumption will be high
+				flag=GPIOF_DIR_OUT|GPIOF_INIT_LOW;//asus bsp ralf,comfirmed with jerry with this
 			err = rkpreisp_gpio_set(data->vio_en_gpio,flag,"GPIO40");
 			if(err<0)
 			{
@@ -493,6 +577,77 @@ static int asus_clk_control(struct spi_rk_preisp_data *data,int value)
 	//printk("%s X value=%d power_state=0x%x\n",__func__,value,data->power_state);
 	return err;
 }
+#ifdef ZD552KL_PHOENIX
+
+static int asus_sleep_power_operation(struct spi_rk_preisp_data *pdata)
+{
+	//off, gpio first, clk sencond, power last
+	int rc=0;
+	if(!pdata)
+	{
+		dev_err(pdata->dev,"pdata is NULL!\n");
+		return -1;
+	}
+	//dev_info(pdata->dev,"%s E\n",__func__);
+
+	rc = asus_clk_control(pdata,0);
+	if(rc == 0)
+		rc = asus_ext_buck_power_supply_control(pdata,0);
+
+	//dev_info(pdata->dev,"%s X\n",__func__);
+	return rc;
+}
+
+static int asus_wakeup_power_operation(struct spi_rk_preisp_data *pdata)
+{
+	int rc = 0;
+	if(!pdata)
+	{
+		dev_err(pdata->dev,"pdata is NULL!\n");
+		return -1;
+	}
+	//dev_info(pdata->dev,"%s E\n",__func__);
+	//on, power first, clk second, gpio last
+	rc = asus_ext_buck_power_supply_control(pdata,1);
+	if(rc == 0)
+		rc = asus_clk_control(pdata,1);
+
+	//dev_info(pdata->dev,"%s X\n",__func__);
+	return rc;
+}
+
+static void sleep_operation(struct work_struct *work)
+{
+	sleep_work_t *sleep_work = container_of(work, sleep_work_t, work);
+	struct spi_rk_preisp_data * pdata = sleep_work->pdata;
+
+	if(pdata != g_preisp_data)
+	{
+		printk("preisp, pdata get not right!\n");
+		return;
+	}
+
+	if(!pdata)
+	{
+		dev_err(pdata->dev,"pdata is NULL!\n");
+		return;
+	}
+
+	mutex_lock(&pdata->wake_sleep_lock);
+
+	if(pdata->is_sleep_requested == 0)
+	{
+		dev_info(pdata->dev,"sleep interrupt not come from request, ignore\n");
+	}
+	else
+	{
+		asus_sleep_power_operation(pdata);
+		pdata->is_sleep_requested = 0;
+	}
+
+	mutex_unlock(&pdata->wake_sleep_lock);
+}
+#endif
 
 int asus_power_config( struct spi_rk_preisp_data *data,int type,int value)
 {
@@ -651,6 +806,8 @@ int rkpreisp_set_log_level(struct spi_rk_preisp_data *pdata, int level)
 int rkpreisp_request_sleep(struct spi_rk_preisp_data *pdata, int32_t mode)
 {
     int ret;
+    int try = 0;
+
     MSG(msg_set_sys_mode_standby_t, m);
 
     mutex_lock(&pdata->wake_sleep_lock);
@@ -661,8 +818,10 @@ int rkpreisp_request_sleep(struct spi_rk_preisp_data *pdata, int32_t mode)
        }
         if (mode >= PREISP_SLEEP_MODE_MAX || mode < 0) {
             dev_warn(pdata->dev, "Unkown sleep mode %d\n", mode);
+            mutex_unlock(&pdata->wake_sleep_lock);
             return -1;
         }
+        dev_info(pdata->dev,"request sleep\n");
 
         if (mode == PREISP_SLEEP_MODE_BYPASS) {
             m.type = id_msg_set_sys_mode_bypass_t;
@@ -672,7 +831,25 @@ int rkpreisp_request_sleep(struct spi_rk_preisp_data *pdata, int32_t mode)
             gpio_set_value(pdata->wakeup_gpio, !pdata->wakeup_active);
         }
         ret = preisp_send_msg_to_dsp(pdata, (struct msg*)&m);
+#ifdef ZD552KL_PHOENIX
+		if(mode == PREISP_SLEEP_MODE_STANDBY)
+			pdata->is_sleep_requested = 1;
+#endif
 
+        do {
+            if (pdata->sleep_state_flag) {
+                ret = 0;
+                pdata->sleep_state_flag = 0;
+                mdelay(5);
+                break;
+            }
+            if (try++ == PREISP_REQUEST_SLEEP_TIMEOUT_MS) {
+                ret = -1;
+                dev_err(pdata->dev, "request sleep timeout\n");
+                break;
+            }
+            mdelay(1);
+        } while (1);
         dev_info(pdata->dev, "request dsp enter %s mode. ret:%d",
                 mode == PREISP_SLEEP_MODE_BYPASS ? "bypass" : "sleep", ret);
 	
@@ -716,7 +893,7 @@ static int rkpreisp_restart(struct spi_rk_preisp_data *pdata)
 
     preisp_set_spi_speed(pdata, pdata->max_speed_hz);
     //download system firmware
-    ret = spi_download_fw(pdata->spi, NULL);
+    ret = spi_download_fw(pdata->spi, NULL,pdata->fw_speed_hz,pdata->max_speed_hz);
     if (ret) {
         dev_err(pdata->dev, "download firmware failed!");
     } else {
@@ -745,6 +922,9 @@ int rkpreisp_wakeup(struct spi_rk_preisp_data *pdata)
                atomic_dec_return(&pdata->wake_sleep_cnt);
                pdata->do_force_sleep=false;
        }
+#ifdef ZD552KL_PHOENIX
+		asus_wakeup_power_operation(pdata);
+#endif
         if (pdata->powerdown_gpio > 0) {
             gpio_set_value(pdata->powerdown_gpio, pdata->powerdown_active);
         }
@@ -758,7 +938,7 @@ int rkpreisp_wakeup(struct spi_rk_preisp_data *pdata)
             ret = spi2apb_safe_r32(pdata->spi, DSP_PMU_SYS_REG0, &reg);
 
             if (!ret && ((reg & DSP_MSG_QUEUE_OK_MASK) == DSP_MSG_QUEUE_OK_TAG)) {
-                dev_info(pdata->dev, "wakeup dsp.");
+                dev_info(pdata->dev, "wakeup dsp, times %d\n",try);
                 break;
             }
 
@@ -817,11 +997,12 @@ static int rkpreisp_power_on(struct spi_rk_preisp_data *pdata,int is_download_fw
         preisp_set_spi_speed(pdata, pdata->max_speed_hz);
         //download system firmware
         if(is_download_fw){
-	        ret = spi_download_fw(pdata->spi, NULL);
+	        ret = spi_download_fw(pdata->spi, NULL,pdata->fw_speed_hz,pdata->max_speed_hz);
 	        if (ret) {
 	            dev_err(pdata->dev, "download firmware failed!");
 	        } else {
 	            dev_info(pdata->dev, "download firmware success!");
+	            pdata->is_fw_loaded = true;
 	        }
         }
 
@@ -831,6 +1012,7 @@ static int rkpreisp_power_on(struct spi_rk_preisp_data *pdata,int is_download_fw
         }
         rkpreisp_set_log_level(pdata, pdata->log_level);
 
+        pdata->sleep_state_flag = 0;
         atomic_set(&pdata->wake_sleep_cnt, 1);
     } else {
         rkpreisp_wakeup(pdata);
@@ -873,6 +1055,7 @@ static int rkpreisp_power_off(struct spi_rk_preisp_data *pdata)
             clk_disable_unprepare(pdata->mclk);
         }
         atomic_set(&pdata->wake_sleep_cnt, 0);
+        pdata->is_fw_loaded = false;
     } else if (atomic_read(&pdata->power_on_cnt) < 0) {
         atomic_set(&pdata->power_on_cnt, 0);
     } else {
@@ -889,14 +1072,26 @@ static void fw_nowait_power_on(const struct firmware *fw, void *context)
 {
     int ret = 0;
     struct spi_rk_preisp_data *pdata = context;
-	dev_info(pdata->dev,"%s in fw=%p",__func__,fw);
-    ret = rkpreisp_power_on(pdata,1);
-    if (!ret) {
-        mdelay(10); /*delay for dsp boot*/
-        rkpreisp_request_sleep(pdata, PREISP_SLEEP_MODE_STANDBY);
-    }
+	//dev_info(pdata->dev,"%s in fw=%p",__func__,fw);
+
+	ret = rkpreisp_power_on(pdata,1);
+	if (!ret) {
+		mdelay(10); /*delay for dsp boot*/
+		rkpreisp_request_sleep(pdata, PREISP_SLEEP_MODE_STANDBY);
+	}
+
     if (fw) {
         release_firmware(fw);
+    }
+    if(pdata->is_resume_processing == true)
+    {
+		dev_info(pdata->dev,"resume done!\n");
+		wake_unlock(&pdata->resume_wake_lock);
+		pdata->is_resume_processing = false;
+    }
+    else
+    {
+		dev_info(pdata->dev,"not resume, not unlock resume_wake_lock\n");
     }
 }
 
@@ -1090,7 +1285,7 @@ int do_cmd_download_fw(struct spi_rk_preisp_data *pdata,
         fw_name = args->argv[1].m_str;
     }
 
-    ret = spi_download_fw(pdata->spi, fw_name);
+    ret = spi_download_fw(pdata->spi, fw_name,pdata->fw_speed_hz,pdata->max_speed_hz);
     if (ret)
         dev_err(pdata->dev, "download firmware failed!");
     else
@@ -1257,6 +1452,28 @@ int do_cmd_wakeup(struct spi_rk_preisp_data *pdata,
 {
     return rkpreisp_wakeup(pdata);
 }
+#ifdef ZD552KL_PHOENIX
+int do_cmd_set_core_voltage(struct spi_rk_preisp_data *pdata,
+        const struct auto_args *args)
+{
+    int ret=0;
+	uint32_t val=0;
+    if (args->argc != 2 && args->argv[1].type != AUTO_ARG_TYPE_INT32) {
+        dev_err(pdata->dev, "Mis or unknown args!");
+        return -1;
+    }
+	val=(uint32_t)args->argv[1].m_int32;
+	if(val<=PREISP_MAX_CORE_VOLTAGE)
+	{
+		g_cur_core_voltage=val;
+		dev_info(pdata->dev, "set dsp core voltage %d", val);
+	}
+	else
+		dev_info(pdata->dev,"new value(%d) must not larger than %d",val,PREISP_MAX_CORE_VOLTAGE);
+
+    return ret;
+}
+#endif
 
 int do_cmd(struct spi_rk_preisp_data *pdata,
     const struct auto_args *args)
@@ -1300,7 +1517,10 @@ int do_cmd(struct spi_rk_preisp_data *pdata,
     if (!strcmp(s, "w")) return do_cmd_write(pdata, args);
     //echo wake > /dev/rk_preisp
     if (!strcmp(s, "wake")) return do_cmd_wakeup(pdata, args);
-
+	//modify core_valtage
+#ifdef ZD552KL_PHOENIX
+	if (!strcmp(s, "core_voltage")) return do_cmd_set_core_voltage(pdata, args);
+#endif
     return 0;
 }
 
@@ -1422,7 +1642,7 @@ static long rkpreisp_ioctl(struct file *file,
             break;
         }
         dev_info(pdata->dev, "download fw:%s", fw_name);
-        ret = spi_download_fw(pdata->spi, fw_name);
+        ret = spi_download_fw(pdata->spi, fw_name,pdata->fw_speed_hz,pdata->max_speed_hz);
         break;
     }
     case PREISP_APB_WRITE: {
@@ -1591,6 +1811,11 @@ static irqreturn_t rkpreisp_sleep_isr(int irq, void *dev_id)
     if (pdata->powerdown_gpio > 0) {
         gpio_set_value(pdata->powerdown_gpio, !pdata->powerdown_active);
     }
+#ifdef ZD552KL_PHOENIX
+		queue_work(sleep_wq,&(sleep_work.work));
+#endif
+
+    pdata->sleep_state_flag = 1;
 
     return IRQ_HANDLED;
 }
@@ -1613,6 +1838,14 @@ static int rkpreisp_parse_dt_property(struct device *dev,
     if (ret) {
         dev_warn(dev, "can not get spi-min-frequency!");
         pdata->min_speed_hz = pdata->max_speed_hz / 2;
+    }
+
+    ret = of_property_read_u32(node, "spi-fw-frequency",
+            &pdata->fw_speed_hz);
+    if(ret)
+    {
+		dev_warn(dev, "can not get spi-fw-frequency, set it equal to max_speed_hz %d!",pdata->max_speed_hz);
+		pdata->fw_speed_hz = pdata->max_speed_hz;
     }
 
     pdata->mclk = devm_clk_get(dev, "mclk");
@@ -1804,7 +2037,7 @@ static int rkpreisp_parse_dt_property(struct device *dev,
 	//dev_info(dev,"reading firmware-nowait-mode");
     ret = of_property_read_u32(node, "firmware-nowait-mode", &pdata->fw_nowait_mode);
     if (ret) {
-        dev_warn(dev, "can not get firmware-nowait-mode!");
+        dev_warn(dev, "can not get firmware-nowait-mode!"); 
         pdata->fw_nowait_mode = 0;
     }
 	//pdata->fw_nowait_mode=1;
@@ -1828,7 +2061,7 @@ static int spi_rk_preisp_probe(struct spi_device *spi)
     mutex_init(&data->send_msg_lock);
     mutex_init(&data->power_lock);
     mutex_init(&data->wake_sleep_lock);
-
+    wake_lock_init(&data->resume_wake_lock, WAKE_LOCK_SUSPEND, "Preisp_Wake_Lock");
     data->spi = spi;
     data->dev = &spi->dev;
     rkpreisp_parse_dt_property(data->dev, data);
@@ -1867,10 +2100,14 @@ static int spi_rk_preisp_probe(struct spi_device *spi)
     {
         printk("%s:%d mclk is NULL !!!!!!!!!!!! \n",__func__,__LINE__);
     }
+#ifdef ZD552KL_PHOENIX
+	sleep_wq = create_workqueue("sleep wq");
+	sleep_work.pdata = data;
+	INIT_WORK(&(sleep_work.work), sleep_operation);
+#endif
 	if (!data->fw_nowait_mode) {
         return 0;
     }
-
     err = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
             RKL_DEFAULT_FW_NAME, data->dev, GFP_KERNEL, data, fw_nowait_power_on);
     if (err) {
@@ -1896,7 +2133,6 @@ static int spi_rk_preisp_suspend(struct spi_device *spi, pm_message_t mesg)
         return 0;
     }
     rkpreisp_power_off(pdata);
-
     return 0;
 }
 
@@ -1917,11 +2153,16 @@ static int spi_rk_preisp_resume(struct spi_device *spi)
     if (!pdata->fw_nowait_mode)
         return 0;
 
+    wake_lock(&pdata->resume_wake_lock);
+    dev_info(pdata->dev,"resume, going to do power up\n");
+    pdata->is_resume_processing = true;
     ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
             RKL_DEFAULT_FW_NAME, pdata->dev, GFP_KERNEL, pdata, fw_nowait_power_on);
     if (ret) {
         dev_err(pdata->dev, "request firmware nowait failed!");
+        wake_unlock(&pdata->resume_wake_lock);
     }
+
     return ret;
 }
 

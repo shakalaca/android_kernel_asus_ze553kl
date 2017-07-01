@@ -703,7 +703,6 @@ static struct clk_freq_tbl ftbl_blsp_spi_apps_clk_src[] = {
 	F(  16000000,           gpll0,   10,    1,     5),
 	F(  19200000,              xo,    1,    0,     0),
 	F(  25000000,           gpll0,   16,    1,     2),
-	F(  40000000,           gpll0,   10,    1,     2),
 	F(  50000000,           gpll0,   16,    0,     0),
 	F_END
 };
@@ -1145,7 +1144,7 @@ static struct rcg_clk camss_gp1_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_mclk0_clk_src[] = {
-	F(  19200000,             xo,    1,    0,     0),
+	F(  19200000,                  xo,    1,    0,     0),
 	F(  24000000, gpll6_main_div2,    1,    2,    45),
 	F(  33330000, gpll0_main_div2,   12,    0,     0),
 	F(  66667000,           gpll0,   12,    0,     0),
@@ -1167,7 +1166,7 @@ static struct rcg_clk mclk0_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_mclk1_clk_src[] = {
-	F(  19200000,             xo,    1,    0,     0),
+	F(  19200000,                  xo,    1,    0,     0),
 	F(  24000000, gpll6_main_div2,    1,    2,    45),
 	F(  33330000, gpll0_main_div2,   12,    0,     0),
 	F(  66667000,           gpll0,   12,    0,     0),
@@ -2917,7 +2916,6 @@ static struct branch_clk gcc_usb_phy_cfg_ahb_clk = {
 	.has_sibling = 1,
 	.no_halt_check_on_disable = true,
 	.base = &virt_bases[GCC_BASE],
-	.check_enable_bit = 1,
 	.c = {
 		.dbg_name = "gcc_usb_phy_cfg_ahb_clk",
 		.ops = &clk_ops_branch,

@@ -29,6 +29,7 @@
 
 #define SENSOR_MAX_MOUNTANGLE (360)
 
+static int32_t thermal_cnt = 0;
 static struct v4l2_file_operations msm_sensor_v4l2_subdev_fops;
 static int32_t msm_sensor_driver_platform_probe(struct platform_device *pdev);
 
@@ -39,28 +40,19 @@ static int msm_sensor_platform_remove(struct platform_device *pdev)
 {
 	struct msm_sensor_ctrl_t  *s_ctrl;
 
-	pr_err("%s: sensor FREE\n", __func__);
+	CDBG("%s: sensor FREE\n", __func__);
 
 	s_ctrl = g_sctrl[pdev->id];
 	if (!s_ctrl) {
 		pr_err("%s: sensor device is NULL\n", __func__);
 		return 0;
 	}
-
+	remove_sensor_proc_files(s_ctrl);//asus bsp ralf
 	msm_sensor_free_sensor_data(s_ctrl);
 	kfree(s_ctrl->msm_sensor_mutex);
 	kfree(s_ctrl->sensor_i2c_client);
 	kfree(s_ctrl);
 	g_sctrl[pdev->id] = NULL;
-
-//[BSP] Sheldon_Li add camera proc (msm8953)++
-         remove_proc_file();	
-	remove_file();     
-	remove_module_file(); 
-	remove_resolution_file();
-	remove_thermal_file();
-//[BSP] Sheldon_Li add camera proc (msm8953)--
-
 	return 0;
 }
 
@@ -924,7 +916,7 @@ CSID_TG:
 		goto free_camera_info;
 	}
 
-	pr_err("%s probe succeeded", slave_info->sensor_name);
+	CDBG("%s probe succeeded", slave_info->sensor_name);
 
 	/*
 	  Set probe succeeded flag to 1 so that no other camera shall
@@ -983,24 +975,11 @@ CSID_TG:
 	s_ctrl->sensordata->cam_slave_info = slave_info;
 
 	msm_sensor_fill_sensor_info(s_ctrl, probed_info, entity_name);
-
-//[BSP] Sheldon_Li add camera proc (msm8953)++
-	set_sensor_info(slave_info->camera_id,s_ctrl,slave_info->sensor_id_info.sensor_id); //save camera information
-	create_proc_otp_thermal_file(slave_info); //create otp and thermal proc file
-	create_proc_pdaf_info();
-
-	//show message
-	if(CAMERA_0 == slave_info->camera_id || CAMERA_2 == slave_info->camera_id){
-		create_rear_module_proc_file(slave_info->camera_id);
-		create_rear_status_proc_file(slave_info->camera_id);
-		create_rear_resolution_proc_file(slave_info->camera_id);
-	}else if(CAMERA_1 == slave_info->camera_id){
-		create_front_module_proc_file();
-		create_front_status_proc_file();
-		create_front_resolution_proc_file();
-	}
-//[BSP] Sheldon_Li add camera proc (msm8953)--
-
+	
+	//asus bsp ralf:porting camera sensor related proc files>>
+	create_sensor_proc_files(s_ctrl,slave_info);
+	//asus bsp ralf:porting camera sensor related proc files<<
+	
 	return rc;
 
 camera_power_down:
@@ -1201,11 +1180,15 @@ struct msm_sensor_ctrl_t ** get_msm_sensor_ctrls(void)
 {
 	return g_sctrl;
 }
+
 static int32_t msm_sensor_driver_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;
 	//int ret;
 	struct msm_sensor_ctrl_t *s_ctrl = NULL;
+	struct thermal_zone_device *tzd;
+	extern struct thermal_zone_device_ops psy_tzd_rear_ops;
+	extern struct thermal_zone_device_ops psy_tzd_front_ops;
 
 	/* Create sensor control structure */
 	s_ctrl = kzalloc(sizeof(*s_ctrl), GFP_KERNEL);
@@ -1244,7 +1227,13 @@ static int32_t msm_sensor_driver_platform_probe(struct platform_device *pdev)
 
 	/* Fill device in power info */
 	s_ctrl->sensordata->power_info.dev = &pdev->dev;
+if(thermal_cnt == 0){
+	tzd = thermal_zone_device_register("rear_camera",0,0,NULL, &psy_tzd_rear_ops,NULL,0,0);
 
+	tzd = thermal_zone_device_register("front_camera",0,0,NULL, &psy_tzd_front_ops,NULL,0,0);
+
+	thermal_cnt++;
+}
 /*
 	//sean_lu ++ for gpio46 set output
 	ret = gpio_request(46,"GPIO46");
@@ -1333,7 +1322,7 @@ static int msm_sensor_driver_i2c_remove(struct i2c_client *client)
 {
 	struct msm_sensor_ctrl_t  *s_ctrl = i2c_get_clientdata(client);
 
-	pr_err("%s: sensor FREE\n", __func__);
+	CDBG("%s: sensor FREE\n", __func__);
 
 	if (!s_ctrl) {
 		pr_err("%s: sensor device is NULL\n", __func__);

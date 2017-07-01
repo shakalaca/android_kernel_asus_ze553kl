@@ -1385,7 +1385,6 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	spin_unlock_irqrestore(&port->port_lock, flags);
 	usb_bam_alloc_fifos(d->usb_bam_type, d->src_connection_idx);
 	usb_bam_alloc_fifos(d->usb_bam_type, d->dst_connection_idx);
-	gadget->bam2bam_func_enabled = true;
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	/* check if USB cable is disconnected or not */
@@ -2091,6 +2090,15 @@ void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
 	spin_unlock(&port->port_lock_dl);
 	spin_unlock_irqrestore(&port->port_lock_ul, flags_ul);
 
+	usb_ep_disable(gr->in);
+	if (trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		spin_lock_irqsave(&port->port_lock_dl, flags_dl);
+		if (d->tx_req) {
+			usb_ep_free_request(gr->in, d->tx_req);
+			d->tx_req = NULL;
+		}
+		spin_unlock_irqrestore(&port->port_lock_dl, flags_dl);
+	}
 	/* disable endpoints */
 	if (gr->out) {
 		usb_ep_disable(gr->out);
@@ -2102,15 +2110,6 @@ void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
 			}
 			spin_unlock_irqrestore(&port->port_lock_ul, flags_ul);
 		}
-	}
-	usb_ep_disable(gr->in);
-	if (trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
-		spin_lock_irqsave(&port->port_lock_dl, flags_dl);
-		if (d->tx_req) {
-			usb_ep_free_request(gr->in, d->tx_req);
-			d->tx_req = NULL;
-		}
-		spin_unlock_irqrestore(&port->port_lock_dl, flags_dl);
 	}
 
 	/*
@@ -2353,6 +2352,12 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 exit:
 	spin_unlock_irqrestore(&port->port_lock, flags);
 	return ret;
+}
+
+void gbam_data_flush_workqueue(void)
+{
+	pr_debug("%s(): Flushing workqueue\n", __func__);
+	flush_workqueue(gbam_wq);
 }
 
 int gbam_setup(unsigned int no_bam_port)

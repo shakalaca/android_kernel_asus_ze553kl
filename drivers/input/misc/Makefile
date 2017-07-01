@@ -71,6 +71,9 @@ obj-$(CONFIG_INPUT_WM831X_ON)		+= wm831x-on.o
 obj-$(CONFIG_INPUT_XEN_KBDDEV_FRONTEND)	+= xen-kbdfront.o
 obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
 obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
+ifeq ($(TARGET_PRODUCT), Z01M)
+obj-$(CONFIG_SENSORS_CM36656)          += cm36656.o
+else
 obj-$(CONFIG_SENSORS_CM3323) 		+= cm3323e.o
-obj-$(CONFIG_SENSORS_AP3045) 		+= ap3045.o
 obj-$(CONFIG_SENSORS_CM36283) 		+= cm36283.o
+endif

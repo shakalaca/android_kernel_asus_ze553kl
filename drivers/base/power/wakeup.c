@@ -477,7 +477,6 @@ static void wakeup_source_report_event(struct wakeup_source *ws)
 #ifdef ASUS_FACTORY_BUILD
  extern unsigned char fac_wakeup_sign;
 #endif
-
 void __pm_stay_awake(struct wakeup_source *ws)
 {
 	unsigned long flags;

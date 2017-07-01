@@ -17,17 +17,17 @@
 #include "ini.h"
 //#include "scap_test_lib.h"
 
-char CFG_SSL = '[';  /* Section symbol flag it can accoording to specific definition changed, ex { }*/
-char CFG_SSR = ']';  /* Section symbol flag it can accoording to specific definition changed, ex { }*/
-char CFG_NIS = ':';  /* name and index divide symbol */
-char CFG_NTS = '#';  /* comment symbol */
-char CFG_EQS = '=';  /* equall mark*/
+char CFG_SSL_cap_sensors = '[';  /* Section symbol flag it can accoording to specific definition changed, ex { }*/
+char CFG_SSR_cap_sensors = ']';  /* Section symbol flag it can accoording to specific definition changed, ex { }*/
+char CFG_NIS_cap_sensors = ':';  /* name and index divide symbol */
+char CFG_NTS_cap_sensors = '#';  /* comment symbol */
+char CFG_EQS_cap_sensors = '=';  /* equall mark*/
 
-ST_INI_FILE_DATA g_st_ini_file_data[MAX_KEY_NUM];
-int g_used_key_num = 0;
+ST_INI_FILE_DATA g_st_ini_file_data_cap_sensors[MAX_KEY_NUM];
+int g_used_key_num_cap_sensors = 0;
 
-char * ini_str_trim_r(char * buf);
-char * ini_str_trim_l(char * buf);
+char * ini_str_trim_r_cap_sensors(char * buf);
+char * ini_str_trim_l_cap_sensors(char * buf);
 static int ini_file_get_line(char *filedata, char *buffer, int maxlen); 
 //static int ini_split_key_value(char *buf, char **key, char **val); 
 static long atol(char *nptr);
@@ -36,7 +36,7 @@ static long atol(char *nptr);
 /* Works only for digits and letters, but small and fast */
 #define TOLOWER(x) ((x) | 0x20)
 
-int fts_strncmp(const char *cs, const char *ct, size_t count)
+int fts_strncmp_cap_sensors(const char *cs, const char *ct, size_t count)
 {
 	unsigned char c1=0, c2=0;
 
@@ -65,20 +65,20 @@ Return: 0		SUCCESS
 		-22		buffer overflow
 Note: 
 *************************************************************/
-int ini_get_key(char *filedata, char * section, char * key, char * value)
+int ini_get_key_cap_sensors(char *filedata, char * section, char * key, char * value)
 {
 	int i = 0;
 	int ret = -2;
-	for(i = 0; i < g_used_key_num; i++)
+	for(i = 0; i < g_used_key_num_cap_sensors; i++)
 	{
-		if(fts_strncmp(section, g_st_ini_file_data[i].pSectionName,
-			 g_st_ini_file_data[i].iSectionNameLen) != 0)
+		if(fts_strncmp_cap_sensors(section, g_st_ini_file_data_cap_sensors[i].pSectionName,
+			 g_st_ini_file_data_cap_sensors[i].iSectionNameLen) != 0)
 			 continue;
-		//printk("Section Name:%s, Len:%d\n\n", g_st_ini_file_data[i].pSectionName, g_st_ini_file_data[i].iSectionNameLen); 
-		if(fts_strncmp(key, g_st_ini_file_data[i].pKeyName,  strlen(key)) == 0)
-		 //g_st_ini_file_data[i].iKeyNameLen) == 0)
+		//printk("Section Name:%s, Len:%d\n\n", g_st_ini_file_data_cap_sensors[i].pSectionName, g_st_ini_file_data_cap_sensors[i].iSectionNameLen); 
+		if(fts_strncmp_cap_sensors(key, g_st_ini_file_data_cap_sensors[i].pKeyName,  strlen(key)) == 0)
+		 //g_st_ini_file_data_cap_sensors[i].iKeyNameLen) == 0)
 		{
-			memcpy(value, g_st_ini_file_data[i].pKeyValue, g_st_ini_file_data[i].iKeyValueLen);
+			memcpy(value, g_st_ini_file_data_cap_sensors[i].pKeyValue, g_st_ini_file_data_cap_sensors[i].iKeyValueLen);
 			ret = 0;
 			break;
 		}
@@ -114,13 +114,13 @@ int ini_get_sections(char *filedata, unsigned char * sections[], int max)
 			goto cfg_scts_end; 
 		if(n < 0)
 			break;/* file EOF */ 
-		n = strlen(ini_str_trim_l(ini_str_trim_r(buf1)));
-		if(n == 0 || buf1[0] == CFG_NTS) 
+		n = strlen(ini_str_trim_l_cap_sensors(ini_str_trim_r_cap_sensors(buf1)));
+		if(n == 0 || buf1[0] == CFG_NTS_cap_sensors) 
 			continue;       /* space or comment line */ 
 		ret = CFG_ERR_FILE_FORMAT;
-		if(n > 2 && ((buf1[0] == CFG_SSL && buf1[n-1] != CFG_SSR)))
+		if(n > 2 && ((buf1[0] == CFG_SSL_cap_sensors && buf1[n-1] != CFG_SSR_cap_sensors)))
 			goto cfg_scts_end;
-		if(buf1[0] == CFG_SSL) {
+		if(buf1[0] == CFG_SSL_cap_sensors) {
 			if (max!=0){
 				buf1[n-1] = 0x00;
 				strcpy((char *)sections[n_sections], buf1+1);
@@ -146,7 +146,7 @@ Output:
 Return: string pointer
 Note: 
 *************************************************************/
-char * ini_str_trim_r(char * buf)
+char * ini_str_trim_r_cap_sensors(char * buf)
 {
 	int len,i;
 	char tmp[512];
@@ -175,7 +175,7 @@ Output:
 Return: string pointer
 Note: 
 *************************************************************/
-char * ini_str_trim_l(char * buf)
+char * ini_str_trim_l_cap_sensors(char * buf)
 {
 	int len,i;	
 	char tmp[512];
@@ -327,7 +327,7 @@ int my_atoi(const char *str)
 	return signal*result;
 }
 
-int isspace(int x)  
+int isspace_cap_sensors(int x)  
 {  
     if(x==' '||x=='\t'||x=='\n'||x=='\f'||x=='\b'||x=='\r')  
         return 1;  
@@ -335,7 +335,7 @@ int isspace(int x)
         return 0;  
 }  
   
-int isdigit(int x)  
+int isdigit_cap_sensors(int x)  
 {  
     if(x<='9' && x>='0')           
         return 1;   
@@ -350,14 +350,14 @@ static long atol(char *nptr)
 	long total; /* current total */
 	int sign; /* if ''-'', then negative, otherwise positive */
 	/* skip whitespace */
-	while ( isspace((int)(unsigned char)*nptr) )
+	while ( isspace_cap_sensors((int)(unsigned char)*nptr) )
 		++nptr;
 	c = (int)(unsigned char)*nptr++;
 	sign = c; /* save sign indication */
 	if (c == '-' || c == '+')
 		c = (int)(unsigned char)*nptr++; /* skip sign */
 	total = 0;
-	while (isdigit(c)) {
+	while (isdigit_cap_sensors(c)) {
 		total = 10 * total + (c - '0'); /* accumulate digit */
 		c = (int)(unsigned char)*nptr++; /* get next char */
 	}
@@ -389,20 +389,20 @@ int atoi(char *nptr)
 	return (int)atol(nptr);
 }
 
-int init_key_data(void)
+int init_key_data_cap_sensors(void)
 {
 	int i = 0;
 	
-	g_used_key_num = 0;
+	g_used_key_num_cap_sensors = 0;
 		
 	for(i = 0; i < MAX_KEY_NUM; i++)
 		{
-		memset(g_st_ini_file_data[i].pSectionName, 0, MAX_KEY_NAME_LEN);
-		memset(g_st_ini_file_data[i].pKeyName, 0, MAX_KEY_NAME_LEN);
-		memset(g_st_ini_file_data[i].pKeyValue, 0, MAX_KEY_VALUE_LEN);	
-		g_st_ini_file_data[i].iSectionNameLen = 0;
-		g_st_ini_file_data[i].iKeyNameLen = 0;
-		g_st_ini_file_data[i].iKeyValueLen = 0;		
+		memset(g_st_ini_file_data_cap_sensors[i].pSectionName, 0, MAX_KEY_NAME_LEN);
+		memset(g_st_ini_file_data_cap_sensors[i].pKeyName, 0, MAX_KEY_NAME_LEN);
+		memset(g_st_ini_file_data_cap_sensors[i].pKeyValue, 0, MAX_KEY_VALUE_LEN);	
+		g_st_ini_file_data_cap_sensors[i].iSectionNameLen = 0;
+		g_st_ini_file_data_cap_sensors[i].iKeyNameLen = 0;
+		g_st_ini_file_data_cap_sensors[i].iKeyValueLen = 0;		
 		}
 
 	return 1;
@@ -416,7 +416,7 @@ Return: key of number. if wrong, return failure
 		-14			file format failure
 Note: 
 *************************************************************/
-int ini_get_key_data(char *filedata)
+int ini_get_key_data_cap_sensors(char *filedata)
 {
 	//FILE *fp; 
 	char buf1[MAX_CFG_BUF + 1]={0}; 
@@ -430,9 +430,9 @@ int ini_get_key_data(char *filedata)
 //	if((fp = fopen(filename, "rb")) == NULL) 
 //		return CFG_ERR_OPEN_FILE; 
 
-	init_key_data();/*init*/
+	init_key_data_cap_sensors();/*init*/
 
-	g_used_key_num = 0;
+	g_used_key_num_cap_sensors = 0;
 	while(1) {/* searching section */
 		ret = CFG_ERR_READ_FILE;
 		n = ini_file_get_line(filedata+dataoff, buf1, MAX_CFG_BUF);
@@ -444,21 +444,21 @@ int ini_get_key_data(char *filedata)
 		
 		dataoff += n;
 		
-		n = strlen(ini_str_trim_l(ini_str_trim_r(buf1)));
-		if(n == 0 || buf1[0] == CFG_NTS) 
+		n = strlen(ini_str_trim_l_cap_sensors(ini_str_trim_r_cap_sensors(buf1)));
+		if(n == 0 || buf1[0] == CFG_NTS_cap_sensors) 
 			continue;       /* space line or comment line */ 
 		ret = CFG_ERR_FILE_FORMAT;
 		//get section name
-		if(n > 2 && ((buf1[0] == CFG_SSL && buf1[n-1] != CFG_SSR)))
+		if(n > 2 && ((buf1[0] == CFG_SSL_cap_sensors && buf1[n-1] != CFG_SSR_cap_sensors)))
 			{
 			printk("Bad Section:%s\n\n", buf1);
 			goto cfg_scts_end;//bad section
 			}
 	
 		
-		if(buf1[0] == CFG_SSL) {	
-			g_st_ini_file_data[g_used_key_num].iSectionNameLen = n-2;	
-			if(MAX_KEY_NAME_LEN < g_st_ini_file_data[g_used_key_num].iSectionNameLen)
+		if(buf1[0] == CFG_SSL_cap_sensors) {	
+			g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].iSectionNameLen = n-2;	
+			if(MAX_KEY_NAME_LEN < g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].iSectionNameLen)
 			{
 				ret = CFG_ERR_OUT_OF_LEN;
 				printk("MAX_KEY_NAME_LEN: CFG_ERR_OUT_OF_LEN\n\n");
@@ -473,13 +473,13 @@ int ini_get_key_data(char *filedata)
 		} 
 		//get section name end
 
-		strcpy( g_st_ini_file_data[g_used_key_num].pSectionName, tmpSectionName);
-		g_st_ini_file_data[g_used_key_num].iSectionNameLen = strlen(tmpSectionName);	
+		strcpy( g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].pSectionName, tmpSectionName);
+		g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].iSectionNameLen = strlen(tmpSectionName);	
 		
 		iEqualSign = 0;
 		for(i=0; i < n; i++)
 			{
-				if(buf1[i] == CFG_EQS )
+				if(buf1[i] == CFG_EQS_cap_sensors)
 					{
 						iEqualSign = i;
 						break;
@@ -488,37 +488,37 @@ int ini_get_key_data(char *filedata)
 		if(0 == iEqualSign)
 			continue;
 		/*wait key name from before line*/
-		g_st_ini_file_data[g_used_key_num].iKeyNameLen = iEqualSign;	
-		if(MAX_KEY_NAME_LEN < g_st_ini_file_data[g_used_key_num].iKeyNameLen)
+		g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].iKeyNameLen = iEqualSign;	
+		if(MAX_KEY_NAME_LEN < g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].iKeyNameLen)
 			{
 				ret = CFG_ERR_OUT_OF_LEN;
 				printk("MAX_KEY_NAME_LEN: CFG_ERR_OUT_OF_LEN\n\n");
 				goto cfg_scts_end;			
 			}
-		memcpy(g_st_ini_file_data[g_used_key_num].pKeyName,
-			buf1, g_st_ini_file_data[g_used_key_num].iKeyNameLen);
+		memcpy(g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].pKeyName,
+			buf1, g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].iKeyNameLen);
 
 		/*wait key name form after line*/
-		g_st_ini_file_data[g_used_key_num].iKeyValueLen = n-iEqualSign-1;
-		if(MAX_KEY_VALUE_LEN < g_st_ini_file_data[g_used_key_num].iKeyValueLen)
+		g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].iKeyValueLen = n-iEqualSign-1;
+		if(MAX_KEY_VALUE_LEN < g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].iKeyValueLen)
 			{
 				ret = CFG_ERR_OUT_OF_LEN;
 				printk("MAX_KEY_VALUE_LEN: CFG_ERR_OUT_OF_LEN\n\n");
 				goto cfg_scts_end;			
 			}
-		memcpy(g_st_ini_file_data[g_used_key_num].pKeyValue,
-			buf1+ iEqualSign+1, g_st_ini_file_data[g_used_key_num].iKeyValueLen);		
+		memcpy(g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].pKeyValue,
+			buf1+ iEqualSign+1, g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].iKeyValueLen);		
 		
 		
-		ret = g_used_key_num;
+		ret = g_used_key_num_cap_sensors;
 
 		/*printk("Param Name = %s, Value = %s\n",
-			g_st_ini_file_data[g_used_key_num].pKeyName,
-			g_st_ini_file_data[g_used_key_num].pKeyValue
+			g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].pKeyName,
+			g_st_ini_file_data_cap_sensors[g_used_key_num_cap_sensors].pKeyValue
 			);*/
 		
-		g_used_key_num++;/*参数个数累加*/
-		if(MAX_KEY_NUM < g_used_key_num)
+		g_used_key_num_cap_sensors++;/*参数个数累加*/
+		if(MAX_KEY_NUM < g_used_key_num_cap_sensors)
 			{
 				ret = CFG_ERR_TOO_MANY_KEY_NUM;
 				printk("MAX_KEY_NUM: CFG_ERR_TOO_MANY_KEY_NUM\n\n");

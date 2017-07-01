@@ -18,7 +18,11 @@
 
 #include "pmic-voter.h"
 
-#define NUM_MAX_CLIENTS	11
+#ifdef ZS550KL
+#define NUM_MAX_CLIENTS	10
+#else
+#define NUM_MAX_CLIENTS	12
+#endif
 
 struct client_vote {
 	int	state;
@@ -163,7 +167,7 @@ int vote(struct votable *votable, int client_id, bool state, int val)
 	votable->votes[client_id].state = state;
 	votable->votes[client_id].value = val;
 
-	pr_debug("%s: %d voting for %d - %s\n",
+	pr_info("%s: %d voting for %d - %s\n",
 			votable->name,
 			client_id, val, state ? "on" : "off");
 	switch (votable->type) {
@@ -177,8 +181,6 @@ int vote(struct votable *votable, int client_id, bool state, int val)
 		votable->votes[client_id].value = state;
 		effective_result = vote_set_any(votable);
 		if (effective_result != votable->effective_result) {
-			if((votable->name[8] !='h') && (votable->name[8] !='d'))
-				pr_info("%s: %d voting for %d - %s\n",votable->name,client_id, val, state ? "on" : "off");
 			votable->effective_client_id = client_id;
 			votable->effective_result = effective_result;
 			rc = votable->callback(votable->dev,
@@ -193,7 +195,7 @@ int vote(struct votable *votable, int client_id, bool state, int val)
 	 * known effective_result and effective_client_id
 	 */
 	if (effective_id < 0) {
-		pr_debug("%s: no votes; skipping callback\n", votable->name);
+		pr_info("%s: no votes; skipping callback\n", votable->name);
 		goto out;
 	}
 
@@ -202,7 +204,7 @@ int vote(struct votable *votable, int client_id, bool state, int val)
 	if (effective_result != votable->effective_result) {
 		votable->effective_client_id = effective_id;
 		votable->effective_result = effective_result;
-		pr_info("%s: effective vote is now %d voted by %d\n",
+		pr_debug("%s: effective vote is now %d voted by %d\n",
 				votable->name, effective_result, effective_id);
 		rc = votable->callback(votable->dev, effective_result,
 					effective_id, val, client_id);

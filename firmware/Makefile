@@ -27,6 +27,9 @@ else
 acenic-objs := acenic/tg1.bin acenic/tg2.bin
 endif
 
+ifeq ($(TARGET_PRODUCT), Z01H)
+#Hades project synaptics touch fw.
+
 #EDO
 #fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR1959551-s3508r_hybrid_GestureOn_20160919.img
 #fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2424644-s3508t_hybrid_cdm10_asus_00050007.img
@@ -38,8 +41,11 @@ fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2555
 
 #TM
 #fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2515137-s3508r_tianma_20161230.img
-fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2547188_544D0001_s3508r_TM_20170223.img
-
+#fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2547188_544D0001_s3508r_TM_20170223.img
+#fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2555971_544D0002_s3508r_TM_20170306.img
+#fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2555971_544D0004_s3508r_TM_20170313.img
+fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2555971_544D0005_s3508r_TM_20170313.img
+endif
 
 fw-shipped-$(CONFIG_ACENIC) += $(acenic-objs)
 fw-shipped-$(CONFIG_ADAPTEC_STARFIRE) += adaptec/starfire_rx.bin \

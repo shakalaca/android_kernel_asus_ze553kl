@@ -95,6 +95,8 @@ static unsigned char g_ois_device_created = 0;
 static void create_ois_device_proc_file(void);
 /*ASUS_BSP --- bill_chen "Implement camera ois"*/
 
+extern int asus_project_id;
+
 static int32_t msm_ois_download(struct msm_ois_ctrl_t *o_ctrl)
 {
 	uint16_t bytes_in_tx = 0;
@@ -522,10 +524,30 @@ static int32_t msm_ois_write_settings(struct msm_ois_ctrl_t *o_ctrl,
 			case MSM_CAMERA_I2C_READ_FW_DATA:
 				//pr_err("%s: MSM_CAMERA_I2C_READ_FW_DATA +++\n", __func__);
 				if(settings[i].reg_data == 0x0001) {
-					PROGRAM_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZD552KL/ois_fw/OIS_programFW.bin", PROGRAM_DOWNLOAD_OIS_FW, ARRAY_SIZE(PROGRAM_DOWNLOAD_OIS_FW));
+					switch(asus_project_id){
+					case ASUS_ZD552KL_PHOENIX:
+						PROGRAM_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZD552KL_PHOENIX/ois_fw/OIS_programFW.bin", PROGRAM_DOWNLOAD_OIS_FW, ARRAY_SIZE(PROGRAM_DOWNLOAD_OIS_FW));
+						break;
+					case ASUS_ZE553KL:
+						PROGRAM_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZE553KL_HADES/ois_fw/OIS_programFW.bin", PROGRAM_DOWNLOAD_OIS_FW, ARRAY_SIZE(PROGRAM_DOWNLOAD_OIS_FW));
+						break;
+					case ASUS_ZS550KL:
+						PROGRAM_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZS550KL/ois_fw/OIS_programFW.bin", PROGRAM_DOWNLOAD_OIS_FW, ARRAY_SIZE(PROGRAM_DOWNLOAD_OIS_FW));
+						break;
+					}
 					pr_err("%s: PROGRAM_DOWNLOAD_OIS_FW_LENGTH = 0x%d\n", __func__, PROGRAM_DOWNLOAD_OIS_FW_LENGTH);
 				} else if(settings[i].reg_data == 0x0002) {
-					COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZD552KL/ois_fw/OIS_coefficientFW.mem", COEFFICIENT_DOWNLOAD_OIS_FW, ARRAY_SIZE(COEFFICIENT_DOWNLOAD_OIS_FW));
+					switch(asus_project_id){
+					case ASUS_ZD552KL_PHOENIX:
+						COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZD552KL_PHOENIX/ois_fw/OIS_coefficientFW.mem", COEFFICIENT_DOWNLOAD_OIS_FW, ARRAY_SIZE(COEFFICIENT_DOWNLOAD_OIS_FW));
+						break;
+					case ASUS_ZE553KL:
+						COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZE553KL_HADES/ois_fw/OIS_coefficientFW.mem", COEFFICIENT_DOWNLOAD_OIS_FW, ARRAY_SIZE(COEFFICIENT_DOWNLOAD_OIS_FW));
+						break;
+					case ASUS_ZS550KL:
+						COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZS550KL/ois_fw/OIS_coefficientFW.mem", COEFFICIENT_DOWNLOAD_OIS_FW, ARRAY_SIZE(COEFFICIENT_DOWNLOAD_OIS_FW));
+						break;
+					}
 					pr_err("%s: COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = 0x%d\n", __func__, COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH);
 				}
 				//pr_err("%s: MSM_CAMERA_I2C_READ_FW_DATA ---\n", __func__);
@@ -1354,7 +1376,7 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 	uint32_t id_info[3];
 	struct msm_camera_power_ctrl_t *power_info = NULL;
 	struct msm_ois_board_info *ob_info = NULL;
-	pr_err("%s: E", __func__);  
+	//pr_err("%s: E", __func__);  
 	/*ASUS_BSP --- bill_chen "Implement ois"*/
 	CDBG("Enter\n");
 
@@ -1509,7 +1531,7 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 
 		rc = of_property_read_u32((&pdev->dev)->of_node, "qcom,i2c-freq-mode",
 			&cci_client->i2c_freq_mode);
-		pr_err("%s: qcom,i2c_freq_mode %d, rc %d\n", __func__, cci_client->i2c_freq_mode, rc);
+		CDBG("%s: qcom,i2c_freq_mode %d, rc %d\n", __func__, cci_client->i2c_freq_mode, rc);
 		if (rc < 0) {
 			pr_err("%s qcom,i2c-freq-mode read fail. Setting to 0 %d\n",
 				__func__, rc);
@@ -1519,10 +1541,10 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 		msm_ois_t->i2c_client.cci_client->sid = id_info[0] >> 1;
 		msm_ois_t->sensor_id_reg_addr = id_info[1];
 		msm_ois_t->sensor_id = id_info[2];
-		pr_err("%s slave id = 0x%x\n", __func__, msm_ois_t->i2c_client.cci_client->sid);
-	 	pr_err("%s sensor id reg addr = 0x%x\n", __func__, msm_ois_t->sensor_id_reg_addr);
-	 	pr_err("%s sensor id addr = 0x%x\n", __func__, msm_ois_t->sensor_id);
-		pr_err("power_info=%p\n",power_info);
+		CDBG("%s slave id = 0x%x\n", __func__, msm_ois_t->i2c_client.cci_client->sid);
+	 	CDBG("%s sensor id reg addr = 0x%x\n", __func__, msm_ois_t->sensor_id_reg_addr);
+	 	CDBG("%s sensor id addr = 0x%x\n", __func__, msm_ois_t->sensor_id);
+		CDBG("power_info=%p\n",power_info);
 
 		rc = msm_camera_power_up(power_info, msm_ois_t->ois_device_type,
 			&msm_ois_t->i2c_client);
@@ -1530,7 +1552,7 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 			pr_err("%s: msm_camera_power_up fail rc = %d\n", __func__, rc);
 		}
 		usleep_range(1000, 1000);
-		pr_err("calling msm_ois_check_id\n");
+		CDBG("calling msm_ois_check_id\n");
 		rc = msm_ois_check_id(msm_ois_t);
 		if (rc < 0) {
 			pr_err("%s msm_ois_check_id fail %d rc = %d\n", __func__, __LINE__, rc);
@@ -1538,8 +1560,8 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 		} else {
 			g_ois_status = 1;
 		}
-		pr_err("%s g_ois_status = %d\n", __func__, g_ois_status);
-		pr_err("calling msm_camera_power_down\n");
+		CDBG("%s g_ois_status = %d\n", __func__, g_ois_status);
+		CDBG("calling msm_camera_power_down\n");
 
 		rc = msm_camera_power_down(power_info, msm_ois_t->ois_device_type,
 			&msm_ois_t->i2c_client);
@@ -1659,7 +1681,7 @@ static int32_t msm_ois_check_vm(struct msm_ois_ctrl_t *o_ctrl) {
 
     rc = o_ctrl->i2c_client.i2c_func_tbl->i2c_read(&(o_ctrl->i2c_client), 0x84BF, &write_num, MSM_CAMERA_I2C_WORD_DATA);
 
-    pr_err("%s: ois read num: 0x84BF = 0x%x (int16_t) = %d\n", __func__, write_num, (int16_t)write_num);
+    CDBG("%s: ois read num: 0x84BF = 0x%x (int16_t) = %d\n", __func__, write_num, (int16_t)write_num);
     if(rc < 0) {
         pr_err("%s: ois read i2c 0x84BF fail", __func__);
 		goto OIS_CHECK_FAIL;
@@ -1821,7 +1843,7 @@ static int Sysfs_read_word_seq(char *filename, int *value, int size)
 	loff_t pos_lsts = 0;
 	char buf[size][10];
 
-	pr_err("[8953_ois] %s: Enter\n", __func__);
+	CDBG("[8953_ois] %s: Enter\n", __func__);
 
 	/* open file */
 	fp = filp_open(filename, O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
@@ -1842,7 +1864,7 @@ static int Sysfs_read_word_seq(char *filename, int *value, int size)
 		fp->f_op->read(fp, buf[0], 10, &pos_lsts);
 		buf[0][9]='\0';
 		sscanf(buf[0], "%d", &value[0]);
-		pr_err("[8953_ois] %s: %s\n",__func__, buf[0]);
+		CDBG("[8953_ois] %s: %s\n",__func__, buf[0]);
 
 		pos_lsts = 0;
 		fp->f_op->read(fp, buf[1], 10, &pos_lsts);
@@ -1852,7 +1874,7 @@ static int Sysfs_read_word_seq(char *filename, int *value, int size)
 			if(buf[1][i] == ' ') break;
 		}
 		sscanf(&buf[1][i+1], "%d", &value[1]);
-		pr_err("[8953_ois] %s: %s\n",__func__, &buf[1][i+1]);
+		CDBG("[8953_ois] %s: %s\n",__func__, &buf[1][i+1]);
 
 	} else {
 		pr_err("[8953_ois] %s: File (%s) strlen f_op=NULL or op->read=NULL\n", __func__, filename);
@@ -1864,7 +1886,7 @@ static int Sysfs_read_word_seq(char *filename, int *value, int size)
 	/* close file */
 	filp_close(fp, NULL);
 
-	pr_err( "[8953_ois] %s: Exit\n", __func__);
+	CDBG( "[8953_ois] %s: Exit\n", __func__);
 
 	return 0;
 }
@@ -2011,7 +2033,7 @@ static int Sysfs_read_char_seq(char *filename, int *value, int size)
 		pos_lsts = 0;
 		for(i = 0; i < size; i++){
 			read_size = fp->f_op->read(fp, buf, 1, &pos_lsts);
-			pr_err("ois_cali read_size = %ld, buf[0] = %c buf[1] = %c",
+			CDBG("ois_cali read_size = %ld, buf[0] = %c buf[1] = %c",
 				read_size, buf[0], buf[1]);
 			buf[1]='\0';
 			if(read_size == 0) {
@@ -2090,7 +2112,6 @@ static bool Sysfs_write_debug_seq(char *filename, uint16_t *value, uint32_t size
 
 /*ASUS_BSP --- bill_chen "Implement ois"*/
 
-extern int asus_project_id;
 
 /*ASUS_BSP +++ bill_chen "Implement camera ois"*/
 #define	STATUS_OIS_DAC_PROC_FILE	"driver/vcm"
@@ -2098,11 +2119,11 @@ static struct proc_dir_entry *status_proc_file;
 static int ois_dac_proc_read(struct seq_file *buf, void *v)
 {
 	int dac = 0;
-	pr_err("%s: ois proc read dac = %d +++\n", __func__, g_ois_dac);
+	CDBG("%s: ois proc read dac = %d +++\n", __func__, g_ois_dac);
 	dac = g_ois_dac;
 
 	seq_printf(buf, "%d\n", dac);
-	pr_err("%s: ois proc read ---\n", __func__);
+	CDBG("%s: ois proc read ---\n", __func__);
 	return 0;
 }
 
@@ -2141,7 +2162,7 @@ static void create_ois_dac_proc_file(void)
 static int ois_status_proc_read(struct seq_file *buf, void *v)
 {
 	unsigned char status = 0;
-	pr_err("%s: ois proc read g_ois_status = %d\n", __func__, g_ois_status);
+	CDBG("%s: ois proc read g_ois_status = %d\n", __func__, g_ois_status);
 	status = g_ois_status;
 
 	seq_printf(buf, "%d\n", status);
@@ -2188,10 +2209,10 @@ static int ois_vm_proc_read(struct seq_file *buf, void *v)
 	int delay_count = 200;
 	int camera_open = 0;
 	struct msm_ois_ctrl_t *msm_ois_t = msm_ois_t_pointer;
-	pr_err("%s: +++\n", __func__);
-	pr_err("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
+	CDBG("%s: +++\n", __func__);
+	CDBG("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
 	Sysfs_read_char_seq("/data/.tmp/ATD_START", &camera_open, 1);
-	pr_err("%s: camera_open = %d\n", __func__, camera_open);
+	CDBG("%s: camera_open = %d\n", __func__, camera_open);
 
 	while(g_ois_mode == 255 && camera_open == 1) {
 		usleep_range(50000, 51000);
@@ -2206,17 +2227,17 @@ static int ois_vm_proc_read(struct seq_file *buf, void *v)
 		return 0;
 	}
 
-	pr_err("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
+	CDBG("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
 	mutex_lock(msm_ois_t->ois_mutex);
 	if(msm_ois_t->ois_state != OIS_ENABLE_STATE && msm_ois_t->ois_state != OIS_OPS_ACTIVE) {
-		pr_err("%s msm_camera_power_up +++ %d\n", __func__, __LINE__);
+		CDBG("%s msm_camera_power_up +++ %d\n", __func__, __LINE__);
 		g_ois_mode = 255;
 		rc = msm_camera_power_up(&(msm_ois_t->oboard_info->power_info), msm_ois_t->ois_device_type,
 			&msm_ois_t->i2c_client);
 		if (rc) {
 			pr_err("%s: msm_camera_power_up fail rc = %d\n", __func__, rc);
 		}
-		pr_err("%s msm_camera_power_up --- %d\n", __func__, __LINE__);
+		CDBG("%s msm_camera_power_up --- %d\n", __func__, __LINE__);
 
 		if(camera_open == 0) {
 			gpio_set_value_cansleep(
@@ -2230,35 +2251,35 @@ static int ois_vm_proc_read(struct seq_file *buf, void *v)
 			pr_err("%s msm_ois_check_id %d rc = %d\n", __func__, __LINE__, rc);
 		}
 
-		pr_err("%s: ois_init_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_init_setting_array));
+		CDBG("%s: ois_init_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_init_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_init_setting_array),
 			ois_init_setting_array);
 		if (rc < 0) {
 			pr_err("%s write init setting fail %d rc = %d\n", __func__, __LINE__, rc);
 		}
 
-		pr_err("%s: ois_write_eeprom_data_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_write_eeprom_data_setting_array));
+		CDBG("%s: ois_write_eeprom_data_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_write_eeprom_data_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_write_eeprom_data_setting_array),
 			ois_write_eeprom_data_setting_array);
 		if (rc < 0) {
 			pr_err("%s write eeprom data setting fail %d rc = %d\n", __func__, __LINE__, rc);
 		}
 
-		pr_err("%s: ois_write_calibration_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_write_calibration_setting_array));
+		CDBG("%s: ois_write_calibration_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_write_calibration_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_write_calibration_setting_array),
 			ois_write_calibration_setting_array);
 		if (rc < 0) {
 			pr_err("%s write calibration data setting fail %d rc = %d\n", __func__, __LINE__, rc);
 		}
 
-		pr_err("%s: ois_dsp_start_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_dsp_start_setting_array));
+		CDBG("%s: ois_dsp_start_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_dsp_start_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_dsp_start_setting_array),
 			ois_dsp_start_setting_array);
 		if (rc < 0) {
 			pr_err("%s write dsp start setting fail %d rc = %d\n", __func__, __LINE__, rc);
 		}
 
-		pr_err("%s: ois_disable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_disable_setting_array));
+		CDBG("%s: ois_disable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_disable_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_disable_setting_array),
 			ois_disable_setting_array);
 		if (rc < 0) {
@@ -2277,7 +2298,7 @@ static int ois_vm_proc_read(struct seq_file *buf, void *v)
 	}
 
 	if(msm_ois_t->ois_state != OIS_ENABLE_STATE && msm_ois_t->ois_state != OIS_OPS_ACTIVE) {
-		pr_err("%s msm_camera_power_down +++ %d\n", __func__, __LINE__);
+		CDBG("%s msm_camera_power_down +++ %d\n", __func__, __LINE__);
 		rc = msm_camera_power_down(&(msm_ois_t->oboard_info->power_info), msm_ois_t->ois_device_type,
 			&msm_ois_t->i2c_client);
 		if (rc) {
@@ -2289,12 +2310,12 @@ static int ois_vm_proc_read(struct seq_file *buf, void *v)
 			GPIO_OUT_LOW);
 		}
 		g_ois_mode = 255;
-		pr_err("%s msm_camera_power_down --- %d\n", __func__, __LINE__);
+		CDBG("%s msm_camera_power_down --- %d\n", __func__, __LINE__);
 	}
 	mutex_unlock(msm_ois_t->ois_mutex);
 
 	seq_printf(buf, "%d\n", status);
-	pr_err("%s: ois proc read ---\n", __func__);
+	CDBG("%s: ois proc read ---\n", __func__);
 	return 0;
 }
 
@@ -2338,10 +2359,10 @@ static int ois_cali_proc_read(struct seq_file *buf, void *v)
 	int delay_count = 200;
 	int camera_open = 0;
 	struct msm_ois_ctrl_t *msm_ois_t = msm_ois_t_pointer;
-	pr_err("%s: +++\n", __func__);
-	pr_err("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
+	CDBG("%s: +++\n", __func__);
+	CDBG("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
 	Sysfs_read_char_seq("/data/.tmp/ATD_START", &camera_open, 1);
-	pr_err("%s: camera_open = %d\n", __func__, camera_open);
+	CDBG("%s: camera_open = %d\n", __func__, camera_open);
 
 	while(g_ois_mode == 255 && camera_open == 1) {
 		usleep_range(50000, 51000);
@@ -2357,7 +2378,7 @@ static int ois_cali_proc_read(struct seq_file *buf, void *v)
 		return 0;
 	}
 #endif
-	pr_err("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
+	CDBG("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
 	mutex_lock(msm_ois_t->ois_mutex);
 	if(msm_ois_t->ois_state != OIS_ENABLE_STATE && msm_ois_t->ois_state != OIS_OPS_ACTIVE) {
 		rc = msm_camera_power_up(&(msm_ois_t->oboard_info->power_info), msm_ois_t->ois_device_type,
@@ -2373,7 +2394,7 @@ static int ois_cali_proc_read(struct seq_file *buf, void *v)
 			cali_rc = 0;
 		}
 
-		pr_err("%s: ois_init_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_init_setting_array));
+		CDBG("%s: ois_init_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_init_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_init_setting_array),
 			ois_init_setting_array);
 		if (rc < 0) {
@@ -2381,7 +2402,7 @@ static int ois_cali_proc_read(struct seq_file *buf, void *v)
 			cali_rc = 0;
 		}
 
-		pr_err("%s: ois_dsp_start_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_dsp_start_setting_array));
+		CDBG("%s: ois_dsp_start_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_dsp_start_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_dsp_start_setting_array),
 			ois_dsp_start_setting_array);
 		if (rc < 0) {
@@ -2390,7 +2411,7 @@ static int ois_cali_proc_read(struct seq_file *buf, void *v)
 		}
 	}
 
-	pr_err("%s: ois_read_calibration_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_read_calibration_setting_array));
+	CDBG("%s: ois_read_calibration_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_read_calibration_setting_array));
 	rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_read_calibration_setting_array),
 		ois_read_calibration_setting_array);
 	if (rc < 0) {
@@ -2398,8 +2419,8 @@ static int ois_cali_proc_read(struct seq_file *buf, void *v)
 		cali_rc = 0;
 	}
 
-	pr_err("%s: OIS_CALIBRATION_GRYO_OFFSET_X[0] = 0x%x\n", __func__, OIS_CALIBRATION_GRYO_OFFSET_X[0]);
-	pr_err("%s: OIS_CALIBRATION_GRYO_OFFSET_Y[0] = 0x%x\n", __func__, OIS_CALIBRATION_GRYO_OFFSET_Y[0]);
+	CDBG("%s: OIS_CALIBRATION_GRYO_OFFSET_X[0] = 0x%x\n", __func__, OIS_CALIBRATION_GRYO_OFFSET_X[0]);
+	CDBG("%s: OIS_CALIBRATION_GRYO_OFFSET_Y[0] = 0x%x\n", __func__, OIS_CALIBRATION_GRYO_OFFSET_Y[0]);
 
 	if((int16_t)OIS_CALIBRATION_GRYO_OFFSET_X[0] > gyro_criteria ||
 		(int16_t)OIS_CALIBRATION_GRYO_OFFSET_X[0] < -gyro_criteria) {
@@ -2421,7 +2442,7 @@ static int ois_cali_proc_read(struct seq_file *buf, void *v)
 	if(cali_rc != 0) {
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_write_calibration_setting_array),
 			ois_write_calibration_setting_array);
-		pr_err("%s: write gyro calibration data to register\n", __func__);
+		CDBG("%s: write gyro calibration data to register\n", __func__);
 		if (rc < 0) {
 			pr_err("%s write gyro calibration data to register fail %d rc = %d\n", __func__, __LINE__, rc);
 			cali_rc = 0;
@@ -2438,7 +2459,7 @@ static int ois_cali_proc_read(struct seq_file *buf, void *v)
 	}
 	mutex_unlock(msm_ois_t->ois_mutex);
 	seq_printf(buf, "%d\n", cali_rc);
-	pr_err("%s: ---\n", __func__);
+	CDBG("%s: ---\n", __func__);
 	return 0;
 }
 
@@ -2477,11 +2498,11 @@ static void create_ois_cali_proc_file(void)
 static int ois_mode_proc_read(struct seq_file *buf, void *v)
 {
 	unsigned char mode = 0;
-	pr_err("%s: ois proc read g_ois_mode = %d +++\n", __func__, g_ois_mode);
+	CDBG("%s: ois proc read g_ois_mode = %d +++\n", __func__, g_ois_mode);
 	mode = g_ois_mode;
 
 	seq_printf(buf, "%d\n", mode);
-	pr_err("%s: ois proc read ---\n", __func__);
+	CDBG("%s: ois proc read ---\n", __func__);
 	return 0;
 }
 
@@ -2535,7 +2556,7 @@ static ssize_t ois_rw_write(struct file *dev, const char *buf, size_t count, lof
 	uint16_t ori_sid = 0;
 	struct msm_ois_ctrl_t *msm_ois_t = msm_ois_t_pointer;
 	struct msm_camera_i2c_seq_reg_array reg_setting;
-	pr_err("%s: +++\n", __func__);
+	CDBG("%s: +++\n", __func__);
 
 	len=(count > DBG_TXT_BUF_SIZE-1)?(DBG_TXT_BUF_SIZE-1):(count);
 	if (copy_from_user(debugTxtBuf,buf,len))
@@ -2543,13 +2564,13 @@ static ssize_t ois_rw_write(struct file *dev, const char *buf, size_t count, lof
 	debugTxtBuf[len]=0; //add string end
 	sscanf(debugTxtBuf, "%x %x", &reg, &value);
 	*ppos=len;
-	pr_err("ois write reg=0x%x value=0x%x\n", reg, value);
+	CDBG("ois write reg=0x%x value=0x%x\n", reg, value);
 	g_reg = reg;
 	g_value = value;
 	mutex_lock(msm_ois_t->ois_mutex);
 	if (reg == 0xA0) {
 		ori_sid = msm_ois_t->i2c_client.cci_client->sid;
-		pr_err("A0 ois ori_sid = 0x%x\n", ori_sid);
+		CDBG("A0 ois ori_sid = 0x%x\n", ori_sid);
 		msm_ois_t->i2c_client.cci_client->sid = 0x50;
 		//rc = msm_ois_t->i2c_client.i2c_func_tbl->i2c_write(
 			//&(msm_ois_t->i2c_client), value,
@@ -2559,7 +2580,7 @@ static ssize_t ois_rw_write(struct file *dev, const char *buf, size_t count, lof
 			&(msm_ois_t->i2c_client), value,
 			&read_num, MSM_CAMERA_I2C_WORD_DATA);
 		g_value = read_num;
-		pr_err("A0 ois read reg=0x%x read_num=0x%x\n", value, read_num);
+		CDBG("A0 ois read reg=0x%x read_num=0x%x\n", value, read_num);
 		msm_ois_t->i2c_client.cci_client->sid = ori_sid;
 		if (rc < 0) {
 			pr_err("%s: failed to read 0x%x\n",
@@ -2573,7 +2594,7 @@ static ssize_t ois_rw_write(struct file *dev, const char *buf, size_t count, lof
 		reg_setting.reg_data[1] = value / 256;
 		reg_setting.reg_data[2] = value % 256;
 		reg_setting.reg_data_size = 3;
-		pr_err("%s: vcm reg_setting.reg_addr = 0x%x, reg_data[0] = 0x%x, reg_setting.reg_data[1] = 0x%x, reg_setting.reg_data[2] = 0x%x\n", __func__, reg_setting.reg_addr, reg_setting.reg_data[0], reg_setting.reg_data[1], reg_setting.reg_data[2]);
+		CDBG("%s: vcm reg_setting.reg_addr = 0x%x, reg_data[0] = 0x%x, reg_setting.reg_data[1] = 0x%x, reg_setting.reg_data[2] = 0x%x\n", __func__, reg_setting.reg_addr, reg_setting.reg_data[0], reg_setting.reg_data[1], reg_setting.reg_data[2]);
 		rc = msm_ois_t->i2c_client.i2c_func_tbl->
 			i2c_write_seq(&msm_ois_t->i2c_client,
 			reg_setting.reg_addr,
@@ -2586,7 +2607,7 @@ static ssize_t ois_rw_write(struct file *dev, const char *buf, size_t count, lof
 			return rc;
 		}
 	} else if (reg != -1 && value != -1) {
-		pr_err("ois write reg=0x%x value=0x%x reverse_value = 0x%x\n ", reg, value,
+		CDBG("ois write reg=0x%x value=0x%x reverse_value = 0x%x\n ", reg, value,
 			((value & 0xff00) >> 8) + ((value & 0x00ff) << 8));
 		rc = msm_ois_t->i2c_client.i2c_func_tbl->i2c_write(
 			&(msm_ois_t->i2c_client), reg,
@@ -2602,7 +2623,7 @@ static ssize_t ois_rw_write(struct file *dev, const char *buf, size_t count, lof
 			&(msm_ois_t->i2c_client), reg,
 			&read_num, MSM_CAMERA_I2C_WORD_DATA);
 		g_value = read_num;
-		pr_err("ois read reg=0x%x read_num=0x%x\n", reg, read_num);
+		CDBG("ois read reg=0x%x read_num=0x%x\n", reg, read_num);
 		if (rc < 0) {
 			pr_err("%s: failed to read 0x%x\n",
 				 __func__, reg);
@@ -2611,7 +2632,7 @@ static ssize_t ois_rw_write(struct file *dev, const char *buf, size_t count, lof
 		}
 	}
 	mutex_unlock(msm_ois_t->ois_mutex);
-	pr_err("%s: ---\n", __func__);
+	CDBG("%s: ---\n", __func__);
 	return len;
 }
 
@@ -2662,8 +2683,8 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 	int delay_count = 200;
 	int camera_open = 0;
 	struct msm_ois_ctrl_t *msm_ois_t = msm_ois_t_pointer;
-	pr_err("%s: +++\n", __func__);
-	pr_err("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
+	CDBG("%s: +++\n", __func__);
+	CDBG("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
 
 	len=(count > DBG_TXT_BUF_SIZE-1)?(DBG_TXT_BUF_SIZE-1):(count);
 	if (copy_from_user(debugTxtBuf,buf,len))
@@ -2671,11 +2692,11 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 	debugTxtBuf[len]=0; //add string end
 	sscanf(debugTxtBuf, "%d", &value);
 	*ppos=len;
-	pr_err("%s: ois write value=0x%x\n", __func__, value);
+	CDBG("%s: ois write value=0x%x\n", __func__, value);
 
 
 	Sysfs_read_char_seq("/data/.tmp/ATD_START", &camera_open, 1);
-	pr_err("%s: camera_open = %d\n", __func__, camera_open);
+	CDBG("%s: camera_open = %d\n", __func__, camera_open);
 
 	if(value != 4 && value != 5 && value != 6) {
 		while(g_ois_mode == 255 && camera_open == 1) {
@@ -2684,12 +2705,12 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 				break;
 		}
 	}
-	pr_err("%s: LINE = %d\n", __func__, __LINE__);
+	CDBG("%s: LINE = %d\n", __func__, __LINE__);
 	mutex_lock(msm_ois_t->ois_mutex);
 	if(value == 5) {
-		pr_err("%s: LINE = %d\n", __func__, __LINE__);
+		CDBG("%s: LINE = %d\n", __func__, __LINE__);
 		if(msm_ois_t->ois_state != OIS_ENABLE_STATE && msm_ois_t->ois_state != OIS_OPS_ACTIVE) {
-			pr_err("%s: LINE = %d\n", __func__, __LINE__);
+			CDBG("%s: LINE = %d\n", __func__, __LINE__);
 			rc = msm_camera_power_up(&(msm_ois_t->oboard_info->power_info), msm_ois_t->ois_device_type,
 				&msm_ois_t->i2c_client);
 			if (rc) {
@@ -2700,9 +2721,9 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 	}
 
 	if(value == 4) {
-		pr_err("%s: LINE = %d\n", __func__, __LINE__);
+		CDBG("%s: LINE = %d\n", __func__, __LINE__);
 		if(msm_ois_t->ois_state != OIS_ENABLE_STATE && msm_ois_t->ois_state != OIS_OPS_ACTIVE) {
-			pr_err("%s: LINE = %d\n", __func__, __LINE__);
+			CDBG("%s: LINE = %d\n", __func__, __LINE__);
 			rc = msm_camera_power_down(&(msm_ois_t->oboard_info->power_info), msm_ois_t->ois_device_type,
 				&msm_ois_t->i2c_client);
 			if (rc) {
@@ -2720,7 +2741,7 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 			cali_rc = 0;
 		}
 
-		pr_err("%s: ois_init_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_init_setting_array));
+		CDBG("%s: ois_init_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_init_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_init_setting_array),
 			ois_init_setting_array);
 		if (rc < 0) {
@@ -2728,7 +2749,7 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 			cali_rc = 0;
 		}
 
-		pr_err("%s: ois_dsp_start_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_dsp_start_setting_array));
+		CDBG("%s: ois_dsp_start_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_dsp_start_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_dsp_start_setting_array),
 			ois_dsp_start_setting_array);
 		if (rc < 0) {
@@ -2738,7 +2759,7 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 	}
 
 	if(value == 0) {
-		pr_err("%s: ois_disable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_disable_setting_array));
+		CDBG("%s: ois_disable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_disable_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_disable_setting_array),
 			ois_disable_setting_array);
 		if (rc < 0) {
@@ -2748,14 +2769,14 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 	}
 
 	if(value == 1) {
-		pr_err("%s: ois_enable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_enable_setting_array));
+		CDBG("%s: ois_enable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_enable_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_enable_setting_array),
 			ois_enable_setting_array);
 		if (rc < 0) {
 			pr_err("%s write ois enable setting fail %d rc = %d\n", __func__, __LINE__, rc);
 			cali_rc = 0;
 		}
-		pr_err("%s: ois_movie_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_movie_setting_array));
+		CDBG("%s: ois_movie_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_movie_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_movie_setting_array),
 			ois_movie_setting_array);
 		if (rc < 0) {
@@ -2765,14 +2786,14 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 	}
 
 	if(value == 2) {
-		pr_err("%s: ois_enable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_enable_setting_array));
+		CDBG("%s: ois_enable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_enable_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_enable_setting_array),
 			ois_enable_setting_array);
 		if (rc < 0) {
 			pr_err("%s write ois enable setting fail %d rc = %d\n", __func__, __LINE__, rc);
 			cali_rc = 0;
 		}
-		pr_err("%s: ois_still_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_still_setting_array));
+		CDBG("%s: ois_still_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_still_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_still_setting_array),
 			ois_still_setting_array);
 		if (rc < 0) {
@@ -2783,14 +2804,14 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 
 
 	if(value == 3) {
-		pr_err("%s: ois_enable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_enable_setting_array));
+		CDBG("%s: ois_enable_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_enable_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_enable_setting_array),
 			ois_enable_setting_array);
 		if (rc < 0) {
 			pr_err("%s write ois enable setting fail %d rc = %d\n", __func__, __LINE__, rc);
 			cali_rc = 0;
 		}
-		pr_err("%s: ois_test_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_test_setting_array));
+		CDBG("%s: ois_test_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_test_setting_array));
 		rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_test_setting_array),
 			ois_test_setting_array);
 		if (rc < 0) {
@@ -2802,7 +2823,7 @@ static ssize_t ois_power_write(struct file *dev, const char *buf, size_t count, 
 
 	if(cali_rc == 1)
 		g_power_state = value;
-	pr_err("%s: ---\n", __func__);
+	CDBG("%s: ---\n", __func__);
 	return len;
 }
 
@@ -2854,10 +2875,10 @@ static ssize_t ois_debug_write(struct file *dev, const char *buf, size_t count, 
 	struct msm_ois_ctrl_t *msm_ois_t = msm_ois_t_pointer;
 	int gyro_acc_array_size = ARRAY_SIZE(OIS_GYRO_ACC_VALUE);
 	g_ois_debug_status = 1;
-	pr_err("%s: +++\n", __func__);
-	pr_err("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
+	CDBG("%s: +++\n", __func__);
+	CDBG("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
 	Sysfs_read_char_seq("/data/.tmp/ATD_START", &camera_open, 1);
-	pr_err("%s: camera_open = %d\n", __func__, camera_open);
+	CDBG("%s: camera_open = %d\n", __func__, camera_open);
 
 	while(g_ois_mode == 255 && camera_open == 1) {
 		usleep_range(50000, 51000);
@@ -2871,11 +2892,11 @@ static ssize_t ois_debug_write(struct file *dev, const char *buf, size_t count, 
 	debugTxtBuf[len]=0; //add string end
 	sscanf(debugTxtBuf, "%d %d", &reg, &value);
 	*ppos=len;
-	pr_err("%s: ois write reg=0x%x value=0x%x\n", __func__, reg, value);
+	CDBG("%s: ois write reg=0x%x value=0x%x\n", __func__, reg, value);
 	g_reg = reg;
 	g_value = value;
 
-	pr_err("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
+	CDBG("%s: ois_state = %d\n", __func__, msm_ois_t->ois_state);
 	mutex_lock(msm_ois_t->ois_mutex);
 	if (reg == 1) {
 		if(msm_ois_t->ois_state != OIS_ENABLE_STATE && msm_ois_t->ois_state != OIS_OPS_ACTIVE) {
@@ -2892,7 +2913,7 @@ static ssize_t ois_debug_write(struct file *dev, const char *buf, size_t count, 
 				g_ois_debug_status = 0;
 			}
 
-			pr_err("%s: ois_init_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_init_setting_array));
+			CDBG("%s: ois_init_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_init_setting_array));
 			rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_init_setting_array),
 				ois_init_setting_array);
 			if (rc < 0) {
@@ -2900,7 +2921,7 @@ static ssize_t ois_debug_write(struct file *dev, const char *buf, size_t count, 
 				g_ois_debug_status = 0;
 			}
 
-			pr_err("%s: ois_dsp_start_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_dsp_start_setting_array));
+			CDBG("%s: ois_dsp_start_setting_array size = %ld\n", __func__, ARRAY_SIZE(ois_dsp_start_setting_array));
 			rc = msm_ois_write_settings(msm_ois_t, ARRAY_SIZE(ois_dsp_start_setting_array),
 				ois_dsp_start_setting_array);
 			if (rc < 0) {
@@ -2910,7 +2931,7 @@ static ssize_t ois_debug_write(struct file *dev, const char *buf, size_t count, 
 		}
 
 		usleep_range(10000, 11000);
-		pr_err("%s: ois debug_calibration_data ARRAY_SIZE(OIS_GYRO_ACC_VALUE) = %d +++", __func__, gyro_acc_array_size);
+		CDBG("%s: ois debug_calibration_data ARRAY_SIZE(OIS_GYRO_ACC_VALUE) = %d +++", __func__, gyro_acc_array_size);
 		for(i = 0; i < value; i++) {
 			for(j = 0; j < gyro_acc_array_size; j++) {
 				rc = msm_ois_t->i2c_client.i2c_func_tbl->i2c_read(
@@ -2925,7 +2946,7 @@ static ssize_t ois_debug_write(struct file *dev, const char *buf, size_t count, 
 				break;
 			}
 		}
-		pr_err("%s: ois debug_calibration_data ---", __func__);
+		CDBG("%s: ois debug_calibration_data ---", __func__);
 		if(g_ois_debug_status == 1) {
 			pr_err("%s: Sysfs_write_debug_seq /data/data/OIS_debug", __func__);
 			file_rc = Sysfs_write_debug_seq("/data/data/OIS_debug", debug_calibration_data, value * gyro_acc_array_size);
@@ -2945,7 +2966,7 @@ static ssize_t ois_debug_write(struct file *dev, const char *buf, size_t count, 
 		}
 	}
 	mutex_unlock(msm_ois_t->ois_mutex);
-	pr_err("%s: ---\n", __func__);
+	CDBG("%s: ---\n", __func__);
 	return len;
 }
 
@@ -2997,7 +3018,7 @@ static ssize_t ois_device_write(struct file *dev, const char *buf, size_t count,
 	debugTxtBuf[len]=0; //add string end
 	sscanf(debugTxtBuf, "%s", ois_subdev_string);
 	*ppos=len;
-	pr_err("ois write subdev=%s\n", ois_subdev_string);
+	CDBG("ois write subdev=%s\n", ois_subdev_string);
 	//pr_err("%s: ---\n", __func__);
 	return len;
 }

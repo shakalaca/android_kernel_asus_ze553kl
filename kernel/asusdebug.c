@@ -20,7 +20,9 @@
 #include <asm/io.h>
 #include <linux/export.h>
 #include <linux/slab.h>
-//extern int g_user_dbg_mode;
+#include <linux/switch.h>
+#include <linux/gpio.h>
+extern int g_gpio_audio_debug;/* ASUS_BSP Freeman +++ */
 
 #include "locking/rtmutex_common.h"
 
@@ -794,6 +796,35 @@ static void deinitKernelEnv(void)
     set_fs(oldfs);
 }
 
+
+//ASUS_BSP+++  "[ZC550KL][TRACE][Na] add rule to trige trace"
+int asus_trace_trige_state = 0;
+struct switch_dev asus_trace_trige_switch;
+static ssize_t asus_trace_trige_name(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "trace_trige\n");
+}
+
+static ssize_t asus_trace_trige_switch_state(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "%d\n", asus_trace_trige_state);
+}
+
+static int AsusTraceTrigeInitialize(void)
+{
+	int ret = 0;
+	printk("[TRACE] %s: register switch dev! %d\n", __FUNCTION__, ret);
+	asus_trace_trige_switch.name = "tracetrige";
+	asus_trace_trige_switch.print_state = asus_trace_trige_switch_state;
+	asus_trace_trige_switch.print_name = asus_trace_trige_name;
+	ret = switch_dev_register(&asus_trace_trige_switch);
+	if (ret < 0) {
+	    printk("[TRACE] %s: Unable to register switch dev! %d\n", __FUNCTION__, ret);
+	    return -1;
+	}
+	return 0;
+}
+//ASUS_BSP--- "[ZC550KL][TRACE][Na] add rule to trige trace"
 char messages[256];
 void save_phone_hang_log(void)
 {
@@ -824,6 +855,9 @@ void save_phone_hang_log(void)
         g_phonehang_log[0] = 0;
         //iounmap(g_phonehang_log);
     }
+	printk("triger trace %d\n", asus_trace_trige_state);
+	asus_trace_trige_state = !asus_trace_trige_state;
+	switch_set_state(&asus_trace_trige_switch, asus_trace_trige_state);
 }
 EXPORT_SYMBOL(save_phone_hang_log);
 void save_last_shutdown_log(char* filename)
@@ -927,10 +961,22 @@ static char g_Asus_Eventlog[ASUS_EVTLOG_MAX_ITEM][ASUS_EVTLOG_STR_MAXLEN];
 static int g_Asus_Eventlog_read = 0;
 static int g_Asus_Eventlog_write = 0;
 
+//ASUS_BSP johnchain+++ add for record ASUSErclog
+static struct workqueue_struct *ASUSErclog_workQueue;
+static int g_hfileErclog = -MAX_ERRNO;
+static char g_Asus_Erclog[ASUS_ERCLOG_MAX_ITEM][ASUS_ERCLOG_STR_MAXLEN];
+static char g_Asus_Erclog_filelist[ASUS_ERCLOG_MAX_ITEM][ASUS_ERCLOG_FILENAME_MAXLEN];
+static int g_Asus_Erclog_read = 0;
+static int g_Asus_Erclog_write = 0;
+//ASUS_BSP johnchain--- add for record ASUSErclog
+
 static void do_write_event_worker(struct work_struct *work);
+static void do_write_erc_worker(struct work_struct *work); //ASUS_BSP johnchain+++ add for record ASUSErclog
 static DECLARE_WORK(eventLog_Work, do_write_event_worker);
+static DECLARE_WORK(ercLog_Work, do_write_erc_worker); //ASUS_BSP johnchain+++ add for record ASUSErclog
 
 static struct mutex mA;
+static struct mutex mA_erc;
 #define AID_SDCARD_RW 1015
 static void do_write_event_worker(struct work_struct *work)
 {
@@ -1009,6 +1055,69 @@ static void do_write_event_worker(struct work_struct *work)
 	}
 }
 
+//ASUS_BSP johnchain+++ add for record ASUSErclog
+static void do_write_erc_worker(struct work_struct *work)
+{
+    int str_len;
+    char log_body[ASUS_ERCLOG_STR_MAXLEN];
+    char filepath[ASUS_ERCLOG_FILENAME_MAXLEN];
+    char filepath_old[ASUS_ERCLOG_FILENAME_MAXLEN];
+    long size;
+    int flag_read = -1;
+    int flag_write = -1;
+
+    while (g_Asus_Erclog_read != g_Asus_Erclog_write) {
+        memset(log_body, 0, ASUS_ERCLOG_STR_MAXLEN);
+        memset(filepath, 0, sizeof(char)*ASUS_ERCLOG_FILENAME_MAXLEN);
+        memset(filepath_old, 0, sizeof(char)*ASUS_ERCLOG_FILENAME_MAXLEN);
+
+        mutex_lock(&mA_erc);
+        flag_read = g_Asus_Erclog_read;
+        flag_write = g_Asus_Erclog_write;
+
+        memcpy(log_body, g_Asus_Erclog[g_Asus_Erclog_read], ASUS_ERCLOG_STR_MAXLEN);
+        snprintf(filepath, ASUS_ERCLOG_FILENAME_MAXLEN, "%s%s.txt", ASUS_ASDF_BASE_DIR, g_Asus_Erclog_filelist[g_Asus_Erclog_read]);
+        snprintf(filepath_old, ASUS_ERCLOG_FILENAME_MAXLEN, "%s%s_old.txt", ASUS_ASDF_BASE_DIR, g_Asus_Erclog_filelist[g_Asus_Erclog_read]);
+        memset(g_Asus_Erclog[g_Asus_Erclog_read], 0, ASUS_ERCLOG_STR_MAXLEN);
+        memset(g_Asus_Erclog_filelist[g_Asus_Erclog_read], 0, ASUS_ERCLOG_FILENAME_MAXLEN);
+
+        g_Asus_Erclog_read++;
+        g_Asus_Erclog_read %= ASUS_ERCLOG_MAX_ITEM;
+        mutex_unlock(&mA_erc);
+
+        str_len = strlen(log_body);
+		if(str_len == 0) continue;
+        if (str_len > 0 && log_body[str_len - 1] != '\n' ) {
+            if(str_len + 1 >= ASUS_ERCLOG_STR_MAXLEN)
+                str_len = ASUS_ERCLOG_STR_MAXLEN - 2;
+            log_body[str_len] = '\n';
+            log_body[str_len + 1] = '\0';
+        }
+
+        pr_debug("flag_read = %d, flag_write = %d, filepath = %s\n", flag_read, flag_write, filepath);
+        g_hfileErclog = sys_open(filepath, O_CREAT|O_RDWR|O_SYNC, 0444);
+        sys_chown(filepath, AID_SDCARD_RW, AID_SDCARD_RW);
+
+        if (!IS_ERR((const void *)(ulong)g_hfileEvtlog)) {
+            size = sys_lseek(g_hfileErclog, 0, SEEK_END);
+            if (size >= 5000) {    //limit 5KB each file
+                sys_close(g_hfileErclog);
+                sys_rmdir(filepath_old);
+                sys_rename(filepath, filepath_old);
+                g_hfileErclog = sys_open(filepath, O_CREAT|O_RDWR|O_SYNC, 0444);
+            }
+
+            sys_write(g_hfileErclog, log_body, strlen(log_body));
+            sys_fsync(g_hfileErclog);
+            sys_close(g_hfileErclog);
+
+        }else{
+            pr_err("sys_open %s IS_ERR error code: %d]\n", filepath, g_hfileEvtlog);
+        }
+    }
+}
+//ASUS_BSP johnchain--- add for record ASUSErclog
+
 extern struct timezone sys_tz;
 
 void ASUSEvtlog(const char *fmt, ...)
@@ -1051,6 +1160,52 @@ void ASUSEvtlog(const char *fmt, ...)
 }
 EXPORT_SYMBOL(ASUSEvtlog);
 
+//ASUS_BSP johnchain+++ add for record ASUSErclog
+void ASUSErclog(const char * filename, const char *fmt, ...)
+{
+    va_list args;
+    char *buffer;
+    char *tofile;
+    int flag_write = -1;
+
+//    if (!in_interrupt() && !in_atomic() && !irqs_disabled())
+        mutex_lock(&mA_erc);
+
+    flag_write = g_Asus_Erclog_write;
+    buffer = g_Asus_Erclog[g_Asus_Erclog_write];
+    tofile = g_Asus_Erclog_filelist[g_Asus_Erclog_write];
+    memset(buffer, 0, ASUS_EVTLOG_STR_MAXLEN);
+    memset(tofile, 0, ASUS_ERCLOG_FILENAME_MAXLEN);
+    g_Asus_Erclog_write++;
+    g_Asus_Erclog_write %= ASUS_EVTLOG_MAX_ITEM;
+
+//    if (!in_interrupt() && !in_atomic() && !irqs_disabled())
+        mutex_unlock(&mA_erc);
+
+    if (buffer) {
+        struct rtc_time tm;
+        struct timespec ts;
+
+        getnstimeofday(&ts);
+        ts.tv_sec -= sys_tz.tz_minuteswest * 60;
+        rtc_time_to_tm(ts.tv_sec, &tm);
+        getrawmonotonic(&ts);
+        sprintf(buffer, "%04d%02d%02d%02d%02d%02d :", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+        va_start(args, fmt);
+        vscnprintf(buffer + strlen(buffer), ASUS_ERCLOG_STR_MAXLEN - strlen(buffer), fmt, args);
+        va_end(args);
+
+        sprintf(tofile, "%s", filename);
+        pr_debug("flag_write= %d, tofile = %s\n", flag_write, tofile);
+        queue_work(ASUSErclog_workQueue, &ercLog_Work);
+    } else {
+        pr_err("[ASDF]ASUSErclog buffer cannot be allocated\n");
+    }
+}
+EXPORT_SYMBOL(ASUSErclog);
+//ASUS_BSP johnchain--- add for record ASUSErclog
+
 static ssize_t evtlogswitch_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
 	ulong *printk_buffer_slot2_addr;
@@ -1080,7 +1235,7 @@ static ssize_t asusevtlog_write(struct file *file, const char __user *buf, size_
 	memset(messages, 0, sizeof(messages));
 	if (copy_from_user(messages, buf, count))
 		return -EFAULT;
-	ASUSEvtlog(messages);
+	ASUSEvtlog("%s",messages);
 
 	return count;
 }
@@ -1115,18 +1270,33 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
 	if (strncmp(messages, "panic", strlen("panic")) == 0) {
 		panic("panic test");
 	} else if (strncmp(messages, "dbg", strlen("dbg")) == 0) {
-//		g_user_dbg_mode = 1;
-//		printk("[ASDF]Kernel dbg mode = %d\n", g_user_dbg_mode);
-		printk("[ASDF]g_user_dbg_mode has been removed\n");
+	#if 0
+		isBuildType_user =true;
+	#endif
+		//if(isBuildType_user && g_ASUS_PRJ_STAGE == STAGE_MP)
+	//	{
+			//g_user_dbg_mode = 0;
+			//gpio_direction_output(g_gpio_audio_debug, 1); /* disable uart log, enable audio */
+			//printk("[ASDF] MP device user build set force Audio mode!!\n");
+		//}
+		//else{
+			g_user_dbg_mode = 1;
+			gpio_direction_output(g_gpio_audio_debug, 0); /* enable uart log, disable audio */
+			printk("[ASDF]Kernel dbg mode = %d\n", g_user_dbg_mode);
+			printk("[ASDF]g_user_dbg_mode has been set\n");
+		//}
 	} else if(strncmp(messages, "ndbg", strlen("ndbg")) == 0) {
-//		g_user_dbg_mode = 0;
-//		printk("[ASDF]Kernel dbg mode = %d\n", g_user_dbg_mode);
+		g_user_dbg_mode = 0;
+		gpio_direction_output(g_gpio_audio_debug, 1); /* disable uart log, enable audio */
+		printk("[ASDF]Kernel dbg mode = %d\n", g_user_dbg_mode);
 		printk("[ASDF]g_user_dbg_mode has been removed\n");
 	} else if(strncmp(messages, "get_asdf_log",
 				strlen("get_asdf_log")) == 0) {
+
 #ifdef CONFIG_MSM_RTB
-		extern int g_saving_rtb_log;
+               extern int g_saving_rtb_log;
 #endif
+
 		ulong *printk_buffer_slot2_addr;
 
 		printk_buffer_slot2_addr = (ulong *)PRINTK_BUFFER_SLOT2;
@@ -1138,15 +1308,16 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
 			get_last_shutdown_log();
 			printk("[ASDF] get_last_shutdown_log: printk_buffer_slot2_addr=%p, value=0x%lx\n", printk_buffer_slot2_addr, *printk_buffer_slot2_addr);
 #ifdef CONFIG_MSM_RTB
-			if ((*printk_buffer_slot2_addr) == (ulong)PRINTK_BUFFER_MAGIC )
-				save_rtb_log();
+                       if ((*printk_buffer_slot2_addr) == (ulong)PRINTK_BUFFER_MAGIC )
+                               save_rtb_log();
 #endif
-			//(*printk_buffer_slot2_addr)=(ulong)PRINTK_BUFFER_MAGIC;
-			(*printk_buffer_slot2_addr)=0;
+                       //(*printk_buffer_slot2_addr)=(ulong)PRINTK_BUFFER_MAGIC;
+                       (*printk_buffer_slot2_addr)=0;
 		}
 #ifdef CONFIG_MSM_RTB
-		g_saving_rtb_log = 0;
+               g_saving_rtb_log = 0;
 #endif
+
 	} else if(strncmp(messages, "slowlog", strlen("slowlog")) == 0) {
 		printk("[ASDF]start to gi chk\n");
 		save_all_thread_info();
@@ -1289,17 +1460,20 @@ static int __init proc_asusdebug_init(void)
 	PRINTK_BUFFER_VA = ioremap(PRINTK_BUFFER_PA, PRINTK_BUFFER_SIZE);
 //printk("PRINTK_BUFFER_VA=%p\n", PRINTK_BUFFER_VA);
 	mutex_init(&mA);
+	mutex_init(&mA_erc);
 	fake_mutex.owner = current;
 	fake_mutex.mutex_owner_asusdebug = current;
 	fake_mutex.name = " fake_mutex";
 	strcpy(fake_completion.name," fake_completion");
 	fake_rtmutex.owner = current;
 	ASUSEvtlog_workQueue  = create_singlethread_workqueue("ASUSEVTLOG_WORKQUEUE");
+	ASUSErclog_workQueue  = create_singlethread_workqueue("ASUSERCLOG_WORKQUEUE"); //ASUS_BSP johnchain+++ add for record ASUSErclog
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	register_early_suspend(&asusdebug_early_suspend_handler);
 #endif
 
+	AsusTraceTrigeInitialize();
 	return 0;
 }
 module_init(proc_asusdebug_init);

@@ -120,6 +120,7 @@ struct kgsl_regulator {
  * @min_pwrlevel - minimum allowable powerlevel per the user
  * @num_pwrlevels - number of available power levels
  * @interval_timeout - timeout in jiffies to be idle before a power event
+ * @clock_times - Each GPU frequency's accumulated active time in us
  * @strtstp_sleepwake - true if the device supports low latency GPU start/stop
  * @regulators - array of pointers to kgsl_regulator structs
  * @pcl - bus scale identifier
@@ -153,6 +154,7 @@ struct kgsl_regulator {
  * @deep_nap_timer - Timer struct for entering deep nap
  * @deep_nap_timeout - Timeout for entering deep nap
  * @gx_retention - true if retention voltage is allowed
+ * @tsens_name - pointer to temperature sensor name of GPU temperature sensor
  */
 
 struct kgsl_pwrctrl {
@@ -172,6 +174,7 @@ struct kgsl_pwrctrl {
 	unsigned int min_pwrlevel;
 	unsigned int num_pwrlevels;
 	unsigned long interval_timeout;
+	u64 clock_times[KGSL_MAX_PWRLEVELS];
 	bool strtstp_sleepwake;
 	struct kgsl_regulator regulators[KGSL_MAX_REGULATORS];
 	uint32_t pcl;
@@ -207,6 +210,7 @@ struct kgsl_pwrctrl {
 	bool gx_retention;
 	unsigned int gpu_bimc_int_clk_freq;
 	bool gpu_bimc_interface_enabled;
+	const char *tsens_name;
 };
 
 int kgsl_pwrctrl_init(struct kgsl_device *device);

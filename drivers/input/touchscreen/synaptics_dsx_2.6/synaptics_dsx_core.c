@@ -662,6 +662,25 @@ struct synaptics_rmi4_f12_ctrl_10 {
 		unsigned char data[7];
 	};	
 };
+
+struct synaptics_rmi4_f54_ctrl_113 {
+	union {
+		struct {
+			unsigned char consistency_and_hybrid;
+			unsigned char consistency_threshold;
+			unsigned char tx_axis_obj_threshold;
+			unsigned char rx_axis_obj_threshold;
+			unsigned char tx_axis_therm_lo;
+			unsigned char tx_axis_therm_hi;
+			unsigned char rx_axis_therm_lo;
+			unsigned char rx_axis_therm_hi;
+			unsigned char tx_axis_negative_threshold;
+			unsigned char rx_axis_negative_threshold;
+		};
+		unsigned char data[10];
+	};
+};
+
 //<ASUS_Glove->
 
 //<ASUS_COVER+>
@@ -928,6 +947,7 @@ static ssize_t synaptics_rmi4_set_cover_param(struct synaptics_rmi4_data *rmi4_d
 	struct synaptics_rmi4_f12_ctrl_10 *ctrl_10 = NULL;
 	struct synaptics_rmi4_f12_ctrl_15 *ctrl_15 = NULL;
 	struct synaptics_rmi4_f12_ctrl_18 *ctrl_18 = NULL;
+
     unsigned char buf;
 
 	ctrl_10 = kmalloc(sizeof(*ctrl_10), GFP_KERNEL);
@@ -1184,7 +1204,8 @@ static ssize_t synaptics_rmi4_set_glove_param(struct synaptics_rmi4_data *rmi4_d
 	struct synaptics_rmi4_f12_ctrl_10 *ctrl_10 = NULL;
 	struct synaptics_rmi4_f12_ctrl_23 *ctrl_23 = NULL;
 	struct synaptics_rmi4_f12_ctrl_9 *ctrl_9 = NULL;
-	
+	struct synaptics_rmi4_f54_ctrl_113 *ctrl_113 = NULL;
+
 	ctrl_10 = kmalloc(sizeof(*ctrl_10), GFP_KERNEL);
 	if (!ctrl_10) {
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -1207,6 +1228,15 @@ static ssize_t synaptics_rmi4_set_glove_param(struct synaptics_rmi4_data *rmi4_d
 	if (!ctrl_9) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for ctrl_9\n",
+				__func__);
+		retval = -ENOMEM;
+		goto exit;
+	}
+
+	ctrl_113 = kmalloc(sizeof(*ctrl_113), GFP_KERNEL);
+	if (!ctrl_113) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to alloc mem for ctrl_113\n",
 				__func__);
 		retval = -ENOMEM;
 		goto exit;
@@ -1242,6 +1272,16 @@ static ssize_t synaptics_rmi4_set_glove_param(struct synaptics_rmi4_data *rmi4_d
 	dev_dbg(rmi4_data->pdev->dev.parent,
 			"%s old ctrl9 data[16] = 0x%x\n", __func__, ctrl_9->data[16]);
 
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_ctrl113_base_addr,
+			ctrl_113->data,
+			sizeof(ctrl_113->data));
+	if (retval < 0)
+		return -EINVAL;	
+		
+	dev_dbg(rmi4_data->pdev->dev.parent,
+			"%s old ctrl113 data[3] = 0x%x\n", __func__, ctrl_9->data[3]);
+
 	//Enable glove mode
 	if (glove_mode == 1) {
 
@@ -1269,7 +1309,7 @@ static ssize_t synaptics_rmi4_set_glove_param(struct synaptics_rmi4_data *rmi4_d
             ctrl_10->min_peak_amp = 0x0C;
         }
 */
-		ctrl_10->min_peak_amp = 15;
+		ctrl_10->min_peak_amp = 12;
 		ctrl_10->noise_floor = 10;
 		retval = synaptics_rmi4_reg_write(rmi4_data,
 			rmi4_data->f12_ctrl10_base_addr,
@@ -1304,6 +1344,24 @@ static ssize_t synaptics_rmi4_set_glove_param(struct synaptics_rmi4_data *rmi4_d
 		dev_dbg(rmi4_data->pdev->dev.parent,
 				"%s enable glove, Gloved Finger Threshold = 0x%x, ctrl_9->data[16]=0x%x\n", __func__, ctrl_9->gloved_finger_threshold, ctrl_9->data[16]);
 
+		//ctrl_113->rx_axis_obj_threshold = 60;
+		ctrl_113->tx_axis_obj_threshold = 50;
+		retval = synaptics_rmi4_reg_write(rmi4_data,
+			rmi4_data->f54_ctrl113_base_addr,
+			ctrl_113->data,
+			sizeof(ctrl_113->data));
+		if (retval < 0)
+			return -EINVAL;
+		retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_ctrl113_base_addr,
+			ctrl_113->data,
+			sizeof(ctrl_113->data));
+		if (retval < 0)
+			return -EINVAL;
+		
+		dev_dbg(rmi4_data->pdev->dev.parent,
+				"%s enable glove, Gloved Finger Threshold = 0x%x, ctrl_9->data[16]=0x%x\n", __func__, ctrl_113->rx_axis_obj_threshold, ctrl_113->data[3]);		
+
 
 	} else {
 		//disable glove mode
@@ -1331,8 +1389,9 @@ static ssize_t synaptics_rmi4_set_glove_param(struct synaptics_rmi4_data *rmi4_d
             ctrl_10->min_peak_amp = 0x14;
         }		
 */
-		ctrl_10->min_peak_amp = 20;
-		ctrl_10->noise_floor = 15;
+
+		ctrl_10->min_peak_amp = rmi4_data->min_peak_amp;
+		ctrl_10->noise_floor = rmi4_data->noise_floor;
 		retval = synaptics_rmi4_reg_write(rmi4_data,
 			rmi4_data->f12_ctrl10_base_addr,
 			ctrl_10->data,
@@ -1350,7 +1409,7 @@ static ssize_t synaptics_rmi4_set_glove_param(struct synaptics_rmi4_data *rmi4_d
 		dev_dbg(rmi4_data->pdev->dev.parent,
 				"%s disable glove, min peak = 0x%x, ctrl_10->data[1]=0x%x\n", __func__, ctrl_10->min_peak_amp, ctrl_10->data[1]);
 
-		ctrl_9->gloved_finger_threshold = 5;
+		ctrl_9->gloved_finger_threshold = rmi4_data->gloved_finger_threshold;
 		retval = synaptics_rmi4_reg_write(rmi4_data,
 			rmi4_data->f12_ctrl9_base_addr,
 			ctrl_9->data,
@@ -1366,13 +1425,32 @@ static ssize_t synaptics_rmi4_set_glove_param(struct synaptics_rmi4_data *rmi4_d
 		
 		dev_dbg(rmi4_data->pdev->dev.parent,
 				"%s enable glove, Gloved Finger Threshold = 0x%x, ctrl_9->data[16]=0x%x\n", __func__, ctrl_9->gloved_finger_threshold, ctrl_9->data[16]);
+
+		//ctrl_113->rx_axis_obj_threshold = 150;
+		ctrl_113->tx_axis_obj_threshold = rmi4_data->tx_axis_obj_threshold;
+		retval = synaptics_rmi4_reg_write(rmi4_data,
+			rmi4_data->f54_ctrl113_base_addr,
+			ctrl_113->data,
+			sizeof(ctrl_113->data));
+		if (retval < 0)
+			return -EINVAL;
+		retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_ctrl113_base_addr,
+			ctrl_113->data,
+			sizeof(ctrl_113->data));
+		if (retval < 0)
+			return -EINVAL;
+		
+		dev_dbg(rmi4_data->pdev->dev.parent,
+				"%s enable glove, Gloved Finger Threshold = 0x%x, ctrl_9->data[16]=0x%x\n", __func__, ctrl_113->rx_axis_obj_threshold, ctrl_113->data[3]);
 	}
 	
 exit:
 	kfree(ctrl_9);
 	kfree(ctrl_10);
 	kfree(ctrl_23);
-	
+	kfree(ctrl_113);	
+
 	return retval;
 }
 //<ASUS_Glove->
@@ -3893,7 +3971,7 @@ static int synaptics_rmi4_query_device(struct synaptics_rmi4_data *rmi4_data)
 	struct synaptics_rmi4_device_info *rmi;
 
 	rmi = &(rmi4_data->rmi4_mod_info);
-
+	
 rescan_pdt:
 	f01found = false;
 	f35found = false;
@@ -5154,7 +5232,81 @@ static void synaptics_resume_work(struct work_struct *work)
 	//dev_info(rmi4_data->pdev->dev.parent, "[synaptics] Touch resume over!\n");
 }
 
+static int synaptics_get_default_glove_para(struct synaptics_rmi4_data* rmi4_data)
+{
+	int retval;
+	struct synaptics_rmi4_f12_ctrl_10 *ctrl_10 = NULL;
+	struct synaptics_rmi4_f12_ctrl_9 *ctrl_9 = NULL;
+	struct synaptics_rmi4_f54_ctrl_113 *ctrl_113 = NULL;
 
+	ctrl_10 = kmalloc(sizeof(*ctrl_10), GFP_KERNEL);
+	if (!ctrl_10) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to alloc mem for ctrl_10\n",
+				__func__);
+		retval = -ENOMEM;
+		goto exit;
+	}
+
+	ctrl_9 = kmalloc(sizeof(*ctrl_9), GFP_KERNEL);
+	if (!ctrl_9) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to alloc mem for ctrl_9\n",
+				__func__);
+		retval = -ENOMEM;
+		goto exit;
+	}
+
+	ctrl_113 = kmalloc(sizeof(*ctrl_113), GFP_KERNEL);
+	if (!ctrl_113) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to alloc mem for ctrl_113\n",
+				__func__);
+		retval = -ENOMEM;
+		goto exit;
+	}
+	
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f12_ctrl10_base_addr,
+			ctrl_10->data,
+			sizeof(ctrl_10->data));
+	if (retval < 0)
+		return -EINVAL;	
+		
+
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f12_ctrl9_base_addr,
+			ctrl_9->data,
+			sizeof(ctrl_9->data));
+	if (retval < 0)
+		return -EINVAL;	
+		
+
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_ctrl113_base_addr,
+			ctrl_113->data,
+			sizeof(ctrl_113->data));
+	if (retval < 0)
+		return -EINVAL;	
+
+	
+	rmi4_data->gloved_finger_threshold = ctrl_9->gloved_finger_threshold;
+	rmi4_data->noise_floor = ctrl_10->noise_floor;
+	rmi4_data->min_peak_amp = ctrl_10->min_peak_amp;
+	rmi4_data->tx_axis_obj_threshold = ctrl_113->tx_axis_obj_threshold;
+
+	dev_err(rmi4_data->pdev->dev.parent,"[synaptics] glove mode default para: 0x%x_0x%x_0x%x_0x%x\n",ctrl_9->gloved_finger_threshold,ctrl_10->noise_floor,ctrl_10->min_peak_amp,ctrl_113->tx_axis_obj_threshold);
+	
+exit:
+	kfree(ctrl_9);
+	kfree(ctrl_10);
+	kfree(ctrl_113);	
+
+	return retval;	
+
+}
 
 static int synaptics_rmi4_probe(struct platform_device *pdev)
 {
@@ -5199,6 +5351,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	rmi4_data->irq_enabled = false;
 	rmi4_data->fingers_on_2d = false;
 	rmi4_data->usb_status = 0;
+	rmi4_data->f54_ctrl113_base_addr = -1;
 	
 	rmi4_data->reset_device = synaptics_rmi4_reset_device;
 	rmi4_data->irq_enable = synaptics_rmi4_irq_enable;
@@ -5470,6 +5623,9 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 
 	//queue_delayed_work(rmi4_data->cap_cal_wq, &rmi4_data->calibration_work, msecs_to_jiffies(60000));
 	//dev_info(&pdev->dev,  "%s: end\n", __func__);
+	synaptics_rmi4_found_f54_ctrl113(rmi4_data);
+	synaptics_get_default_glove_para(rmi4_data);
+
 	synaptics_tp_done = 1;
 	return retval;
 
@@ -6045,6 +6201,9 @@ static struct platform_driver synaptics_rmi4_driver = {
 	.remove = synaptics_rmi4_remove,
 };
 
+//<ASUS-BSP Robert_He 20170330> add project_id and lcd_id to choose touch ++++++
+extern int asus_lcd_id;
+//<ASUS-BSP Robert_He 20170330> add project_id and lcd_id to choose touch ------
 static int __init synaptics_rmi4_init(void)
 {
 	int retval;
@@ -6054,6 +6213,14 @@ static int __init synaptics_rmi4_init(void)
 	//	printk("[Power] %s: skip this driver in charger mode\n", __func__);
 	//	return 0;
 	//}
+//<ASUS-BSP Robert_He 20170330> add project_id and lcd_id to choose touch ++++++
+       if (ASUS_ZD552KL_PHOENIX == asus_project_id)
+       {
+               if (asus_lcd_id == 0)
+                       return 0;
+       }
+//<ASUS-BSP Robert_He 20170330> add project_id and lcd_id to choose touch ------
+
 	retval = synaptics_rmi4_bus_init();
 	if (retval)
 		return retval;

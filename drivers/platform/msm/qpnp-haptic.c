@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -350,9 +350,7 @@ struct qpnp_hap {
 	u8 lra_res_cal_period;
 	u8 sc_duration;
 	u8 ext_pwm_dtest_line;
-	//<asus alex_wang20170206>support vcc pon enable+++
 	bool vcc_pon_enabled;
-	//<asus alex_wang20170206>support vcc pon enable----
 	bool state;
 	bool use_play_irq;
 	bool use_sc_irq;
@@ -758,9 +756,8 @@ static int qpnp_hap_vmax_config(struct qpnp_hap *hap)
 	if (rc)
 		return rc;
 //wxtest
-	pr_err("haptic : vmax = %d\n", hap->vmax_mv);
+	pr_err("haptic vmax_config : vmax = %d\n", hap->vmax_mv);
 //wxtest
-
 	return 0;
 }
 
@@ -1356,8 +1353,11 @@ static ssize_t qpnp_hap_vmax_show(struct device *dev,
 	temp &= ~QPNP_HAP_VMAX_MASK;
 	ret = (temp >> QPNP_HAP_VMAX_SHIFT);
 	ret *= QPNP_HAP_VMAX_MIN_MV;
-
+#ifndef ASUS_FACTORY_BUILD 
 	return snprintf(buf, PAGE_SIZE, "level = %d, vmax = %d\n", hap->vmax_level, ret);
+#else
+        return snprintf(buf, PAGE_SIZE,"%d\n",ret);
+#endif
 }
 
 static int asus_vmax_mv[7] = {116, 348, 580, 812, 1044, 1160, 1392}; //level_general_0~level_general_5,level_alarm
@@ -1372,17 +1372,24 @@ static ssize_t qpnp_hap_vmax_store(struct device *dev,
 	if (sscanf(buf, "%d", &index) != 1) {
 		return -EINVAL;
 	}
-
+#ifndef ASUS_FACTORY_BUILD 
 	if (index < 0) index = 0; //level_general_0
 	if (index > 6) index = 5; //level_general_5
 
 	hap->vmax_mv = asus_vmax_mv[index];
+        hap->vmax_level = index;
+        pr_err("haptic : vmax_level = %d\n", hap->vmax_level);
+#else
+        hap->vmax_mv = index;
+        hap->vmax_level=0;
+        ret=asus_vmax_mv[0];
+#endif
 	ret = qpnp_hap_vmax_config(hap);
 	if (ret) {
 		return -EINVAL;
 	}
-	hap->vmax_level = index;
-	pr_err("haptic : vmax_level = %d\n", hap->vmax_level);
+	
+	
 
 	return count;
 }
@@ -1536,60 +1543,6 @@ static ssize_t qpnp_hap_brake_pattern_store(struct device *dev,
 }
 //wxtest
 
-//wxtest1
-static ssize_t qpnp_hap_wave_play_us_div_5_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct timed_output_dev *timed_dev = dev_get_drvdata(dev);
-	struct qpnp_hap *hap = container_of(timed_dev, struct qpnp_hap,
-					 timed_dev);
-	int ret;
-	u8 temp_low,temp_high;
-
-	ret = qpnp_hap_read_reg(hap, &temp_low, QPNP_HAP_RATE_CFG1_REG(hap->base));
-	if (ret < 0)
-		return ret;
-
-	ret = qpnp_hap_read_reg(hap, &temp_high, QPNP_HAP_RATE_CFG2_REG(hap->base));
-	if (ret < 0)
-		return ret;
-
-	return snprintf(buf, PAGE_SIZE, "brake_pattern = %d\n", (temp_high << 8) | temp_low);
-}
-
-static ssize_t qpnp_hap_wave_play_us_div_5_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct timed_output_dev *timed_dev = dev_get_drvdata(dev);
-	struct qpnp_hap *hap = container_of(timed_dev, struct qpnp_hap,
-					 timed_dev);
-	int ret;
-	u8 temp_low,temp_high;
-	int wave_play_us;
-
-	if (sscanf(buf, "%d", &wave_play_us) != 1) {
-		return -EINVAL;
-	}
-
-	if ((wave_play_us > 4095) || (wave_play_us < 0)) {
-		return -EINVAL;
-	}
-
-	temp_low = wave_play_us & 0xff;
-	temp_high = (wave_play_us & 0xf00) >> 8;
-
-	ret = qpnp_hap_write_reg(hap, &temp_low, QPNP_HAP_RATE_CFG1_REG(hap->base));
-	if (ret < 0) return ret;
-
-	ret = qpnp_hap_write_reg(hap, &temp_high, QPNP_HAP_RATE_CFG2_REG(hap->base));
-	if (ret < 0) return ret;
-
-	dev_err(&hap->spmi->dev,"qpnp_hap_wave_play_us_div_5_store : wave_play_us = %d\n", wave_play_us);
-
-	return count;
-}
-//wxtest1
-
 /* sysfs attributes */
 static struct device_attribute qpnp_hap_attrs[] = {
 	__ATTR(wf_s0, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -1653,11 +1606,6 @@ static struct device_attribute qpnp_hap_attrs[] = {
 			qpnp_hap_brake_pattern_show,
 			qpnp_hap_brake_pattern_store),
 //wxtest
-//wxtest1
-	__ATTR(wave_play_us_div_5, (S_IRUGO | S_IWUSR | S_IWGRP),
-			qpnp_hap_wave_play_us_div_5_show,
-			qpnp_hap_wave_play_us_div_5_store),
-//wxtest1
 };
 
 static int calculate_lra_code(struct qpnp_hap *hap)
@@ -1956,9 +1904,6 @@ dev_err(&hap->spmi->dev,"qpnp_hap_td_enable : value = %d\n", value);
 	} else {
 		value = (value > hap->timeout_ms ?
 				 hap->timeout_ms : value);
-//wxtest
-//		if (value == 28) value = 20;
-//wxtest
 		hap->state = 1;
 		hrtimer_start(&hap->hap_timer,
 			      ktime_set(value / 1000, (value % 1000) * 1000000),
@@ -2031,12 +1976,15 @@ static void qpnp_hap_worker(struct work_struct *work)
 	struct qpnp_hap *hap = container_of(work, struct qpnp_hap,
 					 work);
 	u8 val = 0x00;
-	int rc, reg_en;
-	if (hap->vcc_pon) {
-		reg_en = regulator_enable(hap->vcc_pon);
-		if (reg_en)
-			pr_err("%s: could not enable vcc_pon regulator\n",
-				 __func__);
+	int rc;
+
+	if (hap->vcc_pon && hap->state && !hap->vcc_pon_enabled) {
+		rc = regulator_enable(hap->vcc_pon);
+		if (rc < 0)
+			pr_err("%s: could not enable vcc_pon regulator rc=%d\n",
+				 __func__, rc);
+		else
+			hap->vcc_pon_enabled = true;
 	}
 
 	/* Disable haptics module if the duration of short circuit
@@ -2050,11 +1998,14 @@ static void qpnp_hap_worker(struct work_struct *work)
 			qpnp_hap_mod_enable(hap, hap->state);
 		qpnp_hap_set(hap, hap->state);
 	}
-	if (hap->vcc_pon && !reg_en) {
+
+	if (hap->vcc_pon && !hap->state && hap->vcc_pon_enabled) {
 		rc = regulator_disable(hap->vcc_pon);
 		if (rc)
-			pr_err("%s: could not disable vcc_pon regulator\n",
-				 __func__);
+			pr_err("%s: could not disable vcc_pon regulator rc=%d\n",
+				 __func__, rc);
+		else
+			hap->vcc_pon_enabled = false;
 	}
 }
 
@@ -2555,7 +2506,6 @@ static int qpnp_hap_parse_dt(struct qpnp_hap *hap)
 //wxtest
 	hap->vmax_level = -1;
 //wxtest
-
 	hap->ilim_ma = QPNP_HAP_ILIM_MIN_MV;
 	rc = of_property_read_u32(spmi->dev.of_node,
 			"qcom,ilim-ma", &temp);

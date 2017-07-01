@@ -1100,7 +1100,9 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 
 	card->clk_scaling_highest = mmc_sd_get_max_clock(card);
 	card->clk_scaling_lowest = host->f_min;
-
+	//<ASUS_BSP +++ Hank2_Liu 20170302> Add sd_status Node for ATD ++++++
+	host->sd_status = 1;
+	//<ASUS_BSP +++ Hank2_Liu 20170302> Add sd_status Node for ATD ------
 	return 0;
 
 free_card:
@@ -1125,6 +1127,9 @@ static void mmc_sd_remove(struct mmc_host *host)
 
 	mmc_claim_host(host);
 	host->card = NULL;
+	//<ASUS_BSP +++ Hank2_Liu 20170302> Add sd_status Node for ATD ++++++
+	host->sd_status = 0;
+	//<ASUS_BSP +++ Hank2_Liu 20170302> Add sd_status Node for ATD ------
 	mmc_release_host(host);
 }
 
@@ -1224,11 +1229,13 @@ static int mmc_sd_suspend(struct mmc_host *host)
 {
 	int err;
 
+	MMC_TRACE(host, "%s: Enter\n", __func__);
 	err = _mmc_sd_suspend(host);
 	if (!err) {
 		pm_runtime_disable(&host->card->dev);
 		pm_runtime_set_suspended(&host->card->dev);
 	}
+	MMC_TRACE(host, "%s: Exit err: %d\n", __func__, err);
 
 	return err;
 }
@@ -1294,12 +1301,14 @@ static int mmc_sd_resume(struct mmc_host *host)
 {
 	int err = 0;
 
+	MMC_TRACE(host, "%s: Enter\n", __func__);
 	if (!(host->caps & MMC_CAP_RUNTIME_RESUME)) {
 		err = _mmc_sd_resume(host);
 		pm_runtime_set_active(&host->card->dev);
 		pm_runtime_mark_last_busy(&host->card->dev);
 	}
 	pm_runtime_enable(&host->card->dev);
+	MMC_TRACE(host, "%s: Exit err: %d\n", __func__, err);
 
 	return err;
 }

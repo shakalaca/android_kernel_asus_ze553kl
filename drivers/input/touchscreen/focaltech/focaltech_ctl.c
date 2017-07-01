@@ -97,7 +97,7 @@ static struct class *fts_class;
 static int fts_rw_iic_drv_myread(struct i2c_client *client, u8 *buf, int length)
 {
 	int ret = 0;	
-	ret = fts_i2c_read(client, NULL, 0, buf, length);
+	ret = fts_i2c_read_cap_sensors(client, NULL, 0, buf, length);
 
 	if(ret<0)
 	{
@@ -116,7 +116,7 @@ static int fts_rw_iic_drv_myread(struct i2c_client *client, u8 *buf, int length)
 static int fts_rw_iic_drv_mywrite(struct i2c_client *client, u8 *buf, int length)
 {
 	int ret = 0;
-	ret = fts_i2c_write(client, buf, length);
+	ret = fts_i2c_write_cap_sensors(client, buf, length);
 	if(ret<0)
 	{
 		dev_err(&client->dev, "%s:IIC Write failed\n",__func__);

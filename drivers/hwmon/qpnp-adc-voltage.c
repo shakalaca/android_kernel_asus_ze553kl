@@ -105,8 +105,7 @@
 #define QPNP_VADC_CONV_TIME_MIN					1000
 #define QPNP_VADC_CONV_TIME_MAX					1100
 #define QPNP_ADC_COMPLETION_TIMEOUT				HZ
-#define QPNP_VADC_ERR_COUNT					40
-#define QPNP_VADC_DUMP_REG					20
+#define QPNP_VADC_ERR_COUNT					20
 #define QPNP_OP_MODE_SHIFT					3
 
 #define QPNP_VADC_THR_LSB_MASK(val)				(val & 0xff)
@@ -134,10 +133,10 @@
 #define QPNP_VADC_HC1_DEC_RATIO_SEL				0xc
 #define QPNP_VADC_HC1_DEC_RATIO_SHIFT				2
 #define QPNP_VADC_HC1_FAST_AVG_CTL				0x43
-#define QPNP_VADC_HC1_FAST_AVG_SAMPLES_MASK			0xfff
+#define QPNP_VADC_HC1_FAST_AVG_SAMPLES_MASK			0x7
 #define QPNP_VADC_HC1_ADC_CH_SEL_CTL				0x44
 #define QPNP_VADC_HC1_DELAY_CTL					0x45
-#define QPNP_VADC_HC1_DELAY_CTL_MASK				0xfff
+#define QPNP_VADC_HC1_DELAY_CTL_MASK				0xf
 #define QPNP_VADC_MC1_EN_CTL1					0x46
 #define QPNP_VADC_HC1_ADC_EN					BIT(7)
 #define QPNP_VADC_MC1_CONV_REQ					0x47
@@ -371,27 +370,6 @@ static int32_t qpnp_vadc_status_debug(struct qpnp_vadc_chip *vadc)
 
 	return 0;
 }
-
-static int32_t qpnp_vadc_reg_dump(struct qpnp_vadc_chip *vadc)
-{
-	int rc = 0, i = 0;
-	u8 buf[8], offset = 0;
-
-		for (i = 0; i < QPNP_VADC_REG_DUMP; i++) {
-			rc = qpnp_vadc_read_reg(vadc, offset, buf, 8);
-			if (rc) {
-				pr_err("debug register dump failed\n");
-				return rc;
-			}
-			offset += QPNP_VADC_OFFSET_DUMP;
-			pr_err("reg_dump row%d: 0%x 0%x 0%x 0%x 0%x 0%x 0%x 0%x\n",
-				i, buf[0], buf[1], buf[2], buf[3], buf[4],
-				buf[5], buf[6], buf[7]);
-		}
-
-	return 0;
-}
-
 static int32_t qpnp_vadc_configure(struct qpnp_vadc_chip *vadc,
 			struct qpnp_adc_amux_properties *chan_prop)
 {
@@ -1256,18 +1234,7 @@ int32_t qpnp_vadc_calib_vref(struct qpnp_vadc_chip *vadc,
 		usleep_range(QPNP_VADC_CONV_TIME_MIN,
 				QPNP_VADC_CONV_TIME_MAX);
 		count++;
-		if (count == QPNP_VADC_DUMP_REG) {
-			pr_err("status1 = 0x%x\n",status1);
-			pr_err("calib Vref dump register,try angain.");
-			rc = qpnp_vadc_reg_dump(vadc);
-			if (rc < 0)
-				pr_err("VADC calib Vref dump register failed\n");
-		}
-		if (count > (QPNP_VADC_ERR_COUNT)) {
-			pr_err("calib Vref retry error exceeded.\n");
-			rc = qpnp_vadc_status_debug(vadc);
-			if (rc < 0)
-				pr_err("VADC calib Vref disable failed\n");
+		if (count > QPNP_VADC_ERR_COUNT) {
 			rc = -ENODEV;
 			goto calib_fail;
 		}
@@ -1318,18 +1285,7 @@ int32_t qpnp_vadc_calib_gnd(struct qpnp_vadc_chip *vadc,
 		usleep_range(QPNP_VADC_CONV_TIME_MIN,
 				QPNP_VADC_CONV_TIME_MAX);
 		count++;
-		if (count == QPNP_VADC_DUMP_REG) {
-			pr_err("status1 = 0x%x\n",status1);
-			pr_err("calib gnd retry count = 20, dump register,try angain.");
-			rc = qpnp_vadc_reg_dump(vadc);
-			if (rc < 0)
-				pr_err("VADC calib gnd dump register failed\n");
-		}
 		if (count > QPNP_VADC_ERR_COUNT) {
-			pr_err("calib gnd retry error exceeded.\n");
-			rc = qpnp_vadc_status_debug(vadc);
-			if (rc < 0)
-				pr_err("VADC calib Vref disable failed\n");
 			rc = -ENODEV;
 			goto calib_fail;
 		}
@@ -1419,10 +1375,19 @@ int32_t qpnp_get_vadc_gain_and_offset(struct qpnp_vadc_chip *vadc,
 				enum qpnp_adc_calib_type calib_type)
 {
 	int rc = 0;
+	struct qpnp_vadc_result result;
 
 	rc = qpnp_vadc_is_valid(vadc);
 	if (rc < 0)
 		return rc;
+
+	if (!vadc->vadc_init_calib) {
+		rc = qpnp_vadc_read(vadc, REF_125V, &result);
+		if (rc) {
+			pr_debug("vadc read failed with rc = %d\n", rc);
+			return rc;
+		}
+	}
 
 	switch (calib_type) {
 	case CALIB_RATIOMETRIC:
@@ -1691,13 +1656,6 @@ recalibrate:
 			usleep_range(QPNP_VADC_CONV_TIME_MIN,
 					QPNP_VADC_CONV_TIME_MAX);
 			count++;
-			if (count == QPNP_VADC_DUMP_REG) {
-				pr_err("status1 = 0x%x\n",status1);
-				pr_err("calib GetTemp retry count = 20, dump register,try angain.");				
-				rc = qpnp_vadc_reg_dump(vadc);
-				if (rc < 0)
-					pr_err("VADC calib GetTemp dump register failed\n");
-			}
 			if (count > QPNP_VADC_ERR_COUNT) {
 				pr_err("retry error exceeded\n");
 				rc = qpnp_vadc_status_debug(vadc);
@@ -2775,16 +2733,7 @@ static int qpnp_vadc_probe(struct spmi_device *spmi)
 	vadc->vadc_iadc_sync_lock = false;
 	dev_set_drvdata(&spmi->dev, vadc);
 	list_add(&vadc->list, &qpnp_vadc_device_list);
-	for(i=0;i<count_adc_channel_list;i++)
-	{
-		if((vadc->vadc_therm_chan[i].thermal_node == true)&&
-		   (vadc->vadc_therm_chan[i].tz_dev != NULL)
-		  )
-		{	
-			pr_err("update sensor temp is %s\n",vadc->adc->adc_channels[i].name);
-			thermal_zone_device_update(vadc->vadc_therm_chan[i].tz_dev);
-		}
-	}
+
 	return 0;
 
 err_setup:

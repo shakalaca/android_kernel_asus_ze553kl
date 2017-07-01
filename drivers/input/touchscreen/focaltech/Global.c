@@ -29,17 +29,17 @@
 
 extern struct i2c_client *selftest_client;
 
-extern int fts_i2c_write(struct i2c_client *client, char *writebuf, int writelen);
-extern int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *readbuf, int readlen);
+extern int fts_i2c_write_cap_sensors(struct i2c_client *client, char *writebuf, int writelen);
+extern int fts_i2c_read_cap_sensors(struct i2c_client *client, char *writebuf, int writelen, char *readbuf, int readlen);
 // add by leo --
 
-struct StruScreenSeting g_ScreenSetParam; //screen configure parameter
-struct stTestItem g_stTestItem[1][MAX_TEST_ITEM];
+struct StruScreenSeting g_ScreenSetParam_cap_sensors; //screen configure parameter
+struct stTestItem g_stTestItem_cap_sensors[1][MAX_TEST_ITEM];
 //struct structSCapConf g_stSCapConf;
-int g_TestItemNum = 0;
-char g_strIcName[20] ={0};
+int g_TestItemNum_cap_sensors = 0;
+char g_strIcName_cap_sensors[20] ={0};
 
-int GetPrivateProfileString(char *section, char *ItemName, char *defaultvalue, char *returnValue, char *IniFile){
+int GetPrivateProfileString_cap_sensors(char *section, char *ItemName, char *defaultvalue, char *returnValue, char *IniFile){
 	char value[512] = {0};
 	int len = 0;
 	
@@ -49,7 +49,7 @@ int GetPrivateProfileString(char *section, char *ItemName, char *defaultvalue, c
 		return 0;
 	}
 	
-	if(ini_get_key(IniFile, section, ItemName, value) < 0) 
+	if(ini_get_key_cap_sensors(IniFile, section, ItemName, value) < 0) 
 	{
 		if(NULL != defaultvalue) memcpy(value, defaultvalue, strlen(defaultvalue));
 		sprintf(returnValue, "%s", value);
@@ -61,15 +61,15 @@ int GetPrivateProfileString(char *section, char *ItemName, char *defaultvalue, c
 	return len;	
 }
 
-void focal_msleep(int ms)
+void focal_msleep_cap_sensors(int ms)
 {
 	msleep(ms);
 }
-void SysDelay(int ms)
+void SysDelay_cap_sensors(int ms)
 {
 	msleep(ms);
 }
-int focal_abs(int value)
+int focal_abs_cap_sensors(int value)
 {
 	if(value < 0)
 		value = 0 - value;
@@ -191,37 +191,37 @@ void get_ic_name(unsigned char ucIcCode, char * strIcName)
 	
 	return ;
 }
-void OnInit_InterfaceCfg(char * strIniFile)
+void OnInit_InterfaceCfg_cap_sensors(char * strIniFile)
 {
 	char str[128];
 
 	///////////////////////////IC_Type
-	GetPrivateProfileString("Interface","IC_Type","FT5X36",str,strIniFile);
-	g_ScreenSetParam.iSelectedIC = get_ic_code(str);
+	GetPrivateProfileString_cap_sensors("Interface","IC_Type","FT5X36",str,strIniFile);
+	g_ScreenSetParam_cap_sensors.iSelectedIC = get_ic_code(str);
 
 	/////////////////////////Normalize Type
-	GetPrivateProfileString("Interface","Normalize_Type",0,str,strIniFile);
-	g_ScreenSetParam.isNormalize = atoi(str);	
+	GetPrivateProfileString_cap_sensors("Interface","Normalize_Type",0,str,strIniFile);
+	g_ScreenSetParam_cap_sensors.isNormalize = atoi(str);	
 
 }
 /************************************************************************
-* Name: ReadReg(Same function name as FT_MultipleTest)
+* Name: ReadReg_cap_sensors(Same function name as FT_MultipleTest)
 * Brief:  Read Register
 * Input: RegAddr
 * Output: RegData
 * Return: Comm Code. Code = 0x00 is OK, else fail.
 ***********************************************************************/
-int ReadReg(unsigned char RegAddr, unsigned char *RegData)
+int ReadReg_cap_sensors(unsigned char RegAddr, unsigned char *RegData)
 {
 	int iRet;
 	/*
-	if(NULL == fts_i2c_read)
+	if(NULL == fts_i2c_read_cap_sensors)
 	{
-		printk("[focal] %s fts_i2c_read == NULL \n", __func__);
+		printk("[focal] %s fts_i2c_read_cap_sensors == NULL \n", __func__);
 		return (ERROR_CODE_INVALID_COMMAND);
 	}
 	*/
-	iRet = fts_i2c_read(selftest_client, &RegAddr, 1, RegData, 1);
+	iRet = fts_i2c_read_cap_sensors(selftest_client, &RegAddr, 1, RegData, 1);
 
 	if(iRet >= 0)
 		return (ERROR_CODE_OK);
@@ -229,28 +229,28 @@ int ReadReg(unsigned char RegAddr, unsigned char *RegData)
 		return (ERROR_CODE_COMM_ERROR);
 }
 /************************************************************************
-* Name: WriteReg(Same function name as FT_MultipleTest)
+* Name: WriteReg_cap_sensors(Same function name as FT_MultipleTest)
 * Brief:  Write Register
 * Input: RegAddr, RegData
 * Output: null
 * Return: Comm Code. Code = 0x00 is OK, else fail.
 ***********************************************************************/
-int WriteReg(unsigned char RegAddr, unsigned char RegData)
+int WriteReg_cap_sensors(unsigned char RegAddr, unsigned char RegData)
 {
 	int iRet;
 	unsigned char cmd[2] = {0};
 
 	/*
-	if(NULL == fts_i2c_write)
+	if(NULL == fts_i2c_write_cap_sensors)
 	{
-		printk("[focal] %s fts_i2c_write == NULL \n", __func__);
+		printk("[focal] %s fts_i2c_write_cap_sensors == NULL \n", __func__);
 		return (ERROR_CODE_INVALID_COMMAND);
 	}
 	*/
 	
 	cmd[0] = RegAddr;
 	cmd[1] = RegData;
-	iRet = fts_i2c_write(selftest_client, cmd, 2);
+	iRet = fts_i2c_write_cap_sensors(selftest_client, cmd, 2);
 
 	if(iRet >= 0)
 		return (ERROR_CODE_OK);
@@ -258,23 +258,23 @@ int WriteReg(unsigned char RegAddr, unsigned char RegData)
 		return (ERROR_CODE_COMM_ERROR);
 }
 /************************************************************************
-* Name: Comm_Base_IIC_IO(Same function name as FT_MultipleTest)
+* Name: Comm_Base_IIC_IO_cap_sensors(Same function name as FT_MultipleTest)
 * Brief:  Write/Read Data by IIC
 * Input: pWriteBuffer, iBytesToWrite, iBytesToRead
 * Output: pReadBuffer
 * Return: Comm Code. Code = 0x00 is OK, else fail.
 ***********************************************************************/
-unsigned char Comm_Base_IIC_IO(unsigned char *pWriteBuffer, int  iBytesToWrite, unsigned char *pReadBuffer, int iBytesToRead)
+unsigned char Comm_Base_IIC_IO_cap_sensors(unsigned char *pWriteBuffer, int  iBytesToWrite, unsigned char *pReadBuffer, int iBytesToRead)
 {
 	int iRet;	
 	/*
-	if(NULL == fts_i2c_read)
+	if(NULL == fts_i2c_read_cap_sensors)
 	{
-		printk("[focal] %s fts_i2c_read == NULL \n", __func__);
+		printk("[focal] %s fts_i2c_read_cap_sensors == NULL \n", __func__);
 		return (ERROR_CODE_INVALID_COMMAND);
 	}
 	*/	
-	iRet = fts_i2c_read(selftest_client, pWriteBuffer, iBytesToWrite, pReadBuffer, iBytesToRead);
+	iRet = fts_i2c_read_cap_sensors(selftest_client, pWriteBuffer, iBytesToWrite, pReadBuffer, iBytesToRead);
 
 	if(iRet >= 0)
 		return (ERROR_CODE_OK);
@@ -282,18 +282,18 @@ unsigned char Comm_Base_IIC_IO(unsigned char *pWriteBuffer, int  iBytesToWrite, 
 		return (ERROR_CODE_COMM_ERROR);
 }
 /************************************************************************
-* Name: EnterWork(Same function name as FT_MultipleTest)
+* Name: EnterWork_cap_sensors(Same function name as FT_MultipleTest)
 * Brief:  Enter Work Mode
 * Input: null
 * Output: null
 * Return: Comm Code. Code = 0x00 is OK, else fail.
 ***********************************************************************/
-unsigned char EnterWork(void)
+unsigned char EnterWork_cap_sensors(void)
 {
 	unsigned char RunState = 0;
 	unsigned char ReCode = ERROR_CODE_COMM_ERROR;
 
-	ReCode = ReadReg(DEVIDE_MODE_ADDR, &RunState);
+	ReCode = ReadReg_cap_sensors(DEVIDE_MODE_ADDR, &RunState);
 	if(ReCode == ERROR_CODE_OK)
 	{
 		if(((RunState>>4)&0x07) == 0x00)	//work
@@ -302,10 +302,10 @@ unsigned char EnterWork(void)
 		}
 		else
 		{
-			ReCode = WriteReg(DEVIDE_MODE_ADDR, 0);
+			ReCode = WriteReg_cap_sensors(DEVIDE_MODE_ADDR, 0);
 			if(ReCode == ERROR_CODE_OK)
 			{
-				ReCode = ReadReg(DEVIDE_MODE_ADDR, &RunState);
+				ReCode = ReadReg_cap_sensors(DEVIDE_MODE_ADDR, &RunState);
 				if(ReCode == ERROR_CODE_OK)
 				{	
 					if(((RunState>>4)&0x07) == 0x00)	ReCode = ERROR_CODE_OK;
@@ -319,18 +319,18 @@ unsigned char EnterWork(void)
 	
 }
 /************************************************************************
-* Name: EnterFactory
+* Name: EnterFactory_cap_sensors
 * Brief:  enter Fcatory Mode
 * Input: null
 * Output: null
 * Return: Comm Code. Code = 0 is OK, else fail.
 ***********************************************************************/
-unsigned char EnterFactory(void)
+unsigned char EnterFactory_cap_sensors(void)
 {
 	unsigned char RunState = 0;
 	unsigned char ReCode = ERROR_CODE_COMM_ERROR;
 
-	ReCode = ReadReg(DEVIDE_MODE_ADDR, &RunState);
+	ReCode = ReadReg_cap_sensors(DEVIDE_MODE_ADDR, &RunState);
 	if(ReCode == ERROR_CODE_OK)
 	{
 		if(((RunState>>4)&0x07) == 0x04)	//factory
@@ -339,24 +339,24 @@ unsigned char EnterFactory(void)
 		}
 		else
 		{
-			ReCode = WriteReg(DEVIDE_MODE_ADDR, 0x40);
+			ReCode = WriteReg_cap_sensors(DEVIDE_MODE_ADDR, 0x40);
 			if(ReCode == ERROR_CODE_OK)
 			{
-				ReCode = ReadReg(DEVIDE_MODE_ADDR, &RunState);
+				ReCode = ReadReg_cap_sensors(DEVIDE_MODE_ADDR, &RunState);
 				if(ReCode == ERROR_CODE_OK)
 				{	
 					if(((RunState>>4)&0x07) == 0x04)	ReCode = ERROR_CODE_OK;
 					else	ReCode = ERROR_CODE_COMM_ERROR;
 				}
 				else
-					printk("EnterFactory read DEVIDE_MODE_ADDR error 3.\n");
+					printk("EnterFactory_cap_sensors read DEVIDE_MODE_ADDR error 3.\n");
 			}
 			else
-				printk("EnterFactory write DEVIDE_MODE_ADDR error 2.\n");
+				printk("EnterFactory_cap_sensors write DEVIDE_MODE_ADDR error 2.\n");
 		}
 	}
 	else
-		printk("EnterFactory read DEVIDE_MODE_ADDR error 1.\n");
+		printk("EnterFactory_cap_sensors read DEVIDE_MODE_ADDR error 1.\n");
 
 	return ReCode;
 }

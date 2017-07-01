@@ -80,6 +80,14 @@ static int do_not_cancel_vote = WCNSS_CONFIG_UNSPECIFIED;
 module_param(do_not_cancel_vote, int, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(do_not_cancel_vote, "Do not cancel votes for wcnss");
 
+static int do_softap_band = 0;
+module_param(do_softap_band, int, S_IWUSR | S_IRUGO);
+MODULE_PARM_DESC(do_softap_band, "Is the softap band flag");
+
+static int do_wifi_driver_debug =0;
+module_param(do_wifi_driver_debug,int,S_IWUSR | S_IRUGO);
+MODULE_PARM_DESC(do_wifi_driver_debug, "do wifi driver debug flag");
+
 static char *wcnss_build_version = "unknown";
 module_param(wcnss_build_version, charp, S_IRUGO);
 MODULE_PARM_DESC(wcnss_build_version, "wcnss build version");
@@ -253,11 +261,13 @@ static struct notifier_block wnb = {
 	.notifier_call = wcnss_notif_cb,
 };
 
-static char *kernel_nvbin_ptr = NULL;
-#define NVBIN_FILE_DEFAULT "wlan/prima/WCNSS_qcom_wlan_nv.bin"
-#define NVBIN_FILE_HADES_CA "wlan/prima/WCNSS_qcom_wlan_nv_Hades_CA.bin"
+#define NVBIN_FILE_DEFAULT     "wlan/prima/WCNSS_qcom_wlan_nv.bin"
+#define NVBIN_FILE_PHOENIX     "wlan/prima/WCNSS_qcom_wlan_nv_Phoenix.bin"
+#define NVBIN_FILE_HADES_CA    "wlan/prima/WCNSS_qcom_wlan_nv_Hades_CA.bin"
 #define NVBIN_FILE_HADES_NONCA "wlan/prima/WCNSS_qcom_wlan_nv_Hades_nonCA.bin"
-#define NVBIN_FILE              kernel_nvbin_ptr
+#define NVBIN_FILE_AQUARIUS    "wlan/prima/WCNSS_qcom_wlan_nv_Aquarius.bin"
+static char *kernel_nvbin_ptr = NULL;
+#define NVBIN_FILE             kernel_nvbin_ptr
 
 /* On SMD channel 4K of maximum data can be transferred, including message
  * header, so NV fragment size as next multiple of 1Kb is 3Kb.
@@ -479,6 +489,22 @@ static ssize_t wcnss_wlan_macaddr_show(struct device *dev,
 static DEVICE_ATTR(wcnss_mac_addr, S_IRUSR | S_IWUSR,
 	wcnss_wlan_macaddr_show, wcnss_wlan_macaddr_store);
 
+
+int wcnss_get_softap_band(void)
+{
+       pr_info("[wcnss]: do_softap_band=%d.\n", do_softap_band);
+       return do_softap_band;
+}
+EXPORT_SYMBOL(wcnss_get_softap_band);
+
+//ASUS_BSP++ "add for more wlan driver log when debug"
+int wcnss_get_wifi_driver_debug_flag(void)
+{
+       return do_wifi_driver_debug;
+}
+EXPORT_SYMBOL(wcnss_get_wifi_driver_debug_flag);
+//ASUS_BSP-- "add for more wlan driver log when debug"
+
 static ssize_t wcnss_serial_number_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
@@ -600,12 +626,11 @@ void wcnss_pronto_is_a2xb_bus_stall(void *tst_addr, u32 fifo_mask, char *type)
 	}
 }
 
-/* Log pronto debug registers before sending reset interrupt */
+/* Log pronto debug registers during SSR Timeout CB */
 void wcnss_pronto_log_debug_regs(void)
 {
 	void __iomem *reg_addr, *tst_addr, *tst_ctrl_addr;
 	u32 reg = 0, reg2 = 0, reg3 = 0, reg4 = 0;
-
 
 	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_SPARE_OFFSET;
 	reg = readl_relaxed(reg_addr);
@@ -810,6 +835,33 @@ void wcnss_pronto_log_debug_regs(void)
 	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_WLAN_AHB_CBCR_OFFSET;
 	reg3 = readl_relaxed(reg_addr);
 	pr_err("PMU_WLAN_AHB_CBCR %08x\n", reg3);
+}
+EXPORT_SYMBOL(wcnss_pronto_log_debug_regs);
+
+/* Log pronto debug registers before sending reset interrupt */
+void wcnss_pronto_dump_regs(void)
+{
+	void __iomem *reg_addr;
+	u32 reg = 0, reg2 = 0, reg3 = 0, reg4 = 0;
+
+	if (!penv || !penv->triggered || !penv->msm_wcnss_base) {
+		pr_info(DEVICE " WCNSS driver is not triggered by userspace\n");
+		return;
+	}
+
+	wcnss_pronto_log_debug_regs();
+
+	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_WLAN_BCR_OFFSET;
+	reg = readl_relaxed(reg_addr);
+
+	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_WLAN_GDSCR_OFFSET;
+	reg2 = readl_relaxed(reg_addr);
+
+	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_WLAN_AHB_CBCR_OFFSET;
+	reg3 = readl_relaxed(reg_addr);
+
+	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_CPU_AHB_CMD_RCGR_OFFSET;
+	reg4 = readl_relaxed(reg_addr);
 
 	msleep(50);
 
@@ -889,7 +941,7 @@ void wcnss_pronto_log_debug_regs(void)
 	reg = readl_relaxed(penv->alarms_tactl);
 	pr_err("ALARMS_TACTL %08x\n", reg);
 }
-EXPORT_SYMBOL(wcnss_pronto_log_debug_regs);
+EXPORT_SYMBOL(wcnss_pronto_dump_regs);
 
 #ifdef CONFIG_WCNSS_REGISTER_DUMP_ON_BITE
 
@@ -1106,7 +1158,7 @@ void wcnss_log_debug_regs_on_bite(void)
 		pr_debug("wcnss: clock frequency is: %luHz\n", clk_rate);
 
 		if (clk_rate) {
-			wcnss_pronto_log_debug_regs();
+			wcnss_pronto_dump_regs();
 			if (wcnss_get_mux_control())
 				wcnss_log_iris_regs();
 		} else {
@@ -1126,7 +1178,7 @@ void wcnss_reset_fiq(bool clk_chk_en)
 		if (clk_chk_en) {
 			wcnss_log_debug_regs_on_bite();
 		} else {
-			wcnss_pronto_log_debug_regs();
+			wcnss_pronto_dump_regs();
 			if (wcnss_get_mux_control())
 				wcnss_log_iris_regs();
 		}
@@ -2134,10 +2186,8 @@ exit:
 	return;
 }
 
-
-static void wcnssctrl_rx_handler(struct work_struct *worker)
+static void wcnss_process_smd_msg(int len)
 {
-	int len = 0;
 	int rc = 0;
 	unsigned char buf[sizeof(struct wcnss_version)];
 	unsigned char build[WCNSS_MAX_BUILD_VER_LEN+1];
@@ -2146,17 +2196,6 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 	struct wcnss_version *pversion;
 	int hw_type;
 	unsigned char fw_status = 0;
-
-	len = smd_read_avail(penv->smd_ch);
-	if (len > WCNSS_MAX_FRAME_SIZE) {
-		pr_err("wcnss: frame larger than the allowed size\n");
-		smd_read(penv->smd_ch, NULL, len);
-		return;
-	}
-	if (len < sizeof(struct smd_msg_hdr)) {
-		pr_err("wcnss: incomplete header available len = %d\n", len);
-		return;
-	}
 
 	rc = smd_read(penv->smd_ch, buf, sizeof(struct smd_msg_hdr));
 	if (rc < sizeof(struct smd_msg_hdr)) {
@@ -2224,7 +2263,7 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 	case WCNSS_BUILD_VER_RSP:
 		if (len > WCNSS_MAX_BUILD_VER_LEN) {
 			pr_err("wcnss: invalid build version data from wcnss %d\n",
-					len);
+				len);
 			return;
 		}
 		rc = smd_read(penv->smd_ch, build, len);
@@ -2259,7 +2298,6 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 		penv->is_cbc_done = 1;
 		pr_debug("wcnss: received WCNSS_CBC_COMPLETE_IND from FW\n");
 		break;
-
 	case WCNSS_CALDATA_UPLD_REQ:
 		extract_cal_data(len);
 		break;
@@ -2268,6 +2306,33 @@ static void wcnssctrl_rx_handler(struct work_struct *worker)
 		pr_err("wcnss: invalid message type %d\n", phdr->msg_type);
 	}
 	return;
+}
+
+static void wcnssctrl_rx_handler(struct work_struct *worker)
+{
+	int len;
+
+	while (1) {
+		len = smd_read_avail(penv->smd_ch);
+		if (0 == len) {
+			pr_debug("wcnss: No more data to be read\n");
+			return;
+		}
+
+		if (len > WCNSS_MAX_FRAME_SIZE) {
+			pr_err("wcnss: frame larger than the allowed size\n");
+			smd_read(penv->smd_ch, NULL, len);
+			return;
+		}
+
+		if (len < sizeof(struct smd_msg_hdr)) {
+			pr_err("wcnss: incomplete header available len = %d\n",
+			       len);
+			return;
+		}
+
+		wcnss_process_smd_msg(len);
+	}
 }
 
 static void wcnss_send_version_req(struct work_struct *worker)
@@ -2354,13 +2419,32 @@ static void wcnss_nvbin_dnld(void)
 
 	down_read(&wcnss_pm_sem);
 
-	if(asus_project_id ==  ASUS_ZE553KL){
-		if(asus_rf_id == ASUS_TW_JP || asus_rf_id == ASUS_CN6)
-			NVBIN_FILE = NVBIN_FILE_HADES_CA;
-		else
-			NVBIN_FILE = NVBIN_FILE_HADES_NONCA;
-	}else
-		NVBIN_FILE = NVBIN_FILE_DEFAULT;
+	// Dynamic choose NV file >>
+	switch(asus_project_id) {
+#if defined(ZD552KL_PHOENIX)
+		case ASUS_ZD552KL_PHOENIX:
+			NVBIN_FILE = NVBIN_FILE_PHOENIX;
+			break;
+#elif defined(ZE553KL)
+		case ASUS_ZE553KL:
+			if (asus_rf_id == ASUS_TW_JP || asus_rf_id == ASUS_CN6)
+			{
+				NVBIN_FILE = NVBIN_FILE_HADES_CA;
+			} else {
+				NVBIN_FILE = NVBIN_FILE_HADES_NONCA;
+			}
+			break;
+#elif defined(ZS550KL)
+		case ASUS_ZS550KL:
+			NVBIN_FILE = NVBIN_FILE_AQUARIUS;
+			break;
+#endif
+		default:
+			NVBIN_FILE = NVBIN_FILE_DEFAULT;
+			break;
+	}
+	pr_info("wcnss: choose NV file %s\n", NVBIN_FILE);
+	// <<
 
 	ret = request_firmware(&nv, NVBIN_FILE, dev);
 
@@ -3170,7 +3254,7 @@ wcnss_trigger_config(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Peripheral Loader failed on WCNSS.\n");
 			ret = PTR_ERR(penv->pil);
 			wcnss_disable_pc_add_req();
-			wcnss_pronto_log_debug_regs();
+			wcnss_pronto_dump_regs();
 		}
 	} while (pil_retry++ < WCNSS_MAX_PIL_RETRY && IS_ERR(penv->pil));
 
@@ -3426,7 +3510,7 @@ static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
 		if (pdev && pwlanconfig)
 			wcnss_wlan_power(&pdev->dev, pwlanconfig,
 					WCNSS_WLAN_SWITCH_OFF, NULL);
-		wcnss_pronto_log_debug_regs();
+		wcnss_pronto_dump_regs();
 		wcnss_disable_pc_remove_req();
 	} else if (SUBSYS_BEFORE_SHUTDOWN == code) {
 		wcnss_disable_pc_add_req();
@@ -3564,7 +3648,8 @@ static int __init wcnss_wlan_init(void)
 		printk("[wcnss]: wcnss_build_version, kmalloc fail.\n");
 	else
 		memset( wcnss_build_version, 0, WCNSS_MAX_BUILD_VER_LEN+1 );
-		
+
+	pr_info("[wcnss]: do_softap_band=%d.\n", do_softap_band);
 	pr_info("[wcnss]: wcnss_wlan_init -.\n");
 	return 0;
 }

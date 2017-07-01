@@ -1585,7 +1585,7 @@ static int32_t msm_cci_write(struct v4l2_subdev *sd,
 	}
 	return rc;
 }
-
+#ifdef ZE553KL
 //ASUS_BSP +++ Zhengwei_Cai "OIS block other i2c command"
 static uint8_t is_imx362_start_or_stop_stream_command(struct msm_camera_cci_ctrl *cci_ctrl, uint16_t* on)
 {
@@ -1660,6 +1660,7 @@ static void fix_rumba(struct msm_camera_cci_ctrl *cci_ctrl)
 		usleep_range(2*1000,2*1000);
 	}
 }
+#endif
 static int32_t msm_cci_config(struct v4l2_subdev *sd,
 	struct msm_camera_cci_ctrl *cci_ctrl)
 {
@@ -1675,6 +1676,7 @@ static int32_t msm_cci_config(struct v4l2_subdev *sd,
 		rc = msm_cci_release(sd);
 		break;
 	case MSM_CCI_I2C_READ:
+#ifdef ZE553KL
 		//ASUS_BSP +++ Zhengwei_Cai "OIS block other i2c command"
 		if(g_ois_i2c_block_other && ignore_i2c_cmd(cci_ctrl))
 		{
@@ -1686,12 +1688,16 @@ static int32_t msm_cci_config(struct v4l2_subdev *sd,
 			rc = msm_cci_i2c_read_bytes(sd, cci_ctrl);
 		}
 		//ASUS_BSP --- Zhengwei_Cai "OIS block other i2c command"
+#else
+		rc = msm_cci_i2c_read_bytes(sd, cci_ctrl);
+#endif
 		break;
 	case MSM_CCI_I2C_WRITE:
 	case MSM_CCI_I2C_WRITE_SEQ:
 	case MSM_CCI_I2C_WRITE_SYNC:
 	case MSM_CCI_I2C_WRITE_ASYNC:
 	case MSM_CCI_I2C_WRITE_SYNC_BLOCK:
+#ifdef ZE553KL
 		//ASUS_BSP +++ Zhengwei_Cai "OIS block other i2c command"
 		if(g_ois_i2c_block_other && ignore_i2c_cmd(cci_ctrl))
 		{
@@ -1703,6 +1709,9 @@ static int32_t msm_cci_config(struct v4l2_subdev *sd,
 			rc = msm_cci_write(sd, cci_ctrl);
 		}
 		//ASUS_BSP --- Zhengwei_Cai "OIS block other i2c command"
+#else
+		rc = msm_cci_write(sd, cci_ctrl);
+#endif
 		break;
 	case MSM_CCI_GPIO_WRITE:
 		break;

@@ -3117,7 +3117,12 @@ static int test_set_controls(void)
 
 	/* control 113 */
 	if (f54->query_27.has_ctrl113)
+	{
+//ASUS_BSP+++++++++
+		rmi4_data->f54_ctrl113_base_addr = reg_addr;
+//ASUS_BSP---------
 		reg_addr += CONTROL_113_SIZE;
+	}
 
 	/* control 114 */
 	if (f54->query_27.has_ctrl114)
@@ -4055,6 +4060,32 @@ exit:
 
 	return;
 }
+
+//ASUS_BSP+++++++++++ test_init->test_remove for found f54_ctrl113 base addr.
+int synaptics_rmi4_found_f54_ctrl113(struct synaptics_rmi4_data *rmi4_data)
+{
+	int ret = 0;
+	
+	if(f54 == NULL) 
+	{
+		ret = synaptics_rmi4_test_init(rmi4_data);
+		if(ret)
+			dev_err(rmi4_data->pdev->dev.parent,"%s: Failed to rmi4_test_init\n",__func__);
+		else 
+			synaptics_rmi4_test_remove(rmi4_data);		
+	}
+
+	if(rmi4_data->f54_ctrl113_base_addr == -1)
+	{
+		dev_err(rmi4_data->pdev->dev.parent,"%s: Failed to find F54 ctrl113\n",__func__);
+		ret = -1;
+	}
+	else	
+		dev_err(rmi4_data->pdev->dev.parent,"%s: f54_ctrl113 = %x\n",__func__,rmi4_data->f54_ctrl113_base_addr);
+
+	return ret;
+}
+//ASUS_BSP--------- test_init->test_remove for found f54_ctrl113 base addr.
 
 static void synaptics_rmi4_test_reset(struct synaptics_rmi4_data *rmi4_data)
 {

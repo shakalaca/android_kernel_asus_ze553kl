@@ -1198,6 +1198,9 @@ Range(%d) ErrCode(%d) RawRange(%d) Result(%d)\n",
 		 __func__,confidence_level,confA,confC,ItB,IT_verify,
 		 error_status>>13, thd, limit, thd_near_mm, confidence_level,
 		 Range,errcode,(RawRange&DISTANCE_MASK)>>2, result);
+		 if(ioctrl_read_value_cnt)
+			ioctrl_read_value_cnt = 0;//reset to 0 to avoid ioctrl read not add, but log also print
+
 		if(proc_read_value_cnt)
 			proc_read_value_cnt = 0;//reset to 0 to avoid ioctrl always show, cat value in single measure mode
 	}

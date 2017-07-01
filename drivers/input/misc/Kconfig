@@ -104,6 +104,16 @@ config INPUT_HBTP_INPUT
 	  To compile this driver as a module, choose M here: the
 	  module will be called hbtp_input.
 
+config HBTP_INPUT_SECURE_TOUCH
+	bool "Secure Touch support for HBTP Input driver"
+	depends on INPUT_HBTP_INPUT
+	help
+	  This option enables the Secure Touch functionality of the HBTP
+	  Input driver.
+
+	  Say Y to enable this functionality.
+	  If unsure, say N.
+
 config INPUT_PCSPKR
 	tristate "PC Speaker support"
 	depends on PCSPKR_PLATFORM
@@ -756,16 +766,6 @@ config SENSORS_CM3323
 	To compile this driver as a module, choose M here: the	
 	module will be called CM3323.
 
-config SENSORS_AP3045	
-	tristate "AP3045 proximity and light sensor"	
-	depends on I2C	
-	default n	
-	help	
-	Say Y here to enable the AP3045 Proximity	
-	Sensor with Ambient Light Sensor.	
-	To compile this driver as a module, choose M here: the	
-	module will be called AP3045.
-
 config SENSORS_CM36283	
 	tristate "CM36283 proximity and light sensor"	
 	depends on I2C	
@@ -775,5 +775,11 @@ config SENSORS_CM36283
 	Sensor with Ambient Light Sensor.	
 	To compile this driver as a module, choose M here: the	
 	module will be called CM36283.
+config SENSORS_CM36656
+       tristate "CM36656 optical sensor"
+       depends on I2C
+       default n
+       help
+         Say Y here to enable the CM36656 Optical Sensor.
 
 endif

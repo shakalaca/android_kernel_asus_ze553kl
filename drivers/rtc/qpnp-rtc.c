@@ -495,7 +495,6 @@ static int qpnp_rtc_probe(struct spmi_device *spmi)
 #ifdef ASUS_FACTORY_BUILD
 	fac_alarm_dev = &spmi->dev;
 #endif
-
 	rtc_dd = devm_kzalloc(&spmi->dev, sizeof(*rtc_dd), GFP_KERNEL);
 	if (rtc_dd == NULL) {
 		dev_err(&spmi->dev, "Unable to allocate memory!\n");

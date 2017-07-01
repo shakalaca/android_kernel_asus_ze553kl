@@ -49,6 +49,7 @@
 #include <linux/zcache.h>
 #include <linux/slab.h>
 
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/almk.h>
 
@@ -98,6 +99,8 @@ static unsigned long lowmem_count(struct shrinker *s,
 static atomic_t shift_adj = ATOMIC_INIT(0);
 static short adj_max_shift = 450; //avoid kill previous app
 
+module_param_named(adj_max_shift, adj_max_shift, short,
+	S_IRUGO | S_IWUSR);
 unsigned long time_out;
 /* User knob to enable/disable adaptive lmk feature */
 static int enable_adaptive_lmk;
@@ -147,39 +150,21 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 	int other_free, other_file;
 	unsigned long pressure = action;
 	int array_size = ARRAY_SIZE(lowmem_adj);
-	
+	other_file = global_page_state(NR_FILE_PAGES)+zcache_pages()-global_page_state(NR_SHMEM)-total_swapcache_pages();
+	other_free = global_page_state(NR_FREE_PAGES);
 
-	if (pressure >= 80) 
-	{
-		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
-			global_page_state(NR_SHMEM) -
-			total_swapcache_pages();
-		other_free = global_page_state(NR_FREE_PAGES);
-		printk("lowmemkiller pressure=%ld, other_file=%d, other_free=%d\n", pressure, other_file * 4096, other_free * 4096);
-		
-	}
 	if (!enable_adaptive_lmk)
 		return 0;
 
-	if (pressure >= 95) {
-		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
-			global_page_state(NR_SHMEM) -
-			total_swapcache_pages();
-		other_free = global_page_state(NR_FREE_PAGES);
+	//ASUS_BSP print pressure message
+	if (pressure >= 90)
+		lowmem_print(1,"pressure=%ld, other_file=%d, other_free=%d\n", pressure, other_file * 4096, other_free * 4096);
 
-		atomic_set(&shift_adj, 1);
-		trace_almk_vmpressure(pressure, other_free, other_file);
-	} else if (pressure >= 90) {
+	if (pressure >= 98) {
 		if (lowmem_adj_size < array_size)
 			array_size = lowmem_adj_size;
 		if (lowmem_minfree_size < array_size)
 			array_size = lowmem_minfree_size;
-
-		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
-			global_page_state(NR_SHMEM) -
-			total_swapcache_pages();
-
-		other_free = global_page_state(NR_FREE_PAGES);
 
 		if ((other_free < lowmem_minfree[array_size - 1]) &&
 			(other_file < vmpressure_file_min)) {
@@ -430,6 +415,8 @@ static void list_reset(struct list_head *pList)
 #define MINFREE_TO_PRINT_LOG 		(300)
 #define HEAD_LINE "PID       RSS    oom_adj       cmdline\n"
 char meminfo_str[ASUS_MEMORY_DEBUG_MAXCOUNT][ASUS_MEMORY_DEBUG_MAXLEN];
+
+
 static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 {
 	LIST_HEAD(ListHead);
@@ -452,17 +439,25 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	int other_file;
 	short previous_min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 	bool bIsAdapterLMK = false;
+	int nr_free_pages = 0;
+	int nr_file_pages = 0;
+	int nr_zcache_pages = 0;
+	int nr_shmem = 0;
+	int nr_swapcache_pages = 0;
 
 	if (mutex_lock_interruptible(&scan_mutex) < 0)
 		return 0;
 
-	other_free = global_page_state(NR_FREE_PAGES);
+	nr_free_pages = global_page_state(NR_FREE_PAGES);
+	nr_file_pages = global_page_state(NR_FILE_PAGES);
+	nr_zcache_pages = zcache_pages();
+	nr_shmem = global_page_state(NR_SHMEM);
+	nr_swapcache_pages = total_swapcache_pages();
 
-	if (global_page_state(NR_SHMEM) + total_swapcache_pages() <
-		global_page_state(NR_FILE_PAGES) + zcache_pages())
-		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
-						global_page_state(NR_SHMEM) -
-						total_swapcache_pages();
+	other_free = nr_free_pages;
+
+	if (nr_shmem + nr_swapcache_pages < nr_file_pages + nr_zcache_pages)
+		other_file = nr_file_pages + nr_zcache_pages - 	nr_shmem - nr_swapcache_pages;
 	else
 		other_file = 0;
 
@@ -480,6 +475,8 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		}
 	}
 
+	//ASUS_BSP to prevent previous app to be killed by aLMK
+	adj_max_shift = 701;
 	previous_min_score_adj = min_score_adj;
 	ret = adjust_minadj(&min_score_adj);
 	if (previous_min_score_adj != min_score_adj) {
@@ -661,6 +658,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	}
 	//if (selected) {
 	list_for_each_entry_safe_reverse(pTaskIterator, pTaskNext, &ListHead, node) {
+		char reason[256];
 		long cache_size = other_file * (long)(PAGE_SIZE / 1024);
 		long cache_limit = minfree * (long)(PAGE_SIZE / 1024);
 		long free = other_free * (long)(PAGE_SIZE / 1024);
@@ -677,45 +675,33 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		if (selected->mm)
 			selected_tasksize = get_mm_rss(selected->mm);
 		if(selected->pid == current->pid) {
-			lowmem_print(1, "lowmem:Skip killing '%s' (adj=%d), pid=%d itself\n", selected->comm, selected_oom_score_adj, selected->pid);
+			lowmem_print(1, "Skip killing '%s' (adj=%d), pid=%d itself\n", selected->comm, selected_oom_score_adj, selected->pid);
 			task_unlock(selected);
 			continue;
 		}
 		task_unlock(selected);
-
 		// when a_lmk is activated, do not kill until the app is larger than 80MB
 		if (bIsAdapterLMK && (selected_tasksize * ((long)PAGE_SIZE /1024 )< (long)(80*1024))){
-			printk("lowmem: %s selected(%d MB)(adj=%d) < 80MB\n", selected->comm, (selected_tasksize * 4) / 1024 , selected_oom_score_adj);
+			lowmem_print(1, "%s selected(%d MB)(adj=%d) < 80MB, skip it in aLMK\n", selected->comm, (selected_tasksize * 4) / 1024 , selected_oom_score_adj);
 			continue;
 		}
+		if (bIsAdapterLMK)
+			snprintf(reason, sizeof(reason), "adaptive lmk is triggered and adjusts oom_score_adj to %hd, cache_size=%ldkB\n", min_score_adj, cache_size);
+		else
+			snprintf(reason, sizeof(reason), "cache_size=%ldkB is below limit %ldkB for oom_score_adj %hd\n", cache_size, cache_limit, min_score_adj);
 		trace_lowmemory_kill(selected, cache_size, cache_limit, free);
 		lowmem_print(1, "Killing '%s' (%d), adj %hd,\n" \
-				"   to free %ldkB on behalf of '%s' (%d) because\n" \
-				"   cache %ldkB is below limit %ldkB for oom_score_adj %hd\n" \
-				"   Free memory is %ldkB above reserved.\n" \
-				"   Free CMA is %ldkB\n" \
-				"   Total reserve is %ldkB\n" \
-				"   Total free pages is %ldkB\n" \
-				"   Total file cache is %ldkB\n" \
-				"   Total zcache is %ldkB\n" \
-				"   GFP mask is 0x%x\n",
+				"   to free %ldkB because\n" \
+				"   %s" \
+				"   Beginning free pages is %ldkB, now it's %ldkB\n" \
+				"   Beginning file cache is %ldkB, now it's %ldkB\n",
 			     selected->comm, selected->pid,
 			     selected_oom_score_adj,
 			     selected_tasksize * (long)(PAGE_SIZE / 1024),
-			     current->comm, current->pid,
-			     cache_size, cache_limit,
-			     min_score_adj,
-			     other_free * (long)(PAGE_SIZE / 1024),
-			     global_page_state(NR_FREE_CMA_PAGES) *
-				(long)(PAGE_SIZE / 1024),
-			     totalreserve_pages * (long)(PAGE_SIZE / 1024),
-			     global_page_state(NR_FREE_PAGES) *
-				(long)(PAGE_SIZE / 1024),
-			     global_page_state(NR_FILE_PAGES) *
-				(long)(PAGE_SIZE / 1024),
-
-			     (long)zcache_pages() * (long)(PAGE_SIZE / 1024),
-			     sc->gfp_mask);
+			     reason,
+			     nr_free_pages * (long)(PAGE_SIZE / 1024), global_page_state(NR_FREE_PAGES) * (long)(PAGE_SIZE / 1024),
+			     nr_file_pages * (long)(PAGE_SIZE / 1024), global_page_state(NR_FILE_PAGES) * (long)(PAGE_SIZE / 1024)
+			     );
 
 		if (selected_oom_score_adj == 0) {
 			show_mem(SHOW_MEM_FILTER_NODES);
@@ -726,15 +712,16 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
 		send_sig(SIGKILL, selected, 0);
 		rem += selected_tasksize;
+		
 		/* give the system time to free up the memory */
 		msleep_interruptible(20);
 		trace_almk_shrink(selected_tasksize, ret,
 			other_free, other_file, selected_oom_score_adj);
-	}
-
+	} 
 	list_reset(&ListHead);
 	lowmem_print(4, "lowmem_scan %lu, %x, return %lu\n",
 		     sc->nr_to_scan, sc->gfp_mask, rem);
+
 	rcu_read_unlock();
 	mutex_unlock(&scan_mutex);
 	if(selected && (selected_oom_score_adj < MINFREE_TO_PRINT_LOG) && time_after(jiffies,time_out)){

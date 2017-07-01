@@ -1,5 +1,7 @@
 /* include/linux/lightsensor.h
  *
+ * Copyright (C) 2009 Google, Inc.
+ * Author: Iliyan Malchev <malchev@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -22,6 +24,24 @@
 
 #define LIGHTSENSOR_IOCTL_GET_ENABLED _IOR(LIGHTSENSOR_IOCTL_MAGIC, 1, int *)
 #define LIGHTSENSOR_IOCTL_ENABLE _IOW(LIGHTSENSOR_IOCTL_MAGIC, 2, int *)
+
+//ASUS 20170215 alex wang lightsensir++++
+#ifdef ZD552KL_PHOENIX
+struct lightsensor_mpp_config_data {
+	uint32_t lightsensor_mpp;
+	uint32_t lightsensor_amux;
+};
+
+struct lightsensor_smd_platform_data {
+	const char      *name;
+	uint16_t        levels[10];
+	uint16_t        golden_adc;
+	int             (*ls_power)(int, uint8_t);
+	struct lightsensor_mpp_config_data mpp_data;
+};
+#endif
+//ASUS 20170215 alex wang lightsensir----
+
 /*ASUS - bevis chen-- add +*/
 #define LBUFF_SIZE				16	/* Rx buffer size */
 

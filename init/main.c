@@ -85,6 +85,9 @@
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
 
+#include <linux/gpio.h>
+extern int g_gpio_audio_debug;
+
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/smp.h>
 #endif
@@ -109,47 +112,6 @@ bool early_boot_irqs_disabled __read_mostly;
 
 enum system_states system_state __read_mostly;
 EXPORT_SYMBOL(system_state);
-//+++ ASUS_BSP : miniporting : Add for uart / kernel log
-int g_user_klog_mode = 1;
-EXPORT_SYMBOL(g_user_klog_mode);
-
-static int set_user_klog_mode(char *str)
-{
-    if ( strcmp("y", str) == 0 )
-    {
-        g_user_klog_mode = 1;
-    }
-    else
-    {
-        g_user_klog_mode = 0;
-    }
-
-    //printk("Kernel log mode = %d\n", g_user_klog_mode);
-    return 0;
-}
-early_param("klog", set_user_klog_mode);
-
-//tyree_liu@asus.com  +++ add for audio debug
-int g_user_dbg_mode = 1;
-EXPORT_SYMBOL(g_user_dbg_mode);
-//tyree_liu@asus.com --- add for audio debug
-
-static int set_user_dbg_mode(char *str)
-{
-    if ( strcmp("y", str) == 0 )
-    {
-        g_user_dbg_mode = 1;
-    }
-    else
-    {
-        g_user_dbg_mode = 0;
-    }
-
-    //printk("Kernel uart dbg mode = %d\n", g_user_dbg_mode);
-    return 0;
-}
-early_param("dbg", set_user_dbg_mode);
-//--- ASUS_BSP : miniporting : Add for uart / kernel log
 
 /*
  * Boot command-line arguments
@@ -173,124 +135,171 @@ static char *initcall_command_line;
 static char *execute_command;
 static char *ramdisk_execute_command;
 
-//ASUS_BSP kerwin_chen : add for kernel charger mode. +++
-bool g_Charger_mode = false;
-
-static int set_charger_mode(char *str)
-{
-
-	if ( strcmp("charger", str) == 0 )
-		g_Charger_mode = true;
-	else
-		g_Charger_mode = false;
-
-    printk("g_Charger_mode = %d\n",g_Charger_mode);
-    
-    return 0;
-}
-__setup("androidboot.mode=", set_charger_mode);
-EXPORT_SYMBOL(g_Charger_mode);
-
-
-//ASUS_BSP kerwin_chen : add for kernel charger mode. ---
-
 //<ASUS-Lotta_Lu-2015/02/29> Porting ID Information ++++
 int asus_project_id = 0;
 EXPORT_SYMBOL(asus_project_id);
 
 static int set_project_id(char *str)
 {
-	if(strcmp("3",str) == 0) 
-	{
-		asus_project_id = ASUS_ZE553KL;
-	}
-	else if(strcmp("4",str) == 0)
-	{
-		asus_project_id = ASUS_ZS550KL;
-	}
-	else if(strcmp("5",str) == 0)
-	{
-		asus_project_id = ASUS_ZD552KL;
+	int prj_id,ret;
+	ret = kstrtoint(str,0,&prj_id);
+	if(!ret){
+		switch(prj_id){
+			case 2:
+				asus_project_id = ASUS_ZD552KL_PHOENIX;
+				break;
+			case 3:
+				asus_project_id = ASUS_ZE553KL;
+				break;
+			case 4:
+				asus_project_id = ASUS_ZS550KL;
+				break;
+			default:
+				asus_project_id = 0;
+		}
 	}
 	else
-	{
-		asus_project_id = 0;
-	}
-
+		pr_err("get project id error\n");
 	return 0;
 }
 __setup("PRJ_ID=",set_project_id);
 
+#ifdef ZE553KL
 int asus_fp_id = 0;
 EXPORT_SYMBOL(asus_fp_id);
 
 static int set_asus_fp_id(char *str)
 {
-	if(strcmp("0",str) == 0)
-	{
-		asus_fp_id = SYNAPTICS;
-	}
-	else if (strcmp("1",str) == 0)
-	{
-		asus_fp_id = GOODIX;
-	}
-	else if (strcmp("2",str) == 0)
-	{
-		asus_fp_id = GOODIX2;
+	int fp_id,ret;
+	ret = kstrtoint(str,0,&fp_id);
+	if(!ret){
+		switch(fp_id){
+			case 0:
+				asus_fp_id = SYNAPTICS;
+				break;
+			case 1:
+				asus_fp_id = GOODIX;
+				break;
+			case 2:
+				asus_fp_id = GOODIX2;
+				break;
+			default:
+				asus_fp_id = UNKNOWN_FP_ID;
+		}
 	}
 	else
-	{
-		asus_fp_id = UNKNOWN_FP_ID;
-	}
-	
+		pr_err("get project id error\n");
+
 	return 0;
 }
 __setup("ASUS_FP_ID=",set_asus_fp_id);
-
+#endif
 
 int asus_hw_id = 0;
-int asus_mp_id=0;
 EXPORT_SYMBOL(asus_hw_id);
+
+#ifdef ZE553KL
+int asus_mp_id=0;
 EXPORT_SYMBOL(asus_mp_id);
+#endif
 
 static int set_hw_id(char *str)
 {
-	if(strcmp("0",str) == 0)
-	{
-		asus_hw_id = ASUS_MP;
-		asus_mp_id = 2;
-	}
-	else if(strcmp("1",str) == 0)
-	{
-		asus_hw_id = ASUS_SR1;
-	}
-	else if(strcmp("4",str) == 0)
-	{
-		asus_hw_id = ASUS_SR2;
-	}
-	else if(strcmp("5",str) == 0)
-	{
-		asus_hw_id = ASUS_ER;
-	}
-	else if(strcmp("6",str) == 0)
-	{
-		asus_hw_id = ASUS_PR1;
-	}
-	else if(strcmp("2",str) == 0)
-	{
-		asus_hw_id = ASUS_PR2;
-	}
-	else if(strcmp("7",str) == 0)
-	{
-		asus_hw_id = ASUS_MP;
-		asus_mp_id = 0;
-	}
-	else if(strcmp("3",str) == 0)
-	{
-		asus_hw_id = ASUS_MP;
-		asus_mp_id = 1;
-	}
-	
+	int hw_id,ret;
+	ret = kstrtoint(str,0,&hw_id);
+	if(!ret){
+		switch(hw_id){
+#if defined(ZE553KL)
+			case 0:
+				asus_hw_id = ASUS_MP;
+				asus_mp_id = 2;
+				break;
+			case 1:
+				asus_hw_id = ASUS_SR1;
+				break;
+			case 4:
+				asus_hw_id = ASUS_SR2;
+				break;
+			case 5:
+				asus_hw_id = ASUS_ER;
+				break;
+			case 6:
+				asus_hw_id = ASUS_PR1;
+				break;
+			case 2:
+				asus_hw_id = ASUS_PR2;
+				break;
+			case 7:
+				asus_hw_id = ASUS_MP;
+				asus_mp_id = 0;
+				break;
+			case 3:
+				asus_hw_id = ASUS_MP;
+				asus_mp_id = 1;
+#elif defined(ZS550KL)
+			case 0:
+				asus_hw_id = ASUS_EVB;
+				break;
+			case 1:
+				asus_hw_id = ASUS_SR1;
+				break;
+			case 3:
+				asus_hw_id = ASUS_PR2;
+				break;
+			case 4:
+				asus_hw_id = ASUS_SR2;
+				break;
+			case 5:
+				asus_hw_id = ASUS_ER;
+				break;
+			case 6:
+				asus_hw_id = ASUS_PR;
+				break;
+			case 7:
+				asus_hw_id = ASUS_MP;
+#elif defined(ZD552KL_PHOENIX)
+			case 0:
+				asus_hw_id = ASUS_EVB;
+				break;
+			case 1:
+				asus_hw_id = ASUS_SR1;
+				break;
+			case 2:
+				asus_hw_id = ASUS_ER1;
+				break;
+			case 4:
+				asus_hw_id = ASUS_SR2;
+				break;
+			case 5:
+				asus_hw_id = ASUS_ER2;
+				break;
+			case 6:
+				asus_hw_id = ASUS_PR;
+				break;
+			case 7:
+				asus_hw_id = ASUS_MP;
+#else
+			case 0:
+				asus_hw_id = ASUS_EVB;
+				break;
+			case 1:
+				asus_hw_id = ASUS_SR1;
+				break;
+			case 4:
+				asus_hw_id = ASUS_SR2;
+				break;
+			case 5:
+				asus_hw_id = ASUS_ER;
+				break;
+			case 6:
+				asus_hw_id = ASUS_PR;
+				break;
+			case 7:
+				asus_hw_id = ASUS_MP;
+#endif
+		}
+	}	
+
 	return 0;
 }
 __setup("HW_ID=",set_hw_id);
@@ -300,23 +309,24 @@ EXPORT_SYMBOL(asus_lcd_id);
 
 static int set_lcd_id(char *str)
 {
-	if(strcmp("1",str) == 0)
-	{
-	   asus_lcd_id = 1;
+	int lcd_id,ret;
+	ret = kstrtoint(str,0,&lcd_id);
+	if(!ret){
+		switch(lcd_id){
+			case 1:
+				asus_lcd_id = 1;
+				break;
+			case 2:
+				asus_lcd_id = 2;
+				break;
+			case 3:
+				asus_lcd_id = 3;
+				break;
+			default:
+				asus_lcd_id = 0;
+		}
 	}
-	else if(strcmp("2",str) == 0)
-	{
-	   asus_lcd_id = 2;
-	}
-	else if (strcmp("3",str) == 0)
-	{
-		asus_lcd_id = 3;
-	}
-	else
-	{
-		asus_lcd_id = 0;
-	}
-	
+
 	return 0;
 }
 __setup("LCD_ID=",set_lcd_id);
@@ -328,39 +338,70 @@ EXPORT_SYMBOL(asus_rf_id);
 
 static int set_rf_id(char *str)
 {
-	if(strcmp("0",str) == 0) 
-	{
-		asus_rf_id = ASUS_WW;
+	int rf_id,ret;
+	ret = kstrtoint(str,0,&rf_id);
+	if(!ret){
+		switch(rf_id){
+#if defined(ZS550KL)
+			case 0:
+				asus_rf_id = ASUS_WW;
+				break;
+			case 2:
+				asus_rf_id = ASUS_CN;
+				break;
+#elif defined(ZE553KL)
+			case 0:
+				asus_rf_id = ASUS_WW;
+				break;
+			case 2:
+				asus_rf_id = ASUS_CN;
+				break;
+			case 3:
+				asus_rf_id = ASUS_CN6;
+				break;
+			case 4:
+				asus_rf_id = ASUS_WW_HADES;
+				break;
+			case 5:
+				asus_rf_id = ASUS_ID_IN;
+				break;
+			case 6:
+				asus_rf_id = ASUS_TW_JP;
+				break;
+			case 7:
+				asus_rf_id = ASUS_US_BR;
+				break;
+#elif defined(ZD552KL_PHOENIX)
+			case 0:
+				asus_rf_id = ASUS_WW;
+				break;
+			case 1:
+				asus_rf_id = ASUS_IN_ID;
+				break;
+			case 2:
+				asus_rf_id = ASUS_BR_US;
+				break;
+			case 3:
+				asus_rf_id = ASUS_IN_ID_SKY77645;
+				break;
+			case 4:
+				asus_rf_id = ASUS_WW2;
+				break;
+			case 5:
+				asus_rf_id = ASUS_IN_ID2;
+				break;
+			case 8:
+				asus_rf_id = ASUS_TW_CA;
+				break;
+			case 9:
+				asus_rf_id = ASUS_CN_CA;
+				break;
+#endif
+			default:
+				asus_rf_id = ASUS_UNKNOWN;		
+		}
 	}
-	else if(strcmp("2",str) == 0)
-	{
-		asus_rf_id = ASUS_CN;
-	}
-	else if(strcmp("3",str) == 0)
-	{
-		asus_rf_id = ASUS_CN6;
-	}
-	else if(strcmp("4",str) == 0)
-	{
-		asus_rf_id = ASUS_WW_HADES;
-	}
-	else if(strcmp("5",str) == 0)
-	{
-		asus_rf_id = ASUS_ID_IN;
-	}
-	else if(strcmp("6",str) == 0)
-	{
-		asus_rf_id = ASUS_TW_JP;
-	}
-	else if(strcmp("7",str) == 0)
-	{
-		asus_rf_id = ASUS_US_BR;
-	}
-	else
-	{
-		asus_rf_id = ASUS_UNKNOWN;
-	}
-
+	
 	return 0;
 }
 __setup("ASUS_RF_ID=",set_rf_id);
@@ -378,6 +419,23 @@ static int get_lcd_uniqueId(char *str)
 __setup("LCD_UNIQUEID=", get_lcd_uniqueId);
 //<ASUS-Hank2_Liu-2016/04/27> Read Unique ID Information ------
 
+
+//ASUS_BSP kerwin_chen : add for kernel charger mode. +++
+bool g_Charger_mode = false;
+
+static int set_charger_mode(char *str)
+{
+    if ( strcmp("charger", str) == 0 )
+	       g_Charger_mode = true;
+    else
+        g_Charger_mode = false;
+
+    printk("g_Charger_mode = %d\n", g_Charger_mode);
+    return 0;
+}
+__setup("androidboot.mode=", set_charger_mode);
+EXPORT_SYMBOL(g_Charger_mode);
+//ASUS_BSP kerwin_chen : add for kernel charger mode. ---
 
 /*
  * Used to generate warnings if static_key manipulation functions are used
@@ -481,6 +539,93 @@ static int __init loglevel(char *str)
 }
 
 early_param("loglevel", loglevel);
+
+//+++ ASUS_BSP : miniporting : Add for uart / kernel log
+int g_user_klog_mode = 0;
+EXPORT_SYMBOL(g_user_klog_mode);
+
+static int set_user_klog_mode(char *str)
+{
+    if ( strcmp("y", str) == 0 )
+    {
+        g_user_klog_mode = 1;
+    }
+    else
+    {
+        g_user_klog_mode = 0;
+    }
+
+    //printk("Kernel log mode = %d\n", g_user_klog_mode);
+    return 0;
+}
+early_param("klog", set_user_klog_mode);
+int g_user_dbg_mode = 0;
+EXPORT_SYMBOL(g_user_dbg_mode);
+
+static int set_user_dbg_mode(char *str)
+{
+//ASUS_BSP Freeman +++
+	int ret;
+	ret = gpio_request(g_gpio_audio_debug, "AUDIO_DEBUG");
+	if (ret)
+		printk("%s: Failed to request gpio AUDIO_DEBUG %d\n", __func__, g_gpio_audio_debug); 
+#if 0
+		if(g_ASUS_PRJ_STAGE == STAGE_MP )
+		{
+			gpio_direction_output(g_gpio_audio_debug, 1);/* disable uart log, enable audio */
+		}
+#endif
+//ASUS_BSP Freeman ---
+if ( strcmp("y", str) == 0 )
+    {
+        g_user_dbg_mode = 1;
+        gpio_direction_output(g_gpio_audio_debug, 0); /* enable uart log, disable audio */
+    }
+    else
+    {
+        g_user_dbg_mode = 0;
+        gpio_direction_output(g_gpio_audio_debug, 1); /* disable uart log, enable audio */
+    }
+
+    //printk("Kernel uart dbg mode = %d\n", g_user_dbg_mode);
+    return 0;
+}
+early_param("dbg", set_user_dbg_mode);
+//--- ASUS_BSP : miniporting : Add for uart / kernel log
+
+//ASUS_BSP Freeman : Add for rtb log +++
+int g_user_rtb_mode = 0;
+EXPORT_SYMBOL(g_user_rtb_mode);
+
+static int set_user_rtb_mode(char *str)
+{
+    if ( strcmp("y", str) == 0 )
+    {
+        g_user_rtb_mode = 1;
+    }
+    else
+    {
+        g_user_rtb_mode = 0;
+    }
+
+    //printk("RTB log mode = %d\n", g_user_rtb_mode);
+    return 0;
+}
+early_param("rtb_enable", set_user_rtb_mode);
+//ASUS_BSP Freeman : Add for rtb log  ---
+
+// ASUS_BSP johnchain+++ block disable qpst if qpst=y exists in cmdline when bootup
+int g_origin_qpst_flag = 0;
+static int set_origin_qpst_flag(char *str){
+    if ( strcmp("y", str) == 0 ){
+        g_origin_qpst_flag = 1;
+    }else{
+        g_origin_qpst_flag = 0;
+    }
+    return 0;
+}
+early_param("qpst", set_origin_qpst_flag);
+// ASUS_BSP johnchain+++ block disable qpst if qpst=y exists in cmdline when bootup
 
 /* Change NUL term back to "=", to make "param" the whole string. */
 static int __init repair_env_string(char *param, char *val, const char *unused)

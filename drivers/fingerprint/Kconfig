@@ -1,8 +1,8 @@
-source "drivers/fingerprint/synaptics/Kconfig"
-
 source "drivers/fingerprint/goodixgf3208/Kconfig"
 
-source "drivers/fingerprint/goodix316m/Kconfig"
+source "drivers/fingerprint/goodix/Kconfig"
+
+source "drivers/fingerprint/goodix_5216/Kconfig"
 
 config FINGERPRINT
 	tristate "Support for fingerprint sensor function"

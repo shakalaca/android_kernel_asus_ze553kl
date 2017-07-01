@@ -37,20 +37,25 @@
 #define XO_CLK_RATE	19200000
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
 
-
-extern void set_alpm_cmd(short alpm_mode);//asus always on display
-
 /* Master structure to hold all the information about the DSI/panel */
 static struct mdss_dsi_data *mdss_dsi_res;
+
+#ifdef ZD552KL_PHOENIX
+extern void set_phoenix_alpm_cmd(short alpm_mode);//asus always on display
+#endif
+
 
 #define DSI_DISABLE_PC_LATENCY 100
 #define DSI_ENABLE_PC_LATENCY PM_QOS_DEFAULT_VALUE
 
 static struct pm_qos_request mdss_dsi_pm_qos_request;
 extern struct mdss_panel_data *gdata;
+
 //extern int dclick_mode;
 extern bool cabc_first_boot;
 extern int gesture_mode;
+extern int dclick_mode;
+extern int swipe_mode;
 static void mdss_dsi_pm_qos_add_request(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	struct irq_info *irq_info;
@@ -292,7 +297,13 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	if(ASUS_ZE553KL == asus_project_id){//follow qcom code flow:reset panel for ZE553KL
+	/*ret = mdss_dsi_panel_reset(pdata, 0);
+	if (ret) {
+		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+		ret = 0;
+	}*/
+
+	if(ASUS_ZD552KL_PHOENIX == asus_project_id || ASUS_ZE553KL == asus_project_id){//follow qcom code flow:reset panel for ZE553KL
 		ret = mdss_dsi_panel_reset(pdata, 0);
 		if (ret) {
 			pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
@@ -303,8 +314,10 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
 
+
 //<ASUS-BSP Hank2_Liu 20160420> Add Boe panel iovcc&+/-5v still on ++++++	
-	if(!(gesture_mode&0x40) || (ASUS_ZE553KL == asus_project_id)){//follow qcom code flow:disable vreg for ZE553KL
+	if(((!(gesture_mode&0x40)) && (dclick_mode == 0) && (swipe_mode == 0))
+ 	|| (ASUS_ZD552KL_PHOENIX == asus_project_id)|| (ASUS_ZE553KL == asus_project_id)){//follow qcom code flow:disable vreg for ZE553KL
 		pr_info("enter mdss_dsi_panel_power_off!\n");
 		ret = msm_dss_enable_vreg(
 			ctrl_pdata->panel_power_data.vreg_config,
@@ -331,7 +344,9 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
-	if(cabc_first_boot || !(gesture_mode&0x40) || (ASUS_ZE553KL == asus_project_id)){//follow qcom code flow:enable vreg for ZE553KL
+	
+	if(cabc_first_boot || ((!(gesture_mode&0x40)) && (dclick_mode == 0) && (swipe_mode == 0))
+	 || (ASUS_ZD552KL_PHOENIX == asus_project_id) || (ASUS_ZE553KL == asus_project_id)){//follow qcom code flow:enable vreg for ZE553KL
 		ret = msm_dss_enable_vreg(
 			ctrl_pdata->panel_power_data.vreg_config,
 			ctrl_pdata->panel_power_data.num_vreg, 1);
@@ -342,6 +357,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		}
 	}
 
+
 	/*
 	 * If continuous splash screen feature is enabled, then we need to
 	 * request all the GPIOs that have already been configured in the
@@ -349,8 +365,19 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	 * the lp11_init flag is set or not.
 	 */
 //<ASUS-BSP Hank2_Liu 20160420> Add Boe panel reset seq setup before +/-5.5v power on ++++++	
+	/*if (pdata->panel_info.cont_splash_enabled ||
+		!pdata->panel_info.mipi.lp11_init) {
+		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
+			pr_debug("reset enable: pinctrl not enabled\n");
+
+		ret = mdss_dsi_panel_reset(pdata, 1);
+		if (ret)
+			pr_err("%s: Panel reset failed. rc=%d\n",
+					__func__, ret);
+	}*/
+
 	 //follow qcom code flow:reset panel for ZE553KL
-	 if(ASUS_ZE553KL == asus_project_id){
+	 if((ASUS_ZD552KL_PHOENIX == asus_project_id)||(ASUS_ZE553KL == asus_project_id)){
 		if (pdata->panel_info.cont_splash_enabled ||
 			!pdata->panel_info.mipi.lp11_init) {
 			if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
@@ -362,6 +389,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 						__func__, ret);
 		}
 	}
+
 //<ASUS-BSP Hank2_Liu 20160420> Add Boe panel reset seq setup before +/-5.5v power on ------	
 
 	return ret;
@@ -370,11 +398,13 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 static int mdss_dsi_panel_power_lp(struct mdss_panel_data *pdata, int enable)
 {
 	/* Panel power control when entering/exiting lp mode */
+#ifdef ZD552KL_PHOENIX
 	pr_debug("%s enable:%d\n",__func__,enable);
 	if(enable)
-		set_alpm_cmd(1);//alpm on
+		set_phoenix_alpm_cmd(1);//alpm on
 	else
-		set_alpm_cmd(0);//alpm off
+		set_phoenix_alpm_cmd(0);//alpm off	
+#endif
 	return 0;
 }
 
@@ -1015,6 +1045,7 @@ static void mdss_dsi_debugfs_cleanup(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		struct mdss_dsi_debugfs_info *dfs = ctrl->debugfs_info;
 		if (dfs && dfs->root)
 			debugfs_remove_recursive(dfs->root);
+		kfree(dfs);
 		pdata = pdata->next;
 	} while (pdata);
 	pr_debug("%s: Cleaned up mdss_dsi_debugfs_info\n", __func__);
@@ -1310,8 +1341,6 @@ static int mdss_dsi_update_panel_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 	ctrl_pdata->panel_mode = pinfo->mipi.mode;
 	mdss_panel_get_dst_fmt(pinfo->bpp, pinfo->mipi.mode,
 			pinfo->mipi.pixel_packing, &(pinfo->mipi.dst_format));
-	pinfo->cont_splash_enabled = 0;
-
 	return ret;
 }
 
@@ -1352,15 +1381,22 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 		pr_debug("%s: panel already on\n", __func__);
 		goto end;
 	}
-//<ASUS-BSP Hank2_Liu 20160420> Boe panel reset after LP11 start ++++++
-	//follow qcom code flow:power on panel for ZE553KL
-	if(ASUS_ZE553KL == asus_project_id){
+//<ASUS-BSP Hank2_Liu 20160420> Boe panel reset after LP11 start ++++++	
+	/*ret = mdss_dsi_panel_power_ctrl(pdata, MDSS_PANEL_POWER_ON);
+	if (ret) {
+		pr_err("%s:Panel power on failed. rc=%d\n", __func__, ret);
+		goto end;
+	}*/
+ 
+	//follow qcom code flow:power on panel for ASUS_ZD552KL_PHOENIX
+	if((ASUS_ZD552KL_PHOENIX == asus_project_id)||(ASUS_ZE553KL == asus_project_id)) {
 		ret = mdss_dsi_panel_power_ctrl(pdata, MDSS_PANEL_POWER_ON);
 		if (ret) {
 			pr_err("%s:Panel power on failed. rc=%d\n", __func__, ret);
 			goto end;
 		}
 	}
+
 //<ASUS-BSP Hank2_Liu 20160420> Boe panel reset after LP11 start ------		
 	if (mdss_panel_is_power_on(cur_power_state)) {
 		pr_debug("%s: dsi_on from panel low power state\n", __func__);
@@ -1399,15 +1435,17 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	mdss_dsi_clk_ctrl(ctrl_pdata, ctrl_pdata->dsi_clk_handle,
 			  MDSS_DSI_LINK_CLK, MDSS_DSI_CLK_ON);
 	mdss_dsi_sw_reset(ctrl_pdata, true);
-//<ASUS-BSP Hank2_Liu 20160420> Boe panel reset after LP11 start ++++++ 
-	//follow qcom code flow:donnot power on panel for ZE553KL
-	if(ASUS_ZE553KL != asus_project_id){
+//<ASUS-BSP Hank2_Liu 20160420> Boe panel reset after LP11 start ++++++
+
+	//follow qcom code flow:donnot power on panel for ASUS_ZD552KL_PHOENIX
+	if((ASUS_ZD552KL_PHOENIX != asus_project_id)&&(ASUS_ZE553KL != asus_project_id)){
 		ret = mdss_dsi_panel_power_ctrl(pdata, MDSS_PANEL_POWER_ON);
 		if (ret) {
 			pr_err("%s:Panel power on failed. rc=%d\n", __func__, ret);
 			goto end;
 		}
 	}
+
 //<ASUS-BSP Hank2_Liu 20160420> Boe panel reset after LP11 start ------
 	/*
 	 * Issue hardware reset line after enabling the DSI clocks and data
@@ -1536,10 +1574,12 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 		mdss_dsi_clk_ctrl(sctrl, sctrl->dsi_clk_handle,
 				  MDSS_DSI_ALL_CLKS, MDSS_DSI_CLK_ON);
 
-	if (mdss_dsi_is_panel_on_lp(pdata)) {
+	if (ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_LP) {
 		pr_debug("%s: dsi_unblank with panel always on\n", __func__);
 		if (ctrl_pdata->low_power_config)
 			ret = ctrl_pdata->low_power_config(pdata, false);
+		if (!ret)
+			ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_LP;
 		goto error;
 	}
 
@@ -1604,6 +1644,8 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 		pr_debug("%s: low power state requested\n", __func__);
 		if (ctrl_pdata->low_power_config)
 			ret = ctrl_pdata->low_power_config(pdata, true);
+		if (!ret)
+			ctrl_pdata->ctrl_state |= CTRL_STATE_PANEL_LP;
 		goto error;
 	}
 
@@ -1646,7 +1688,8 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 			}
 			ATRACE_END("dsi_panel_off");
 		}
-		ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_INIT;
+		ctrl_pdata->ctrl_state &= ~(CTRL_STATE_PANEL_INIT |
+			CTRL_STATE_PANEL_LP);
 	}
 
 error:
@@ -2073,6 +2116,13 @@ static int __mdss_dsi_dfps_update_clks(struct mdss_panel_data *pdata,
 	if (sctrl_pdata)
 		MIPI_OUTP((sctrl_pdata->ctrl_base) + DSI_DYNAMIC_REFRESH_CTRL,
 				0x00);
+
+	rc = mdss_dsi_phy_pll_reset_status(ctrl_pdata);
+	if (rc) {
+		pr_err("%s: pll cannot be locked reset core ready failed %d\n",
+			__func__, rc);
+		goto dfps_timeout;
+	}
 
 	__mdss_dsi_mask_dfps_errors(ctrl_pdata, false);
 	if (sctrl_pdata)
@@ -2720,6 +2770,7 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 	struct mdss_panel_info *pinfo = &ctrl_pdata->panel_data.panel_info;
 
 	len = strlen(panel_cfg);
+	ctrl_pdata->panel_data.dsc_cfg_np_name[0] = '\0';
 	if (!len) {
 		/* no panel cfg chg, parse dt */
 		pr_debug("%s:%d: no cmd line cfg present\n",
@@ -2803,18 +2854,11 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 					strlcpy(cfg_np_name, str2,
 						MDSS_MAX_PANEL_LEN);
 				}
-			}
-
-			pr_debug("%s: cfg_np_name:%s\n", __func__, cfg_np_name);
-			if (str2) {
-				ctrl_pdata->panel_data.cfg_np =
-					of_get_child_by_name(dsi_pan_node,
-					cfg_np_name);
-				if (!ctrl_pdata->panel_data.cfg_np)
-					pr_warn("%s: can't find config node:%s. either no such node or bad name\n",
-						__func__, cfg_np_name);
+				strlcpy(ctrl_pdata->panel_data.dsc_cfg_np_name,
+					cfg_np_name, MDSS_MAX_PANEL_LEN);
 			}
 		}
+
 		return dsi_pan_node;
 	}
 end:
@@ -2993,6 +3037,12 @@ static int mdss_dsi_cont_splash_config(struct mdss_panel_info *pinfo,
 			mdss_dsi_panel_pwm_enable(ctrl_pdata);
 		ctrl_pdata->ctrl_state |= (CTRL_STATE_PANEL_INIT |
 			CTRL_STATE_MDP_ACTIVE | CTRL_STATE_DSI_ACTIVE);
+
+		/*
+		 * MDP client removes this extra vote during splash reconfigure
+		 * for command mode panel from interface. DSI removes the vote
+		 * during suspend-resume for video mode panel.
+		 */
 		if (ctrl_pdata->panel_data.panel_info.type == MIPI_CMD_PANEL)
 			clk_handle = ctrl_pdata->mdp_clk_handle;
 		else
@@ -3027,8 +3077,8 @@ static int mdss_dsi_get_bridge_chip_params(struct mdss_panel_info *pinfo,
 	u32 temp_val = 0;
 
 	if (!ctrl_pdata || !pdev || !pinfo) {
-		pr_err("%s: Invalid Params ctrl_pdata=%p, pdev=%p\n", __func__,
-			ctrl_pdata, pdev);
+		pr_err("%s: Invalid Params ctrl_pdata=%pK, pdev=%pK\n",
+			 __func__, ctrl_pdata, pdev);
 		rc = -EINVAL;
 		goto end;
 	}
@@ -4162,9 +4212,6 @@ static void mdss_dsi_shutdown(struct platform_device *pdev)
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
-	/*follow qcom code flow:do nothing for ZE553KL*/
-	if(ASUS_ZE553KL == asus_project_id)
-		return;
 	pr_info("enter %s!!!!!!!\n",__func__);
 	ret = mdss_dsi_panel_reset(gdata, 0);
 	if (ret) {

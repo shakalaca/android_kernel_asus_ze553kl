@@ -181,24 +181,24 @@ struct stCfg_SCap_DetailThreshold
 
 };
 
-//struct stCfg_MCap_DetailThreshold g_stCfg_MCap_DetailThreshold;
-//struct stCfg_SCap_DetailThreshold g_stCfg_SCap_DetailThreshold;
+//struct stCfg_MCap_DetailThreshold g_stCfg_MCap_DetailThreshold_cap_sensors;
+//struct stCfg_SCap_DetailThreshold g_stCfg_SCap_DetailThreshold_cap_sensors;
 
-void OnInit_MCap_DetailThreshold(char *strIniFile);
-void OnInit_SCap_DetailThreshold(char *strIniFile);
+void OnInit_MCap_DetailThreshold_cap_sensors(char *strIniFile);
+void OnInit_SCap_DetailThreshold_cap_sensors(char *strIniFile);
 
-void OnInit_InvalidNode(char *strIniFile);
-void OnGetTestItemParam(char *strItemName, char *strIniFile, int iDefautValue);
-void OnInit_DThreshold_RawDataTest(char *strIniFile);
-void OnInit_DThreshold_SCapRawDataTest(char *strIniFile);
-void OnInit_DThreshold_SCapCbTest(char *strIniFile);
+void OnInit_InvalidNode_cap_sensors(char *strIniFile);
+void OnGetTestItemParam_cap_sensors(char *strItemName, char *strIniFile, int iDefautValue);
+void OnInit_DThreshold_RawDataTest_cap_sensors(char *strIniFile);
+void OnInit_DThreshold_SCapRawDataTest_Cap_Sensors(char *strIniFile);
+void OnInit_DThreshold_SCapCbTest_cap_sensors(char *strIniFile);
 
 /*void OnInit_DThreshold_ForceTouch_SCapRawDataTest(char *strIniFile);
 void OnInit_DThreshold_ForceTouch_SCapCbTest(char *strIniFile);*/
 
-void OnInit_DThreshold_RxLinearityTest(char *strIniFile);//For FT5822
-void OnInit_DThreshold_TxLinearityTest(char *strIniFile);//For FT5822
+void OnInit_DThreshold_RxLinearityTest_cap_sensors(char *strIniFile);//For FT5822
+void OnInit_DThreshold_TxLinearityTest_cap_sensors(char *strIniFile);//For FT5822
 
-void set_max_channel_num(void);
+void set_max_channel_num_cap_sensors(void);
 
 #endif

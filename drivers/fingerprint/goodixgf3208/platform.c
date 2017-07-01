@@ -52,7 +52,7 @@ int gf_parse_dts(struct gf_dev* gf_dev)
 		dev_err(&gf_dev->spi->dev, "Unable to get vdd_ana\n");
 		return -1;
 	}
-	rc = regulator_set_voltage(gf_dev->areg, 3000000,3000000);
+	rc = regulator_set_voltage(gf_dev->areg, 3300000,3300000);
 	if (rc){
 		dev_err(&gf_dev->spi->dev,"Unable to set voltage on vdd_ana");
 		return -1;

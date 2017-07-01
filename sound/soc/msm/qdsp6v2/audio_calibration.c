@@ -634,11 +634,11 @@ static long audio_cal_ioctl(struct file *f,
 #define AUDIO_SET_AUDIOWIZARD_FORCE_PRESET32	_IOWR(CAL_IOCTL_MAGIC, \
  							221, compat_uptr_t)
 //sherry--
+
 /* ASUS_BSP  +++ */
 #define AUDIO_GET_HS_IMP32			_IOWR(CAL_IOCTL_MAGIC, \
 							230, compat_uptr_t)
 /* ASUS_BSP  --- */
-
 static long audio_cal_compat_ioctl(struct file *f,
 		unsigned int cmd, unsigned long arg)
 {

@@ -286,8 +286,9 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 	for (i = find_first_bit((unsigned long *)pending, gic->gic_irqs);
 	i < gic->gic_irqs;
 	i = find_next_bit((unsigned long *)pending, gic->gic_irqs, i+1)) {
-		unsigned int irq_no = irq_find_mapping(gic->domain, i);
-		struct irq_desc *desc = irq_to_desc(irq_no);
+		unsigned int irq = irq_find_mapping(gic->domain,
+						i + gic->irq_offset);
+		struct irq_desc *desc = irq_to_desc(irq);
 		const char *name = "null";
 
 		if (desc == NULL)
@@ -296,7 +297,7 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 			name = desc->action->name;
 
 		//[+++][Power] jeff_gu Add for wakeup debug
-		if (irq_no==msm_gpio_chip_irq)
+		if (irq==msm_gpio_chip_irq)
 		{
 			name = "msm_gpio";
 			gpio_wakeup_device = true;
@@ -304,11 +305,11 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		//[---][Power] jeff_gu Add for wakeup debug
 
 		pr_warning("%s: IRQ No.%d triggered %s\n", __func__,
-					irq_no, name);
+					irq, name);
 
 		//[+++][Power] jeff_gu Add for wakeup debug
 		if (gic_irq_cnt < 8) {
-			gic_resume_irq[gic_irq_cnt]=irq_no;
+			gic_resume_irq[gic_irq_cnt] = irq;
 			gic_irq_cnt++;
 		}
 		//[---][Power] jeff_gu Add for wakeup debug

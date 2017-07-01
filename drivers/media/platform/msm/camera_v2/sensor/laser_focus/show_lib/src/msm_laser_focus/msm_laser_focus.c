@@ -140,7 +140,6 @@ int32_t power_up(struct msm_laser_focus_ctrl_t *dev_t)
 	if (dev_t->laser_focus_state != LASER_FOCUS_POWER_UP) {
 		/* Enable voltage */
 		LOG_Handler(LOG_DBG, "POWER UP\n");
-		if(asus_project_id==ASUS_ZE553KL  &&  asus_hw_id >= ASUS_ER)
 			rkpreisp_power_on_dsp(0);
 		rc = vreg_control(dev_t, ENABLE_VREG);
 		if (rc < 0) {
@@ -174,7 +173,6 @@ int32_t power_down(struct msm_laser_focus_ctrl_t *dev_t)
 		/* Disable voltage */
 		LOG_Handler(LOG_DBG, "POWER DOWN\n");
 		rc = vreg_control(dev_t, DISABLE_VREG);
-		if(asus_project_id==ASUS_ZE553KL  &&  asus_hw_id >= ASUS_ER)
 			rkpreisp_power_off_dsp();
 		if (rc < 0) {
 			LOG_Handler(LOG_ERR, "%s failed %d\n", __func__, __LINE__);

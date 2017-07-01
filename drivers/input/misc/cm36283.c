@@ -14,8 +14,10 @@
  */
 
 #include <linux/delay.h>
+//#include <linux/earlysuspend.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
+//#include <linux/sensors.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -28,6 +30,8 @@
 #include <linux/lightsensor.h>
 #include <linux/slab.h>
 #include <asm/uaccess.h>
+
+//#include <asm/mach-types.h>
 
 //<ASUS-danielchan20150601>>>>>>>>>+
 #include <linux/kernel.h>
@@ -64,7 +68,13 @@ extern int Read_PROJ_ID(void);
 #define CM36283_VI2C_MAX_UV	1800000
 
 #define CONFIG_ASUS_FACTORY_SENSOR_MODE  1
-
+//wxtest
+#define asus_PRJ_ID 0
+//wxtest
+//<ASUS-danielchan20150921>>>>>>>>>+
+static uint16_t ZD_CLOSE_THD=0x90;
+static uint16_t ZD_AWAY_THD=0x50;
+//<ASUS-danielchan20150921><<<<<<<<+
 static int sensitivity_x = 20;
 static bool newold = 0 ; //20140523 Eve_Wen default = 0 means cm36283
 static int proximity_state = 1; //<asus-wx20150429+>
@@ -340,10 +350,113 @@ static struct CM36283_info *lp_info_cm36283 = NULL;
 
 static struct device* vemmc2_userCtrl_dev;
 static struct class* vemmc2_userCtrl_class;
+//static struct class* gpio_userCtrl_class;
+//static struct device* gpio_userCtrl_dev;
 
 static struct regulator *vemmc2_reg;
 static ssize_t vemmc2_reg_show(struct device *dev,
             struct device_attribute *attr, char *buf){
+
+/*	
+
+    int reg_err;	
+
+	reg_err = reg_err = intel_msic_reg_write(VEMMC2CNT_ADDR, 0x07);
+
+	if(!reg_err)
+
+	     D("VEMMC2_cm32863 ---regulator write success !!\n");
+
+    else 
+
+     	D("VEMMC2_cm32863 ---regulator write fail !!\n");	
+
+*/
+
+/*
+
+
+
+     struct CM36283_info *lpi = lp_info_cm36283;
+
+     struct input_dev* find_ps_input_dev_ptr = lpi->ls_input_dev;
+
+	 struct list_head node_start = find_ps_input_dev_ptr->node;
+
+	 char* self_name = find_ps_input_dev_ptr->name;	 
+
+	 list_for_each_entry_continue( find_ps_input_dev_ptr, 
+
+	                              &node_start,
+
+								   node ){ 
+
+        D("input_dev is %s!!\n",find_ps_input_dev_ptr->name);								   
+
+         if (find_ps_input_dev_ptr->name =="proximit"){
+
+               D("find ps_input_dev success !!!\n");		
+
+               break;   			   
+
+		}
+
+		
+
+		if (find_ps_input_dev_ptr->name == self_name){
+
+	           D("find ps_input_dev fail !!\n");	
+
+               break;			   
+
+	    }
+
+	}/config/wifi
+
+*/     
+
+/*
+
+
+
+        int projid;
+
+        projid = Read_PROJ_ID();
+
+        D("projid = %d\n", projid);
+
+*/
+
+
+
+/*
+
+	int res=0;
+
+    FILE  *sysfsfp;
+
+    int* var;
+
+	char *filename = "/config/wifi/psensor.txt";
+
+    sysfsfp = fopen(filename, "r");
+
+    if (sysfsfp!=NULL) {
+
+        fscanf(sysfsfp, "%d\n", var);
+
+        fclose(sysfsfp);
+
+    } else {
+
+        ALOGE("open file %s to read with error %d", filename, res);
+
+    }
+
+    D(" read test value is %d\n", var);
+
+*/
+
 return 0;
 }
 
@@ -396,6 +509,29 @@ return count;
 }
 DEVICE_ATTR(vemmc2_ctrl, 0664, vemmc2_reg_show, vemmc2_reg_store);
 
+/*
+static ssize_t gpio_test_tool_show(struct device *dev,
+              struct device_attribute *attr, char *buf){
+
+     return 0;
+}
+
+
+static ssize_t gpio_test_tool_store(struct device *dev,
+                                    struct device_attribute *attr,
+                                    const char *buf, size_t count){
+
+     int gpio_num, reg_err; 
+         gpio_num = -1;
+         sscanf(buf, "%d", &gpio_num);
+         gpio_free(gpio_num);
+
+return count;
+}
+
+
+DEVICE_ATTR(gpio_ctrl, 0664, gpio_test_tool_show, gpio_test_tool_store);
+*/
 #endif // DEBUG_VEMMC2
 
 
@@ -520,6 +656,12 @@ static int _CM36283_I2C_Read_Word(uint16_t slaveAddr, uint8_t cmd, uint16_t *pda
 	}
 
 	*pdata = (buffer[1]<<8)|buffer[0];
+#if 0
+	/* Debug use */
+	printk(KERN_DEBUG "[CM36283] %s: I2C_RxData[0x%x, 0x%x] = 0x%x\n",
+
+		__func__, slaveAddr, cmd, *pdata);
+#endif
 	return ret;
 }
 
@@ -528,6 +670,12 @@ static int _CM36283_I2C_Write_Word(uint16_t SlaveAddress, uint8_t cmd, uint16_t 
 {
 	char buffer[3];
 	int ret = 0;
+#if 0
+	/* Debug use */
+	printk(KERN_DEBUG
+	"[CM36283] %s: _CM36283_I2C_Write_Word[0x%x, 0x%x, 0x%x]\n",
+		__func__, SlaveAddress, cmd, data);
+#endif
 
 	buffer[0] = cmd;
 	buffer[1] = (uint8_t)(data&0xff);
@@ -535,7 +683,7 @@ static int _CM36283_I2C_Write_Word(uint16_t SlaveAddress, uint8_t cmd, uint16_t 
 
 	ret = I2C_TxData(SlaveAddress, buffer, 3);
 	if (ret < 0) {
-		pr_err("[PS_ERR][CM36283 error]%s: I2C_TxData fail[0x%x, 0x%x]\n", __func__,SlaveAddress,cmd);
+		pr_err("[PS_ERR][CM36283 error]%s: I2C_TxData fail\n", __func__);
 		return -EIO;
 	}
 
@@ -560,6 +708,32 @@ static int get_ls_adc_value(uint16_t *als_step, bool resume)
 		return -EIO;
 	}
 
+//<ASUS-danielchan20150520>>>>>>>>>+
+    switch (asus_PRJ_ID) {
+        //  case 0://ASUS_ZE550KL
+        //
+        //      break;
+  // <asus-jhw20150618+>
+		case 1://ASUS_ZE600KL
+			if(*als_step <= 0x0A){//workaround get ls adc
+				*als_step=0x00;
+			}
+			break;
+  // <asus-jhw20150618->
+        //  case 2://ASUS_ZX550KL
+        //
+        //      break;
+        case 3://ASUS_ZD550KL
+		if(*als_step <= 0x0A){//workaround get ls adc
+		    *als_step=0x00;
+		}
+            break;
+        default:
+            break;
+    }
+//<ASUS-danielchan20150520><<<<<<<<+
+
+
     if (!lpi->ls_calibrate) {
 		tmpResult = (uint32_t)(*als_step) * lpi->als_gadc / lpi->als_kadc_cm36283;
 		
@@ -570,6 +744,8 @@ static int get_ls_adc_value(uint16_t *als_step, bool resume)
 
 
 	}
+	//D("[LS][CM36283] %s: raw adc = 0x%X, ls_calibrate = %d\n",
+	//	__func__, *als_step, lpi->ls_calibrate);
 
 	return ret;
 }
@@ -595,13 +771,18 @@ static int get_ps_adc_value(uint16_t *data)
         if(newold == 0)//20140522Eve
         {
                 (*data) &= 0xFF;
-                D("Eve_Wen Psensor in cm36283\n");
+                printk("Eve_Wen Psensor in cm36283\n");
         }
-        if (ret < 0) {
+                if (ret < 0) {
 		pr_err(
-			"[PS][CM36283 error]%s: _CM36283_I2C_Read_Word fail 0x%x\n",
-			__func__, *data);
+			"[PS][CM36283 error]%s: _CM36283_I2C_Read_Word fail\n",
+			__func__);
 		return -EIO;
+
+	}else{
+		pr_err(
+			"[PS][CM36283 OK]%s: _CM36283_I2C_Read_Word OK 0x%x\n",
+			__func__, *data);
 	}
 
 	return ret;
@@ -698,7 +879,17 @@ bool proximity_check_status(void){
     struct CM36283_info *lpi;
 	uint16_t ps_adc_value_init = 0 , data =0, data1= 0;
     int ret = 0;
-	int p_value; //<asus-wx20150814+>			
+	int p_value; //<asus-wx20150814+>
+
+	pr_err("anna proximity_check_status default \n");
+//wxtest--
+/*
+	if (cm36283_is_no_present) {
+		pr_err("[PS][ap3426]  is ap3426\n"); 
+		return proximityap3426_check_status();		
+	}
+*/
+//wxtest--   				
 //<asus-wx20150805>+>>
 	if (cm36283_probe_fail) {
 		pr_err("proximity_check_status default return FAR\n");
@@ -759,6 +950,28 @@ static void light_sensor_initial_value_work_routine(struct work_struct *work){
          uint16_t ls_low_thd, ls_high_thd;
 		 struct CM36283_info *lpi = lp_info_cm36283;
 		  int report_lux=0;
+		 
+//<ASUS-danielchan20150730>>>>>>>>>+
+#if 0
+        switch (asus_PRJ_ID) {
+          //  case 0://ASUS_ZE550KL
+          //
+          //      break;
+          //  case 1://ASUS_ZE600KL
+          //
+          //      break;
+          //  case 2://ASUS_ZX550KL
+          //
+          //      break;
+          //  case 3://ASUS_ZD550KL
+		//    msleep(100);//ER workaround report wrong lux
+        //        break;
+            default:
+                break;
+        }
+#endif
+//<ASUS-danielchan20150730><<<<<<<<+
+
          get_ls_adc_value(&adc_value, 0);
 
 //wxtest
@@ -796,12 +1009,24 @@ else {
 #else
 	               D("CM36283--initial- NO calibration data, Factory branch , NO default config\n");
 #endif // end of CONFIG_ASUS_FACTORY_SENSOR_MODE
+
                    report_lux = report_lux*10/sensitivity_x;
 			       D("CM36283--initial-After devided by 20, report_lux is %d\n", report_lux);
 
 		//<-- ASUS-Bevis_Chen - -->
 
                  }			
+//<asus-wx20160831>->>			
+/*
+            if(report_lux %2 == 1)
+			       report_lux -= 1;
+
+
+            if(report_lux == lpi->last_report_lux){ //<asus-wx20160831>
+                  report_lux += 2;			  
+      		  }	  
+*/
+//<asus-wx20160831>-<<
 //wxtest
 	lpi->als_first_report = true;
 //wxtest
@@ -835,9 +1060,39 @@ static void sensor_irq_do_work(struct work_struct *work)
 
 static int lightsensor_proc_show(struct seq_file *m, void *v) {
 	
+	//if(!lightsensor_entry){
 		int ret = 0,ret1=0;
-		uint16_t idReg;	
+		uint16_t idReg;
+		//uint8_t i;				
+		
 		struct CM36283_info *lpi = lp_info_cm36283;   
+		/* anna -- for new atd spec
+		ret1 = _CM36283_I2C_Read_Word(lpi->slave_addr, ID_REG, &idReg);
+		printk("anna-sensor idReg : 0x0c=0x%x \n", idReg);
+	      
+	  	if(ret1<0){
+			ret =seq_printf(m," ERROR: i2c r/w test fail\n");	
+		}else{
+			ret =seq_printf(m," ACK: i2c r/w test ok\n");	
+		}
+		if(Driverversion != NULL){
+			ret =seq_printf(m," Driver version:%s\n",Driverversion);
+		}
+		else{
+			ret =seq_printf(m," Driver version:NULL\n");
+		}
+	  	if((idReg==0x0186)){
+	  		ret =seq_printf(m," Vendor:%s(0x0%x)\n", VENDOR,idReg);
+		}else{
+			ret =seq_printf(m," Vendor:%s(0x0%x)\n", VENDOR,idReg);
+		} */
+
+		//for ( i=0x00 ;i<=0x0c;i++){
+		//	 ret1 = _CM36283_I2C_Read_Word(lpi->slave_addr, i, &idReg);
+		//	 printk("anna-sensor idReg : 0x%x=0x%x \n",i, idReg);
+			 
+		//	  }
+		// }
 		ret1 = _CM36283_I2C_Read_Word(lpi->slave_addr, ID_REG, &idReg);
 		if(ret1<0){	  		
 			ret =seq_printf(m,"0 \n");
@@ -851,10 +1106,40 @@ static int lightsensor_proc_show(struct seq_file *m, void *v) {
 }
 
 static int Proximitysensor_proc_show(struct seq_file *m, void *v) {
+	
+	//if(!lightsensor_entry){
 		int ret = 0,ret1=0;
-		uint16_t idReg;			
+		uint16_t idReg;
+		//uint8_t i;				
 		
 		struct CM36283_info *lpi = lp_info_cm36283;   
+		/* anna -- for new atd spec
+		ret1 = _CM36283_I2C_Read_Word(lpi->slave_addr, ID_REG, &idReg);
+		printk("anna-sensor idReg : 0x0c=0x%x \n", idReg);
+	      
+	  	if(ret1<0){
+			ret =seq_printf(m," ERROR: i2c r/w test fail\n");	
+		}else{
+			ret =seq_printf(m," ACK: i2c r/w test ok\n");	
+		}
+		if(Driverversion != NULL){
+			ret =seq_printf(m," Driver version:%s\n",Driverversion);
+		}
+		else{
+			ret =seq_printf(m," Driver version:NULL\n");
+		}
+	  	if((idReg==0x0186)){
+	  		ret =seq_printf(m," Vendor:%s(0x0%x)\n", VENDOR,idReg);
+		}else{
+			ret =seq_printf(m," Vendor:%s(0x0%x)\n", VENDOR,idReg);
+		}
+  		*/
+		//for ( i=0x00 ;i<=0x0c;i++){
+		//	 ret1 = _CM36283_I2C_Read_Word(lpi->slave_addr, i, &idReg);
+		//	 printk("anna-sensor idReg : 0x%x=0x%x \n",i, idReg);
+			 
+		//	  }
+		// }
 		ret1 = _CM36283_I2C_Read_Word(lpi->slave_addr, ID_REG, &idReg);
 		if(ret1<0){	  		
 			ret =seq_printf(m," 0 \n");
@@ -933,10 +1218,9 @@ static int als_power(int enable)
 }
 
 //<ASUS-danielchan20150921>>>>>>>>>+
-/*
 static void psensor_calibration_check(struct CM36283_info *lpi,uint16_t close_thd_value,uint16_t away_thd_value)
 {
-	D("[PS][CM36283] psensor_calibration_check lpi->ps_away_thd_set:0x%x lpi->ps_close_thd_set:0x%x\n",lpi->ps_away_thd_set,lpi->ps_close_thd_set);
+	printk("[PS][CM36283] psensor_calibration_check lpi->ps_away_thd_set:0x%x lpi->ps_close_thd_set:0x%x\n",lpi->ps_away_thd_set,lpi->ps_close_thd_set);
 	if((lpi->ps_away_thd_set == 0x100) &&  (lpi->ps_close_thd_set == 0x200) ) { //without calibration
 		if(newold ==0) {
 		    lpi->ps_away_thd_set = away_thd_value &0xFF;
@@ -945,7 +1229,7 @@ static void psensor_calibration_check(struct CM36283_info *lpi,uint16_t close_th
 			lpi->ps_close_thd_set = close_thd_value;
 	        lpi->ps_away_thd_set = away_thd_value;
 		}
-        D("[PS][CM36283] without calibration: ps_away_thd_set:0x%x ,ps_close_thd_set:0x%x\n",lpi->ps_away_thd_set,lpi->ps_close_thd_set);
+        printk("[PS][CM36283] without calibration: ps_away_thd_set:0x%x ,ps_close_thd_set:0x%x\n",lpi->ps_away_thd_set,lpi->ps_close_thd_set);
 	} else if(lpi->ps_away_thd_set > lpi->ps_close_thd_set ) {//wrong calibration
 		if(newold ==0) {
 		    lpi->ps_away_thd_set = away_thd_value &0xFF;
@@ -954,9 +1238,9 @@ static void psensor_calibration_check(struct CM36283_info *lpi,uint16_t close_th
 			lpi->ps_close_thd_set = close_thd_value;
 	        lpi->ps_away_thd_set = away_thd_value;
 		}
-		D("[PS][CM36283] wrong calibration: ps_away_thd_set:0x%x ,ps_close_thd_set:0x%x\n",lpi->ps_away_thd_set,lpi->ps_close_thd_set);
+		printk("[PS][CM36283] wrong calibration: ps_away_thd_set:0x%x ,ps_close_thd_set:0x%x\n",lpi->ps_away_thd_set,lpi->ps_close_thd_set);
 	}
-}*/
+}
 //<ASUS-danielchan20150921><<<<<<<<+
 
 static void ls_initial_cmd(struct CM36283_info *lpi)
@@ -977,15 +1261,30 @@ static void psensor_initial_cmd(struct CM36283_info *lpi)
 	lpi->ps_conf1_val = 0x3d7;
 	lpi->ps_conf3_val = 0x210;
 
+	//<ASUS-danielchan20150921>>>>>>>>>+
+    switch (asus_PRJ_ID) {
+        case 3://ASUS_ZD550KL
+            psensor_calibration_check(lpi,ZD_CLOSE_THD,ZD_AWAY_THD);
+            break;
+        default:
+            break;
+    }
+	//<ASUS-danielchan20150921><<<<<<<<+
+
 	_CM36283_I2C_Write_Word(lpi->slave_addr, PS_CONF1, lpi->ps_conf1_val);
 	_CM36283_I2C_Write_Word(lpi->slave_addr, PS_CONF3, lpi->ps_conf3_val);
 
+//<asus-wx20160804>+>>
+/*
+	_CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDL, lpi->ps_away_thd_set);
+	_CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDH, lpi->ps_close_thd_set);
+*/
 	psensor_set_threshold();
 
 	lpi->ps_autok_module_enable = true;
 	lpi->ps_crosstalk_diff = 0;
 	lpi->ps_autok_min = 3; //decided by EE
-	lpi->ps_autok_max = 65; //decided by EE
+	lpi->ps_autok_max = 50; //decided by EE
 //<asus-wx20160804>+<<
 
 	D("[PS][CM36283] %s, finish\n", __func__);	
@@ -998,7 +1297,7 @@ void psensor_set_threshold(void)
 
 	_CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDL, lpi->ps_away_thd_set);
 	_CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDH, lpi->ps_close_thd_set);
-	D("[PS][CM36283]psensor_set_threshold : PS_THDL = %d, PS_THDH = %d\n", lpi->ps_away_thd_set, lpi->ps_close_thd_set);
+	pr_err("[PS][CM36283]psensor_set_threshold : PS_THDL = %d, PS_THDH = %d\n", lpi->ps_away_thd_set, lpi->ps_close_thd_set);
 }
 
 static int psensor_check_minCT(void)
@@ -1029,11 +1328,11 @@ static int psensor_check_minCT(void)
 
 	/*update the diff crosstalk value*/
 	crosstalk_diff = crosstalk_min - lpi->ps_crosstalk;
-	D("[PS][CM36283]psensor_check_minCT : ps_crosstalk = %d, crosstalk_min = %d\n", lpi->ps_crosstalk, crosstalk_min);
+	pr_err("[PS][CM36283]psensor_check_minCT : ps_crosstalk = %d, crosstalk_min = %d\n", lpi->ps_crosstalk, crosstalk_min);
 
 	if ((crosstalk_diff > lpi->ps_autok_min) && (crosstalk_diff < lpi->ps_autok_max)) {
 		lpi->ps_crosstalk_diff = crosstalk_diff;
-		D("[PS][CM36283]psensor_check_minCT : update ps_crosstalk_diff = %d\n", lpi->ps_crosstalk_diff);
+		pr_err("[PS][CM36283]psensor_check_minCT : update ps_crosstalk_diff = %d\n", lpi->ps_crosstalk_diff);
 
 		lpi->ps_away_thd_set = PSensor_CALIDATA[1] + lpi->ps_crosstalk_diff;
 		lpi->ps_close_thd_set = PSensor_CALIDATA[0] + lpi->ps_crosstalk_diff;
@@ -1050,7 +1349,7 @@ static int psensor_check_minCT(void)
 		}
 		else {
 			lpi->ps_crosstalk_diff = crosstalk_diff;
-			D("[PS][CM36283]psensor_check_minCT : crosstalk_diff = %d, too big\n", crosstalk_diff);
+			pr_err("[PS][CM36283]psensor_check_minCT : crosstalk_diff = %d, too big\n", crosstalk_diff);
 		}
 	}
 
@@ -1131,14 +1430,29 @@ static int psensor_enable(struct CM36283_info *lpi)
 		D("[PS][CM36283] %s: already enabled\n", __func__);
 		ret = 0;
 	}else{
+	// +++	
+//     psensor_initial_cmd(lpi);
+/*
+	_CM36283_I2C_Write_Word(lpi->slave_addr, PS_CONF1, lpi->ps_conf1_val);   
+    _CM36283_I2C_Write_Word(lpi->slave_addr, PS_CONF3, lpi->ps_conf3_val);
+	_CM36283_I2C_Write_Word(lpi->slave_addr, PS_THD, (lpi->ps_close_thd_set <<8)| lpi->ps_away_thd_set);
+*/		
+//    enable_irq(lpi->irq);
+// ---	
   	disable_irq_nosync(lpi->irq);
 	ret = control_and_report(lpi, CONTROL_PS, 1);
+// +++	
+/*     
+	 input_report_abs(lpi->ps_input_dev, ABS_DISTANCE, 1);     
+	 input_sync(lpi->ps_input_dev);  
+*/
+// ---
 	queue_delayed_work(lpi->lp_wq, &proximity_initial_value_work, 0); //<asus-wx20160804>
     }
 
 	mutex_unlock(&ps_enable_mutex);
 	if (ret!=0){
-         pr_err("[PS][CM36283] psensor_enable--fail!!!\n");    		
+         D("[PS][CM36283] psensor_enable--fail!!!\n");    		
      }else{
 	       D("[PS][CM36283] psensor_enable--success!!!\n");
 	 }
@@ -1181,6 +1495,8 @@ static int psensor_release(struct inode *inode, struct file *file)
 	struct CM36283_info *lpi = lp_info_cm36283;
 	D("[PS][CM36283] %s\n", __func__);
 	lpi->psensor_opened = 0;
+
+//	return psensor_disable(lpi);
 	return 0;
 }
 
@@ -1210,13 +1526,21 @@ static long psensor_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	case CAPELLA_CM3602_IOCTL_GET_ENABLED:
 		return put_user(lpi->ps_enable, (unsigned int __user *)arg);
 		break;
+	//<----------- ASUS-Bevis_Chen + --------------->
+	/*case ASUS_PSENSOR_IOCTL_START:	
+	        printk("%s:ASUS ASUS_PSENSOR_IOCTL_START  \n", __func__);
+	        break;
+
+      case ASUS_PSENSOR_IOCTL_CLOSE:				
+	 	  printk("%s:ASUS ASUS_PSENSOR_IOCTL_CLOSE \n", __func__);
+	        break;*/
 	case ASUS_PSENSOR_IOCTL_GETDATA:
 		{
 			uint16_t ps_adc_value = 0;	
 			int ret=0;
 
 			rc = 0 ;
-			D("%s:ASUS ASUS_PSENSOR_IOCTL_GETDATA \n", __func__);
+			printk("%s:ASUS ASUS_PSENSOR_IOCTL_GETDATA \n", __func__);
 			ret = get_ps_adc_value(&ps_adc_value);
 			if (ret < 0) {
 					printk("%s:ASUS failed to get_ps_adc_value. \n",__func__);
@@ -1230,11 +1554,11 @@ static long psensor_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 						goto pend;
 			  }		
 
-			  D("%s:ASUS_PSENSOR_IOCTL_GETDATA end\n", __func__);
+			  printk("%s:ASUS_PSENSOR_IOCTL_GETDATA end\n", __func__);
 		}
 		break;
 	case ASUS_PSENSOR_SETCALI_DATA:
-		D("%s:ASUS ASUS_PSENSOR_SETCALI_DATA \n", __func__);
+		printk("%s:ASUS ASUS_PSENSOR_SETCALI_DATA \n", __func__);
 		rc = 0 ;
 		memset(PSensor_CALIDATA, 0, 3*sizeof(int)); //<asus-wx20160804>
 		if (copy_from_user(PSensor_CALIDATA, argp, sizeof(PSensor_CALIDATA))){
@@ -1242,7 +1566,7 @@ static long psensor_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 			goto pend;
 		}	
 
-		D("%s:ASUS_PSENSOR SETCALI_DATA : PSensor_CALIDATA[0] : %d, PSensor_CALIDATA[1]: %d, PSensor_CALIDATA[2]: %d\n", 
+		printk("%s:ASUS_PSENSOR SETCALI_DATA : PSensor_CALIDATA[0] : %d, PSensor_CALIDATA[1]: %d, PSensor_CALIDATA[2]: %d\n", 
 			__func__, PSensor_CALIDATA[0], PSensor_CALIDATA[1], PSensor_CALIDATA[2]); //<asus-wx20160804>
 
 		if(PSensor_CALIDATA[0] <= 0||PSensor_CALIDATA[1] <= 0 
@@ -1261,20 +1585,29 @@ static long psensor_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		}
 		else
 		{
+			//<ASUS-danielchan20150921>>>>>>>>>+
+			switch (asus_PRJ_ID) {
+				case 3://ASUS_ZD550KL
+					psensor_calibration_check(lpi,ZD_CLOSE_THD,ZD_AWAY_THD);
+					break;
+				default:
+					break;
+			}
+			//<ASUS-danielchan20150921><<<<<<<<+
 			_CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDL, lpi->ps_away_thd_set);
 			_CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDH, lpi->ps_close_thd_set);
 		}
 		break;
 
 	case ASUS_PSENSOR_EN_CALIBRATION:
-		D("%s:ASUS ASUS_PSENSOR_EN_CALIBRATION \n", __func__);
+		printk("%s:ASUS ASUS_PSENSOR_EN_CALIBRATION \n", __func__);
 		rc = 0 ;
 		if (copy_from_user(&enPcalibration_flag , argp, sizeof(enPcalibration_flag ))){
 			rc = -EFAULT;
 			goto pend;
 		}	
 		enPSensorConfig_flag =  enPcalibration_flag ;
-		D("%s: ASUS_PSENSOR_EN_CALIBRATION : enPSensorConfig_flag is : %d  \n",__func__,enPSensorConfig_flag); 
+		printk("%s: ASUS_PSENSOR_EN_CALIBRATION : enPSensorConfig_flag is : %d  \n",__func__,enPSensorConfig_flag); 
 		break;		
 	//<----------- ASUS-Bevis_Chen - ------------->
 	default:
@@ -1343,6 +1676,10 @@ static int lightsensor_update_table(struct CM36283_info *lpi)
          }else{
                lpi->cali_table[i] = 0xFFFF;    
           }         
+
+		//D("[LS][CM36283] %s: Calibrated adc_table: data[%d], %x\n",
+		//	__func__, i, lpi->cali_table[i]);
+
 	}
 
 	return 0;
@@ -1390,6 +1727,8 @@ static int lightsensor_open(struct inode *inode, struct file *file)
 {
 	struct CM36283_info *lpi = lp_info_cm36283;
 	int rc = 0;
+	//D("[LS][CM36283] %s\n", __func__);
+
 	if (lpi->lightsensor_opened) {
 		pr_err("[LS][CM36283 error]%s: already opened\n", __func__);
 		rc = -EBUSY;
@@ -1402,6 +1741,7 @@ static int lightsensor_open(struct inode *inode, struct file *file)
 static int lightsensor_release(struct inode *inode, struct file *file)
 {
 	struct CM36283_info *lpi = lp_info_cm36283;
+	//D("[LS][CM36283] %s\n", __func__);
 	lpi->lightsensor_opened = 0;
 	return 0;
 }
@@ -1412,13 +1752,15 @@ static long lightsensor_ioctl(struct file *file, unsigned int cmd,unsigned long 
 	struct CM36283_info *lpi = lp_info_cm36283;
 	char encalibration_flag = 0 ;
 	void __user *argp = (void __user *)arg;
-
+	/*D("[CM36283] %s cmd %d\n", __func__, _IOC_NR(cmd));*/
 	switch (cmd) {
 	case LIGHTSENSOR_IOCTL_ENABLE:
 		if (get_user(val, (unsigned int __user *)arg)) {
 			rc = -EFAULT;
 			break;
 		}
+		//D("[LS][CM36283] %s LIGHTSENSOR_IOCTL_ENABLE, value = %d\n",
+		//	__func__, val);
 
 		rc = val ? lightsensor_enable(lpi) : lightsensor_disable(lpi);
 		break;
@@ -1429,6 +1771,13 @@ static long lightsensor_ioctl(struct file *file, unsigned int cmd,unsigned long 
 
 		rc = put_user(val, (unsigned int __user *)arg);
 		break;
+	//<----------- ASUS-Bevis_Chen + --------------->
+	/*case ASUS_LIGHTSENSOR_IOCTL_START:	
+	        printk("%s:ASUS ASUS_LIGHTSENSOR_IOCTL_START  \n", __func__);
+	        break;
+	case ASUS_LIGHTSENSOR_IOCTL_CLOSE:				
+	 	  printk("%s:ASUS ASUS_LIGHTSENSOR_IOCTL_CLOSE \n", __func__);
+	        break;*/
 	case ASUS_LIGHTSENSOR_IOCTL_GETDATA:
        	{
 			 uint16_t adc_value = 0;	
@@ -1445,6 +1794,13 @@ static long lightsensor_ioctl(struct file *file, unsigned int cmd,unsigned long 
 			if(enLSensorConfig_flag == 1 ){//calibration enable 
 				  if(LSensor_CALIDATA[0] > 0&&LSensor_CALIDATA[1] > 0 
 	  	                     &&LSensor_CALIDATA[1] >LSensor_CALIDATA[0] ){ //in case of zero divisor error
+	                            
+	                              //D("CM36283---Before calibration, ASUS_LIGHTSENSOR_IOCTL_GETDATA,  report_lux is %d\n", report_lux);
+	                              //report_lux = calibration_light(LSensor_CALIDATA[1], LSensor_CALIDATA[0], report_lux);
+	                              //D("CM36283---After calibration, ASUS_LIGHTSENSOR_IOCTL_GETDATA, report_lux is %d\n", report_lux);
+	                            //  report_lux = report_lux*10/sensitivity_x;  //anna need report adc value
+	                             // D("CM36283---After devided by 20, ASUS_LIGHTSENSOR_IOCTL_GETDATA, report_lux is %d\n", report_lux);	
+
 	                      }else{
 						        rc = -EINVAL;
 						        printk("%s:ASUS input LSensor_CALIDATA was invalid .error !!!!!\n",__func__);
@@ -1461,16 +1817,16 @@ static long lightsensor_ioctl(struct file *file, unsigned int cmd,unsigned long 
 	              }
 
 	                if ( copy_to_user(argp, &report_lux, sizeof(report_lux) ) ) {
-	                       D("%s:ASUS failed to copy lightsense data to user space.\n",__func__);
+	                       printk("%s:ASUS failed to copy lightsense data to user space.\n",__func__);
 	                       rc = -EFAULT;			
 	                       goto end;
 		           }		
-			D("%s:ASUS_LIGHTSENSOR_IOCTL_GETDATA end\n", __func__);
+			printk("%s:ASUS_LIGHTSENSOR_IOCTL_GETDATA end\n", __func__);
 		}//ASUS_LIGHTSENSOR_IOCTL_GETDATA
 		break;
 	case ASUS_LIGHTSENSOR_SETCALI_DATA:
 
-		D("%s:ASUS ASUS_LIGHTSENSOR_SETCALI_DATA \n", __func__);
+		printk("%s:ASUS ASUS_LIGHTSENSOR_SETCALI_DATA \n", __func__);
 		rc = 0 ;
 		memset(LSensor_CALIDATA, 0, 2*sizeof(int));
 
@@ -1480,7 +1836,7 @@ static long lightsensor_ioctl(struct file *file, unsigned int cmd,unsigned long 
 			goto end;
 		}	
 
-		D("%s:ASUS_LIGHTSENSOR SETCALI_DATA : LSensor_CALIDATA[0] :  %d ,LSensor_CALIDATA[1]:  %d \n", 
+		printk("%s:ASUS_LIGHTSENSOR SETCALI_DATA : LSensor_CALIDATA[0] :  %d ,LSensor_CALIDATA[1]:  %d \n", 
 			__func__, LSensor_CALIDATA[0],LSensor_CALIDATA[1]);
 
 		if(LSensor_CALIDATA[0] <= 0||LSensor_CALIDATA[1] <= 0 
@@ -1490,7 +1846,7 @@ static long lightsensor_ioctl(struct file *file, unsigned int cmd,unsigned long 
 
 		break;
 	case ASUS_LIGHTSENSOR_EN_CALIBRATION:
-		D("%s:ASUS ASUS_LIGHTSENSOR_EN_CALIBRATION \n", __func__);
+		printk("%s:ASUS ASUS_LIGHTSENSOR_EN_CALIBRATION \n", __func__);
 		rc = 0 ;
 		if (copy_from_user(&encalibration_flag , argp, sizeof(encalibration_flag )))
 		{
@@ -1499,7 +1855,7 @@ static long lightsensor_ioctl(struct file *file, unsigned int cmd,unsigned long 
 		}	
 		enLSensorConfig_flag =  encalibration_flag ;
 
-		D("%s: ASUS_LIGHTSENSOR_EN_CALIBRATION : enLSensorConfig_flag is : %d  \n",__func__,enLSensorConfig_flag); 
+		printk("%s: ASUS_LIGHTSENSOR_EN_CALIBRATION : enLSensorConfig_flag is : %d  \n",__func__,enLSensorConfig_flag); 
 		break;		
 	//<----------- ASUS-Bevis_Chen - ------------->
 
@@ -1693,6 +2049,10 @@ static ssize_t ps_thd_store(struct device *dev,	struct device_attribute *attr, c
 		lpi->ps_close_thd_set = (code &0xFF00)>>8;	
 	    	_CM36283_I2C_Write_Word(lpi->slave_addr, PS_THD, (lpi->ps_close_thd_set <<8)| lpi->ps_away_thd_set);
 		D("[PS]%s: ps_close_thd_set = 0x%x, ps_away_thd_set = 0x%x\n", __func__, lpi->ps_close_thd_set, lpi->ps_away_thd_set);
+
+
+		//ret = sprintf(buf,"[PS]%s: ps_close_thd_set = 0x%x, ps_away_thd_set = 0x%x\n", __func__, lpi->ps_close_thd_set, lpi->ps_away_thd_set );
+
 		return ret;
 	}
 	else
@@ -1704,9 +2064,20 @@ static ssize_t ps_thd_store(struct device *dev,	struct device_attribute *attr, c
 			
 	        lpi->ps_close_thd_set = code1;  
 	        lpi->ps_away_thd_set = code2;
+			//<ASUS-danielchan20150921>>>>>>>>>+
+			switch (asus_PRJ_ID) {
+				case 3://ASUS_ZD550KL
+					psensor_calibration_check(lpi,ZD_CLOSE_THD,ZD_AWAY_THD);
+					break;
+				default:
+					break;
+			}
+			//<ASUS-danielchan20150921><<<<<<<<+
 	        _CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDH, lpi->ps_close_thd_set );
 	        _CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDL, lpi->ps_away_thd_set );
 	        D("[PS][CM36686]%s: ps_close_thd_set = 0x%04x(%d), ps_away_thd_set = 0x%04x(%d)\n", __func__, lpi->ps_close_thd_set, lpi->ps_close_thd_set, lpi->ps_away_thd_set, lpi->ps_away_thd_set);
+
+        //ret = sprintf(buf,"[PS][CM36686]%s: ps_close_thd_set = 0x%04x(%d), ps_away_thd_set = 0x%04x(%d)\n", __func__, lpi->ps_close_thd_set, lpi->ps_close_thd_set, lpi->ps_away_thd_set, lpi->ps_away_thd_set);
         return count; //anna
 	}
 }
@@ -2218,6 +2589,45 @@ err_free_ps_input_device:
 
 	return ret;
 }
+/*
+static int I2C_RxData_to_judge_cm3628(unsigned short slaveAddr, unsigned char *rxData, int length)
+{
+    unsigned char loop_i;
+    int val;
+
+    struct i2c_msg msgs[] = {
+        {
+            .addr = slaveAddr,
+            .flags = I2C_M_RD,
+            .len = length,
+            .buf = rxData,
+        },
+    };
+
+    for (loop_i = 0; loop_i < I2C_RETRY_COUNT; loop_i++) {
+
+           if (i2c_transfer(lp_info_cm36283->i2c_client->adapter, msgs, 1) > 0)
+               break;
+
+        val = gpio_get_value(lp_info_cm36283->intr_pin);
+        //check intr GPIO when i2c error
+           if (loop_i == 0 || loop_i == I2C_RETRY_COUNT -1)
+                 D("[ALS+PS][CM3628-AD3 error] %s, i2c err, slaveAddr 0x%x ISR gpio %d  = %d, record_init_fail %d \n",
+                    __func__, slaveAddr, lp_info_cm36283->intr_pin, val, record_init_fail);
+
+
+        msleep(10);
+    }
+
+    if (loop_i >= I2C_RETRY_COUNT) {
+            printk(KERN_ERR "[ALS+PS_ERR][CM3628-AD3 error] %s retry over %d\n",  __func__, I2C_RETRY_COUNT);
+            return -EIO;
+    }
+
+
+    return 0;
+}
+*/
 static int initial_CM36283(struct CM36283_info *lpi)
 {
 	int val;
@@ -2230,11 +2640,12 @@ static int initial_CM36283(struct CM36283_info *lpi)
 
 	ret = _CM36283_I2C_Read_Word(lpi->slave_addr, ID_REG, &idReg);
         idReg = idReg&0x00FF;
-        D("P-sensor idReg : %d \n", idReg);
+        printk("P-sensor idReg : %d \n", idReg);
 	if ((ret < 0) || ((idReg != 0x0083) && (idReg != 0x0086))) {
   		    if (record_init_fail == 0)
-  		   	      record_init_fail = 1;   		    
-        D("p-sensor init fail ret = %d\n",ret);
+  		   	      record_init_fail = 1;   
+        printk("ret = %d \n", ret);			    
+        printk("p-sensor init fail \n");
         return -ENOMEM;/*If devices without CM36283/CM36686 chip and did not probe driver*/	
      }
         if(idReg == 0x0083)
@@ -2244,10 +2655,11 @@ static int initial_CM36283(struct CM36283_info *lpi)
         }
         else
         {
-                sensitivity_x = sensitivity_25; //ALS_IT change from 80ms to 160ms
+                sensitivity_x = sensitivity_125;				
                 newold = 1;
         }
-        D("p-sensor init OK!sensitivity = %d\n", sensitivity_x);
+                printk("p-sensor init OK!\n");
+        printk("p-sensor sensitivity = %d\n", sensitivity_x);
 	return 0;
 }
 
@@ -2292,6 +2704,16 @@ static int CM36283_setup(struct CM36283_info *lpi)
    		   pr_err( "[PS][CM36283 error]%s: req_irq(%d) fail for gpio %d (%d)\n", __func__, lpi->irq, lpi->intr_pin, ret);
            goto fail_free_intr_pin;
 	}
+//<asus-wx20150429>->>
+/*
+	ret = enable_irq_wake(lpi->irq);
+
+	if (ret < 0) {
+           pr_err( "[PS][CM36283 error]%s: req_irq(%d) fail for gpio %d (%d)\n", __func__, lpi->irq, lpi->intr_pin, ret);
+           goto fail_free_intr_pin;
+	}
+*/
+//<asus-wx20150429>-<<
 	return ret;
 
 fail_free_intr_pin:
@@ -2299,6 +2721,30 @@ fail_free_intr_pin:
 
 	return ret;
 }
+/*
+static void CM36283_early_suspend(struct early_suspend *h)
+{
+	struct CM36283_info *lpi = lp_info_cm36283;
+	D("[LS][CM36283] %s\n", __func__);
+
+	if (lpi->als_enable){
+            lightsensor_disable(lpi);
+            lpi->lsensor_sleep_becuz_early_suspend = 1;
+	}
+}
+
+static void CM36283_late_resume(struct early_suspend *h)
+{
+	struct CM36283_info *lpi = lp_info_cm36283;
+	D("[ALS][CM36283] %s\n", __func__);
+
+	if (lpi->lsensor_sleep_becuz_early_suspend){
+		    lightsensor_enable(lpi);
+            lpi->lsensor_sleep_becuz_early_suspend = 0;
+            D("[LS][CM36283] lightsensor late_resume\n");    
+	}
+}
+*/
 static int cm36283_parse_dt(struct device *dev,
 				struct CM36283_platform_data *pdata)
 {
@@ -2416,15 +2862,38 @@ static ssize_t psensor_auto_calibration_write(struct file *dev,const char *buf, 
 	get_ps_adc_value(&init_value);
 
 	if(init_value==0x00) {
-	    D("[PS][CM36686] driver not ready");
+	    printk("[PS][CM36686] driver not ready");
 	    return count;
 	}
 
 	if(send_buff==1) { // close_thd_value ,away_thd_value
-        D("[PS][CM36686] psensor_calibration:%d \n",  send_buff);
+        printk("[PS][CM36686] psensor_calibration:%d \n",  send_buff);
         get_ps_adc_value(&init_value);
-	close_thd_value=init_value+60;
-         away_thd_value=init_value+25;
+        switch (asus_PRJ_ID) {
+          //  case 0://ASUS_ZE550KL
+          //
+          //      break;
+          //  case 1://ASUS_ZE600KL
+          //
+          //      break;
+          //  case 2://ASUS_ZX550KL
+          //
+          //      break;
+            case 3://ASUS_ZD550KL
+                if(init_value>10) {
+                    close_thd_value= (abs(init_value/3)+25)+init_value;
+                    away_thd_value= (abs(init_value/6)+15)+init_value;
+                }else {
+                    close_thd_value= (init_value+24)+init_value;
+                    away_thd_value= (init_value+13)+init_value;
+                }
+                break;
+            default:
+				close_thd_value=init_value+60;
+		        away_thd_value=init_value+25;
+                break;
+        }
+
 		if(newold ==0) {
 		    lpi->ps_away_thd_set = away_thd_value &0xFF;
 		    lpi->ps_close_thd_set = (close_thd_value &0xFF00)>>8;
@@ -2435,7 +2904,7 @@ static ssize_t psensor_auto_calibration_write(struct file *dev,const char *buf, 
 			_CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDH, lpi->ps_close_thd_set );
 	        _CM36283_I2C_Write_Word(lpi->slave_addr, PS_THDL, lpi->ps_away_thd_set );
 		}
-		D("[PS][CM36686] %s: ps_close_thd_set = (0x%x), ps_away_thd_set = (0x%x)\n", __func__, lpi->ps_close_thd_set , lpi->ps_away_thd_set);
+		printk("[PS][CM36686] %s: ps_close_thd_set = (0x%x), ps_away_thd_set = (0x%x)\n", __func__, lpi->ps_close_thd_set , lpi->ps_away_thd_set);
 	} else if(send_buff==2) { //save calibration
         if(init_value>10) {
             CalidataX=init_value-4;
@@ -2446,20 +2915,20 @@ static ssize_t psensor_auto_calibration_write(struct file *dev,const char *buf, 
 		CalidataH=lpi->ps_close_thd_set;
 		filp = filp_open("/factory/PSensor_Calibration.ini", O_RDWR | O_CREAT,0660);
 		if (IS_ERR(filp)) {
-			D("[PS][CM36686] can't open /factory/PSensor_Calibration.ini \n");
+			printk("[PS][CM36686] can't open /factory/PSensor_Calibration.ini \n");
 		} else {
 		    sprintf(tmpbuf,"%d %d %d ", CalidataX,CalidataH,CalidataL);
 			tmplen=strlen(tmpbuf);
-	        D("[PS][CM36686] tmpbuf:%s , tmplen:%d  \n",tmpbuf, tmplen);
+	        printk("[PS][CM36686] tmpbuf:%s , tmplen:%d  \n",tmpbuf, tmplen);
 	        old_fs = get_fs();
             set_fs(KERNEL_DS);
 			filp->f_op->write(filp, tmpbuf,  tmplen, &filp->f_pos);
 	        set_fs(old_fs);
             filp_close(filp, NULL);
-            D("[PS][CM36686] save /factory/PSensor_Calibration.ini \n");
+            printk("[PS][CM36686] save /factory/PSensor_Calibration.ini \n");
 		}
 	} else {
-	    D("[PS][CM36686] not support command\n");
+	    printk("[PS][CM36686] not support command\n");
 	}
     return count;
 }
@@ -2523,7 +2992,7 @@ static int CM36283_probe (struct i2c_client *client,
 		}
 	}
 
-	//D("[PS][CM36283] delay point 1...\n");
+	D("[PS][CM36283] delay point 1...\n");
 	msleep(100);
 
 	ret = cm36283_power_set(lpi, true);
@@ -2532,7 +3001,7 @@ static int CM36283_probe (struct i2c_client *client,
 		goto err_platform_data_null;
 	}	
 	//pr_err("%s: zxtest CM36283  present test!\n", __func__);
-	//D("[PS][CM36283] delay point 2...\n");
+	D("[PS][CM36283] delay point 2...\n");
 	msleep(100);
 	
     	status = i2c_smbus_read_word_data(client, ID_REG);
@@ -2548,6 +3017,14 @@ static int CM36283_probe (struct i2c_client *client,
 		if (ret) {
 			dev_err(&client->dev, "Can't select pinctrl state\n");
 		}
+	
+//{
+//	int gp36value =
+//		gpio_get_value(pdata->intr);
+//
+//	D("[PS][CM36283] %s: reset pin pdata->intr %d = %d", __func__,pdata->intr,gp36value);
+//}
+
 
 /******* modified start  *******/
 	lpi->irq = client->irq;
@@ -2573,7 +3050,7 @@ static int CM36283_probe (struct i2c_client *client,
 	D("[PS][CM36283] %s: ls_cmd 0x%x\n", __func__, lpi->ls_cmd);
 
 	if (pdata->ls_cmd == 0) {
-		lpi->ls_cmd  = CM36283_ALS_IT_160ms | CM36283_ALS_GAIN_2;
+		lpi->ls_cmd  = CM36283_ALS_IT_80ms | CM36283_ALS_GAIN_2;
 
 	}
 
@@ -2767,8 +3244,58 @@ static int CM36283_probe (struct i2c_client *client,
     if(ret){
          device_unregister(vemmc2_userCtrl_dev);
     }
+/*
+    gpio_userCtrl_class = class_create(THIS_MODULE, "gpio_userCtrl_dev");
+    gpio_userCtrl_dev = device_create(gpio_userCtrl_class, NULL, 0, "%s", "gpio_userCtrl");
+        
+    ret = device_create_file(gpio_userCtrl_dev, &dev_attr_gpio_ctrl);
 
+    if(ret){
+         device_unregister(gpio_userCtrl_dev);
+    }
+    */
+/*	
+	vemmc2_reg = regulator_get(vemmc2_userCtrl_dev, "vemmc2");     
+	if (IS_ERR(vemmc2_reg)) { 
+	    D(" VEMMC2_cm32863 ---regulator get fail !!!\n");
+	}
+	int reg_err;
+	uint8_t reg;
+*/
+/*	
+    reg_err = intel_msic_reg_read(VEMMC2CNT_ADDR, &reg);
+	if (reg_err){
+              D(" VEMMC2_cm32863 ---regulator read VEMMC2CNT_ADDR fail !!!\n");
+	}else{
+	     D(" VEMMC2_cm32863 ---regulator read VEMMC2CNT_ADDR = %d\n", reg);
+	}
+
+	reg_err = intel_msic_reg_write(VEMMC2CNT_ADDR, (reg|0x07));
+
+   	if (reg_err){
+	     D(" VEMMC2_cm32863 ---regulator write VEMMC2CNT_ADDR to set NORMAL mode fail !!!\n");
+	}
+
+	reg = 0;
+    reg_err = intel_msic_reg_read(VEMMC2CNT_ADDR, &reg);
+
+	if (!reg_err){
+	     D(" VEMMC2_cm32863 ---regulator read VEMMC2CNT_ADDR final = %d 2!!!\n",reg);
+	}
+*/
+/*
+    reg_err = regulator_set_mode(vemmc2_reg, 0x02);
+	
+    if(!reg_err)
+	     D("VEMMC2_cm32863 ---regulator setmode success !!\n");
+    else 
+     	D("VEMMC2_cm32863 ---regulator setmode fail !!\n");
+*/
 #endif //DEBUG_VEMMC2
+//	lpi->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
+//	lpi->early_suspend.suspend = CM36283_early_suspend;
+//	lpi->early_suspend.resume = CM36283_late_resume;
+//	register_early_suspend(&lpi->early_suspend);
 
 //<asus-wx20160804>+>>
 	hrtimer_init(&lpi->ps_autok_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -3085,12 +3612,38 @@ static const struct i2c_device_id CM36283_i2c_id[] = {
 	{}
 };
 
+
+/*
+static void CM36283_early_suspend(struct early_suspend *h)
+{
+	struct CM36283_info *lpi = lp_info_cm36283;
+	D("[LS][CM36283] %s\n", __func__);
+
+	if (lpi->als_enable){
+            lightsensor_disable(lpi);
+            lpi->lsensor_sleep_becuz_early_suspend = 1;
+	}
+}
+
+static void CM36283_late_resume(struct early_suspend *h)
+{
+	struct CM36283_info *lpi = lp_info_cm36283;
+	D("[ALS][CM36283] %s\n", __func__);
+
+	if (lpi->lsensor_sleep_becuz_early_suspend){
+		    lightsensor_enable(lpi);
+            lpi->lsensor_sleep_becuz_early_suspend = 0;
+            D("[LS][CM36283] lightsensor late_resume\n");    
+	}
+}
+*/
+
 static int cm36283_power_set(struct CM36283_info *info, bool on)
 {
 	int rc;
 
 	if (on) {
-
+		/*
 		info->vdd = regulator_get(&info->i2c_client->dev, "vdd");
 		if (IS_ERR(info->vdd)) {
 			rc = PTR_ERR(info->vdd);
@@ -3108,7 +3661,7 @@ static int cm36283_power_set(struct CM36283_info *info, bool on)
 				goto err_vdd_set_vtg;
 			}
 		}
-
+*/
 		info->vio = regulator_get(&info->i2c_client->dev, "vio");
 		if (IS_ERR(info->vio)) {
 			rc = PTR_ERR(info->vio);
@@ -3126,14 +3679,14 @@ static int cm36283_power_set(struct CM36283_info *info, bool on)
 				goto err_vio_set_vtg;
 			}
 		}
-
+/*
 		rc = regulator_enable(info->vdd);
 		if (rc) {
 			dev_err(&info->i2c_client->dev,
 				"Regulator vdd enable failed rc=%d\n", rc);
 			goto err_vdd_ena;
 		}
-
+*/
 		rc = regulator_enable(info->vio);
 		if (rc) {
 			dev_err(&info->i2c_client->dev,
@@ -3141,7 +3694,7 @@ static int cm36283_power_set(struct CM36283_info *info, bool on)
 			goto err_vio_ena;
 		}
 	} else {
-
+/*
 		rc = regulator_disable(info->vdd);
 		if (rc) {
 			dev_err(&info->i2c_client->dev,
@@ -3152,7 +3705,7 @@ static int cm36283_power_set(struct CM36283_info *info, bool on)
 			regulator_set_voltage(info->vdd, 0, CM36283_VDD_MAX_UV);
 
 		regulator_put(info->vdd);
-
+*/
 		rc = regulator_disable(info->vio);
 		if (rc) {
 			dev_err(&info->i2c_client->dev,
@@ -3168,20 +3721,28 @@ static int cm36283_power_set(struct CM36283_info *info, bool on)
 
 	return 0;
 
+
 err_vio_ena:
+	/*
+	regulator_disable(info->vdd);
+
+err_vdd_ena:
+*/
 	if (regulator_count_voltages(info->vio) > 0)
 		regulator_set_voltage(info->vio, 0, CM36283_VI2C_MAX_UV);
+
 err_vio_set_vtg:
+
 	regulator_put(info->vio);
+
 err_vio_get:
-        return rc;
-		
-err_vdd_ena:
+	/*
 	if (regulator_count_voltages(info->vdd) > 0)
 		regulator_set_voltage(info->vdd, 0, CM36283_VDD_MAX_UV);
 err_vdd_set_vtg:
 	regulator_put(info->vdd);
 err_vdd_get:
+*/
 	return rc;
 }
 
@@ -3192,15 +3753,45 @@ static int CM36283_suspend(struct device *dev)
    	pr_err("CM32683:  CM36283_suspend\n");
 
 	lpi->status_calling = status_calling; //<asus-wx20150429+>
+//<asus-wx20150506>->> don't power off when suspend
+/*
+	if (lpi->ps_enable && !status_calling){
+		  pr_err("CM32683:  CM36283_suspend  no.2 \n");
+  		  psensor_disable(lpi);
+  	      lpi->psensor_sleep_becuz_suspend =1;
+		 pr_err("CM32683:  CM36283_suspend  no.3 \n");
+//		disable_irq_nosync(lp_info_cm36283->irq);
+	}
 
+	if (lpi->als_enable){ //<asus-wx20150429>
+            lightsensor_disable(lpi);
+            lpi->lsensor_sleep_becuz_early_suspend = 1;
+		 pr_err("CM36283 lightsensor suspend\n");    
+	}
+*/
+//<asus-wx20150506>-<< don't power off when suspend
+//<asus-wx20150429>+>>
 	if (!status_calling) {
+//<asus-wx20150506>->> don't power off when suspend
+/*
+		if (cm36283_power_set(lpi, 0))
+			goto out;
+*/
+//<asus-wx20150506>-<< don't power off when suspend
 	}
 	else {
 		enable_irq_wake(lpi->irq);
 	}
 //<asus-wx20150429>+<<
 	return 0;
-
+//<asus-wx20150506>->> don't power off when suspend
+/*
+out:
+	dev_err(&lpi->i2c_client->dev, "%s:failed during resume operation.\n",
+			__func__);
+	return -EIO;
+*/
+//<asus-wx20150506>-<< don't power off when suspend
 }
 
 static int CM32683_resume(struct device *dev)
@@ -3210,6 +3801,12 @@ static int CM32683_resume(struct device *dev)
      pr_err("CM36283:  CM32683_resume\n");
 //<asus-wx20150429>+>>
 	if (!status_calling) {
+//<asus-wx20150506>->> don't power off when suspend
+/*
+		if (cm36283_power_set(lpi, 1))
+			goto out;
+*/
+//<asus-wx20150506>-<< don't power off when suspend
 	}
 	else {
 		if (proximity_state == 0) {
@@ -3218,9 +3815,37 @@ static int CM32683_resume(struct device *dev)
 		disable_irq_wake(lpi->irq);
 	}
 //<asus-wx20150429>+<<
+//<asus-wx20150506>->> don't power off when suspend
+/*
+	ls_initial_cmd(lpi);
+	if (!status_calling) { //<asus-wx20150429+>
+		psensor_initial_cmd(lpi);
+	} //<asus-wx20150429+>
 
+	 if (!lpi->ps_enable && lpi->psensor_sleep_becuz_suspend){
+	 	 pr_err("CM32683:  CM32683_resume  no.2 \n");
+		 psensor_enable(lpi);
+		  pr_err("CM32683:  CM32683_resume  no.3 \n");
+         lpi->psensor_sleep_becuz_suspend =0;
+//		enable_irq(lp_info_cm36283->irq);
+    }
+
+	if (!lpi->als_enable && lpi->lsensor_sleep_becuz_early_suspend){
+		    lightsensor_enable(lpi);
+            lpi->lsensor_sleep_becuz_early_suspend = 0;
+            pr_err("[LS][CM36283] lightsensor late_resume\n");    
+	}
+*/
+//<asus-wx20150506>-<< don't power off when suspend	 
 	return 0;
-
+//<asus-wx20150506>->> don't power off when suspend
+/*
+out:
+	dev_err(&lpi->i2c_client->dev, "%s:failed during resume operation.\n",
+			__func__);
+	return -EIO;
+*/
+//<asus-wx20150506>-<< don't power off when suspend
 }
 
 static UNIVERSAL_DEV_PM_OPS(cm36283_pm, CM36283_suspend, CM32683_resume, NULL);

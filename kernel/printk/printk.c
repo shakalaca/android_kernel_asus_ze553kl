@@ -1067,6 +1067,7 @@ static inline void boot_delay_msec(int level)
 
 static bool printk_time = IS_ENABLED(CONFIG_PRINTK_TIME);
 module_param_named(time, printk_time, bool, S_IRUGO | S_IWUSR);
+
 #include <linux/rtc.h>
 extern struct timezone sys_tz;
 static void myrtc_time_to_tm(unsigned long time, struct rtc_time *tm)
@@ -1077,6 +1078,7 @@ static void myrtc_time_to_tm(unsigned long time, struct rtc_time *tm)
 	tm->tm_min = time / 60;
 	tm->tm_sec = time - tm->tm_min * 60;
 }
+
 extern int rtc_ready;
 int boot_after_60sec = 0;
 static size_t print_time(u64 ts, char *buf)
@@ -1126,6 +1128,7 @@ static size_t print_time(u64 ts, char *buf)
 		       (unsigned long)ts, rem_nsec / 1000);
 
 	}
+
 }
 
 static size_t print_prefix(const struct printk_log *msg, bool syslog, char *buf)
@@ -2171,7 +2174,7 @@ MODULE_PARM_DESC(console_suspend, "suspend console during suspend"
  */
 void suspend_console(void)
 {
-	ASUSEvtlog("[UTS] System Suspend\n");
+	ASUSEvtlog("[UTS] System Suspend");
 	nSuspendInProgress = 1;
 	if (!console_suspend_enabled)
 		return;
@@ -2184,10 +2187,8 @@ void suspend_console(void)
 void resume_console(void)
 {
 	int i;
-
-	nSuspendInProgress = 0;
-	ASUSEvtlog("[UTS] System Resume\n");
-
+	nSuspendInProgress = 0;	
+	ASUSEvtlog("[UTS] System Resume");
 	//ASUS_BSP [+++] jeff_gu Add GPIO wakeup information
 	if (pm_pwrcs_ret)
 	{
@@ -2212,7 +2213,6 @@ void resume_console(void)
 		pm_pwrcs_ret=0;
 	}
 	//ASUS_BSP [---] jeff_gu Add GPIO wakeup information
-
 	if (!console_suspend_enabled)
 		return;
 	down_console_sem();

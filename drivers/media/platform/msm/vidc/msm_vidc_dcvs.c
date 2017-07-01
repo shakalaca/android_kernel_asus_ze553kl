@@ -1,4 +1,4 @@
-/* Copyright (c) 2014 - 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -95,7 +95,7 @@ static void msm_dcvs_update_dcvs_params(int idx, struct msm_vidc_inst *inst)
 	struct dcvs_table *table = NULL;
 
 	if (!inst || !inst->core) {
-		dprintk(VIDC_ERR, "%s Invalid args: %p\n", __func__, inst);
+		dprintk(VIDC_ERR, "%s Invalid args: %pK\n", __func__, inst);
 		return;
 	}
 
@@ -619,7 +619,8 @@ static bool msm_dcvs_check_supported(struct msm_vidc_inst *inst)
 		if (!is_codec_supported ||
 			!IS_VALID_DCVS_SESSION(num_mbs_per_frame,
 				res->dcvs_limit[inst->session_type].min_mbpf) ||
-			!IS_VALID_DCVS_SESSION(instance_load, dcvs_limit))
+			!IS_VALID_DCVS_SESSION(instance_load, dcvs_limit) ||
+			inst->seqchanged_count > 1)
 			return false;
 
 		if (!output_buf_req) {

@@ -34,11 +34,6 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/syscore_ops.h>
 
-//ASUS BSP: workround for DoubleClickVolumeKey sometimes can't bring up panel
-#include <linux/wakelock.h>
-static struct wake_lock volume_key_wake_lock;
-//ASUS BSP: workround for DoubleClickVolumeKey sometimes can't bring up panel
-
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -345,35 +340,15 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	int state;
 
 	state = (__gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
-
+#ifdef ZE553KL
 	printk("[Gpio_keys] %s:keycode=%d  state=%s \n",__func__,
 			button->code,state ? "press" : "release");
-
+#endif
 	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
 	} else {
-		if(state==1) {
-			if (button->code == KEY_VOLUMEUP) {
-				printk("[VOL] gpio key code = %d, volume up pressed down\n", button->code);
-			}else if(button->code == KEY_VOLUMEDOWN) {
-				printk("[VOL] gpio  key code = %d, volume down pressed down\n", button->code);
-			}
-		} else{
-			if (button->code == KEY_VOLUMEUP) {
-				printk("[VOL] gpio key code = %d, volume up pressed up\n", button->code);
-			}else if(button->code == KEY_VOLUMEDOWN) {
-				printk("[VOL] gpio key code = %d, volume down pressed up\n", button->code);
-			}
-		}
 		input_event(input, type, button->code, !!state);
-		if (state) {//ASUS BSP : workround for DoubleClickVolumeKey sometimes can't bring up panel
-		if ((button->code == KEY_VOLUMEUP) || (button->code == KEY_VOLUMEDOWN)) {
-			printk("[Gpio_keys]vol_key:%x\r\n", state);
-			wake_lock_timeout(&volume_key_wake_lock, 3 * HZ);
-			printk("[Gpio_keys]Wakelock 3 sec for vol_key \n");
-			}
-		}//ASUS BSP : workround for DoubleClickVolumeKey sometimes can't bring up panel
 	}
 	input_sync(input);
 }
@@ -757,7 +732,7 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 
 #endif
 
-#ifdef ASUS_FACTORY_BUILD//add by alex1_wang for factory build +++
+#ifdef ASUS_FACTORY_BUILD//add by stone1_wang for factory build +++
 ssize_t printklog_write (struct file *filp, const char __user *userbuf, size_t size, loff_t *loff_p)
 {
 	char str[128];
@@ -778,7 +753,6 @@ ssize_t printklog_write (struct file *filp, const char __user *userbuf, size_t s
 struct file_operations printklog_fops = {
 	.write=printklog_write,
 };
-
 unsigned char fac_wakeup_sign = 0;
 extern void release_wakeup_source(void);
 extern void alarm_irq_disable(void);
@@ -794,7 +768,7 @@ ssize_t fac_sleep_node_write(struct file *filp, const char __user *userbuf, size
 struct file_operations fac_sleep_node_fops = {
 	.write=fac_sleep_node_write,
 };
-#endif					//add by alex1_wang for factory builds ---
+#endif					//add by stone1_wang for factory builds ---
 
 static int gpio_keys_probe(struct platform_device *pdev)
 {
@@ -867,8 +841,7 @@ static int gpio_keys_probe(struct platform_device *pdev)
 			return error;
 		}
 	}
-
-#ifdef ASUS_FACTORY_BUILD//add by alex1_wang for factory build +++
+#ifdef ASUS_FACTORY_BUILD//add by stone1_wang for factory build +++
 	if(proc_create("fac_printklog", 0777, NULL, &printklog_fops)==NULL)
 	{
 		printk(KERN_ERR"create printklog node is error\n");
@@ -877,7 +850,7 @@ static int gpio_keys_probe(struct platform_device *pdev)
 	{
 		printk(KERN_ERR"create fac_sleep_node is error\n");
 	}
-#endif					//add by alex1_wang for factory build ---
+#endif					//add by stone1_wang for factory build ---
 
 	for (i = 0; i < pdata->nbuttons; i++) {
 		const struct gpio_keys_button *button = &pdata->buttons[i];
@@ -911,9 +884,6 @@ static int gpio_keys_probe(struct platform_device *pdev)
 		gpio_keys_syscore_pm_ops.resume = gpio_keys_syscore_resume;
 
 	register_syscore_ops(&gpio_keys_syscore_pm_ops);
-
-	wake_lock_init(&volume_key_wake_lock, WAKE_LOCK_SUSPEND, "pwr_key_lock");
-	printk(KERN_INFO "[Gpio_keys]Initialize a wakelock for gpio_key\r\n");
 
 	return 0;
 

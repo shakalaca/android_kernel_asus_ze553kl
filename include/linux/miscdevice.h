@@ -29,7 +29,6 @@
 #define NVRAM_MINOR		144
 #define SGI_MMTIMER		153
 #define STORE_QUEUE_MINOR	155	/* unused */
-#define AP3045_MINOR  156
 #define I2O_MINOR		166
 #define MICROCODE_MINOR		184
 #define VFIO_MINOR		196

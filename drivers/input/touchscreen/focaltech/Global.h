@@ -129,31 +129,31 @@ enum PROOF_TYPE
 	Proof_NoWaterProof,      //mode2
 };
 
-extern struct stCfg_MCap_DetailThreshold g_stCfg_MCap_DetailThreshold;
-extern struct stCfg_SCap_DetailThreshold g_stCfg_SCap_DetailThreshold;
+extern struct stCfg_MCap_DetailThreshold g_stCfg_MCap_DetailThreshold_cap_sensors;
+extern struct stCfg_SCap_DetailThreshold g_stCfg_SCap_DetailThreshold_cap_sensors;
 //extern struct structSCapConf g_stSCapConf;
-extern struct StruScreenSeting g_ScreenSetParam; //screen configure parameter
-extern struct stTestItem g_stTestItem[1][MAX_TEST_ITEM];
+extern struct StruScreenSeting g_ScreenSetParam_cap_sensors; //screen configure parameter
+extern struct stTestItem g_stTestItem_cap_sensors[1][MAX_TEST_ITEM];
 
-extern int g_TestItemNum;/*test item num*/
-extern char g_strIcName[20];/*IC Name*/
+extern int g_TestItemNum_cap_sensors;/*test item num*/
+extern char g_strIcName_cap_sensors[20];/*IC Name*/
 
 
-int GetPrivateProfileString(char *section, char *ItemName, char *defaultvalue, char *returnValue, char *IniFile);
-void focal_msleep(int ms);
-void SysDelay(int ms);
-int focal_abs(int value);
+int GetPrivateProfileString_cap_sensors(char *section, char *ItemName, char *defaultvalue, char *returnValue, char *IniFile);
+void focal_msleep_cap_sensors(int ms);
+void SysDelay_cap_sensors(int ms);
+int focal_abs_cap_sensors(int value);
 unsigned char get_ic_code(char * strIcName);
 void get_ic_name(unsigned char ucIcCode, char * strIcName);
 
-void OnInit_InterfaceCfg(char * strIniFile);
+void OnInit_InterfaceCfg_cap_sensors(char * strIniFile);
 
-int ReadReg(unsigned char RegAddr, unsigned char *RegData);
-int WriteReg(unsigned char RegAddr, unsigned char RegData);
-unsigned char Comm_Base_IIC_IO(unsigned char *pWriteBuffer, int  iBytesToWrite, unsigned char *pReadBuffer, int iBytesToRead);
+int ReadReg_cap_sensors(unsigned char RegAddr, unsigned char *RegData);
+int WriteReg_cap_sensors(unsigned char RegAddr, unsigned char RegData);
+unsigned char Comm_Base_IIC_IO_cap_sensors(unsigned char *pWriteBuffer, int  iBytesToWrite, unsigned char *pReadBuffer, int iBytesToRead);
 
-unsigned char EnterWork(void);
-unsigned char EnterFactory(void);
+unsigned char EnterWork_cap_sensors(void);
+unsigned char EnterFactory_cap_sensors(void);
 
 
 

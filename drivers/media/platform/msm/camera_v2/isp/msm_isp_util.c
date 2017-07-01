@@ -842,7 +842,7 @@ static long msm_isp_ioctl_unlocked(struct v4l2_subdev *sd,
 			if (!rc && rc2)
 				rc = rc2;
 		} else {
-			pr_err("%s: no HW reset, halt enforced.\n",
+			pr_err_ratelimited("%s: no HW reset, halt enforced.\n",
 				__func__);
 		}
 		mutex_unlock(&vfe_dev->core_mutex);
@@ -856,7 +856,7 @@ static long msm_isp_ioctl_unlocked(struct v4l2_subdev *sd,
 			if (!rc && rc2)
 				rc = rc2;
 		} else {
-			pr_err("%s: no AXI restart, halt enforced.\n",
+			pr_err_ratelimited("%s: no AXI restart, halt enforced.\n",
 				__func__);
 		}
 		mutex_unlock(&vfe_dev->core_mutex);

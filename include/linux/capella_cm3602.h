@@ -19,13 +19,13 @@
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
-/*
+#ifdef ZD552KL_PHOENIX
 #define CAPELLA_CM3602_IOCTL_MAGIC 'c'
 #define CAPELLA_CM3602_IOCTL_GET_ENABLED \
 		_IOR(CAPELLA_CM3602_IOCTL_MAGIC, 1, int *)
 #define CAPELLA_CM3602_IOCTL_ENABLE \
 		_IOW(CAPELLA_CM3602_IOCTL_MAGIC, 2, int *)
- */
+#endif
 
 /*ASUS - bevis chen-- add +*/
 #define PBUFF_SIZE				16	/* Rx buffer size */

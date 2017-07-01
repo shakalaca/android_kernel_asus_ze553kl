@@ -177,10 +177,16 @@ signing_key.priv signing_key.x509: x509.genkey
 	@echo "### needs to be run as root, and uses a hardware random"
 	@echo "### number generator if one is available."
 	@echo "###"
-	openssl req -new -nodes -utf8 -$(CONFIG_MODULE_SIG_HASH) -days 36500 \
-		-batch -x509 -config x509.genkey \
-		-outform DER -out signing_key.x509 \
-		-keyout signing_key.priv 2>&1
+#ASUS_BSP Ken_Gan +++ [BSP][BOOT][SIGN][Modify]use regular key to sign modules
+#############################################################
+#	openssl req -new -nodes -utf8 -$(CONFIG_MODULE_SIG_HASH) -days 36500 \
+#		-batch -x509 -config x509.genkey \
+#		-outform DER -out signing_key.x509 \
+#		-keyout signing_key.priv 2>&1
+#############################################################
+	cp ../../../../../../build/target/product/security/signing_key.x509 signing_key.x509
+	cp ../../../../../../build/target/product/security/signing_key.priv signing_key.priv
+#ASUS_BSP Ken_Gan --- [BSP][BOOT][SIGN][Modify]use regular key to sign modules
 	@echo "###"
 	@echo "### Key pair generated."
 	@echo "###"
@@ -195,9 +201,15 @@ x509.genkey:
 	@echo >>x509.genkey "x509_extensions = myexts"
 	@echo >>x509.genkey
 	@echo >>x509.genkey "[ req_distinguished_name ]"
-	@echo >>x509.genkey "O = Magrathea"
-	@echo >>x509.genkey "CN = Glacier signing key"
-	@echo >>x509.genkey "emailAddress = slartibartfast@magrathea.h2g2"
+#ASUS_BSP Ken_Gan +++ [BSP][BOOT][SIGN][Modify]use regular key to sign modules
+	@echo >>x509.genkey "C = CN"
+	@echo >>x509.genkey "ST = JiangSu"
+	@echo >>x509.genkey "L = SuZhou"
+	@echo >>x509.genkey "O = ASUSTeK COMPUTER INC."
+	@echo >>x509.genkey "OU = FW R&D Center"
+	@echo >>x509.genkey "CN = ZS550KL"
+	@echo >>x509.genkey "emailAddress = admin@asus.com"
+#ASUS_BSP Ken_Gan --- [BSP][BOOT][SIGN][Modify]use regular key to sign modules
 	@echo >>x509.genkey
 	@echo >>x509.genkey "[ myexts ]"
 	@echo >>x509.genkey "basicConstraints=critical,CA:FALSE"

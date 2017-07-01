@@ -1885,8 +1885,8 @@ SYSCALL_DEFINE6(recvfrom, int, fd, void __user *, ubuf, size_t, size,
 
 	if (size > INT_MAX)
 		size = INT_MAX;
- if (unlikely(!access_ok(VERIFY_WRITE, ubuf, size)))
-	return -EFAULT;
+	if (unlikely(!access_ok(VERIFY_WRITE, ubuf, size)))
+		return -EFAULT;
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)
 		goto out;
@@ -2449,7 +2449,6 @@ int __sys_recvmmsg(int fd, struct mmsghdr __user *mmsg, unsigned int vlen,
 			break;
 	}
 
-
 	if (err == 0)
 		goto out_put;
 
@@ -2472,7 +2471,7 @@ int __sys_recvmmsg(int fd, struct mmsghdr __user *mmsg, unsigned int vlen,
 		sock->sk->sk_err = -err;
 	}
 out_put:
-	fput_light(sock->file, fput_needed);	
+	fput_light(sock->file, fput_needed);
 
 	return datagrams;
 }

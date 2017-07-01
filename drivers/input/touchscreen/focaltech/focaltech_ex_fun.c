@@ -38,6 +38,13 @@
 #include "../../../../fs/proc/internal.h"
 #include "test_lib.h"
 #include "Test_FT6X36.h"
+//<ASUS-BSP Robert_He 20170410> add capsensor vkled node ++++++
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+#include "../../../leds/leds-qpnp.h"
+#endif
+#endif
+//<ASUS-BSP Robert_He 20170410> add capsensor vkled node ------
 
 /*******************************************************************************
 * Private constant and macro definitions using #define
@@ -126,7 +133,7 @@ static ssize_t fts_debug_write(struct file *filp, const char __user *buff, size_
 		break;
 	case PROC_READ_REGISTER:
 		writelen = 1;
-		ret = fts_i2c_write(fts_i2c_client, writebuf + 1, writelen);
+		ret = fts_i2c_write_cap_sensors(fts_i2c_client, writebuf + 1, writelen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:write iic error\n", __func__);
 			return ret;
@@ -134,7 +141,7 @@ static ssize_t fts_debug_write(struct file *filp, const char __user *buff, size_
 		break;
 	case PROC_WRITE_REGISTER:
 		writelen = 2;
-		ret = fts_i2c_write(fts_i2c_client, writebuf + 1, writelen);
+		ret = fts_i2c_write_cap_sensors(fts_i2c_client, writebuf + 1, writelen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:write iic error\n", __func__);
 			return ret;
@@ -142,12 +149,12 @@ static ssize_t fts_debug_write(struct file *filp, const char __user *buff, size_
 		break;
 	case PROC_AUTOCLB:
 		FTS_DBG("%s: autoclb\n", __func__);
-		fts_ctpm_auto_clb(fts_i2c_client);
+		fts_ctpm_auto_clb_cap_sensors(fts_i2c_client);
 		break;
 	case PROC_READ_DATA:
 	case PROC_WRITE_DATA:
 		writelen = count - 1;
-		ret = fts_i2c_write(fts_i2c_client, writebuf + 1, writelen);
+		ret = fts_i2c_write_cap_sensors(fts_i2c_client, writebuf + 1, writelen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:write iic error\n", __func__);
 			return ret;
@@ -192,7 +199,7 @@ static ssize_t fts_debug_read(struct file *filp, char __user *buff, size_t count
 		break;
 	case PROC_READ_REGISTER:
 		readlen = 1;
-		ret = fts_i2c_read(fts_i2c_client, NULL, 0, buf, readlen);
+		ret = fts_i2c_read_cap_sensors(fts_i2c_client, NULL, 0, buf, readlen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:read iic error\n", __func__);
 			return ret;
@@ -201,7 +208,7 @@ static ssize_t fts_debug_read(struct file *filp, char __user *buff, size_t count
 		break;
 	case PROC_READ_DATA:
 		readlen = count;
-		ret = fts_i2c_read(fts_i2c_client, NULL, 0, buf, readlen);
+		ret = fts_i2c_read_cap_sensors(fts_i2c_client, NULL, 0, buf, readlen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:read iic error\n", __func__);
 			return ret;
@@ -278,7 +285,7 @@ static int fts_debug_write(struct file *filp,
 		break;
 	case PROC_READ_REGISTER:
 		writelen = 1;
-		ret = fts_i2c_write(fts_i2c_client, writebuf + 1, writelen);
+		ret = fts_i2c_write_cap_sensors(fts_i2c_client, writebuf + 1, writelen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:write iic error\n", __func__);
 			return ret;
@@ -286,7 +293,7 @@ static int fts_debug_write(struct file *filp,
 		break;
 	case PROC_WRITE_REGISTER:
 		writelen = 2;
-		ret = fts_i2c_write(fts_i2c_client, writebuf + 1, writelen);
+		ret = fts_i2c_write_cap_sensors(fts_i2c_client, writebuf + 1, writelen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:write iic error\n", __func__);
 			return ret;
@@ -294,12 +301,12 @@ static int fts_debug_write(struct file *filp,
 		break;
 	case PROC_AUTOCLB:
 		FTS_DBG("%s: autoclb\n", __func__);
-		fts_ctpm_auto_clb(fts_i2c_client);
+		fts_ctpm_auto_clb_cap_sensors(fts_i2c_client);
 		break;
 	case PROC_READ_DATA:
 	case PROC_WRITE_DATA:
 		writelen = len - 1;
-		ret = fts_i2c_write(fts_i2c_client, writebuf + 1, writelen);
+		ret = fts_i2c_write_cap_sensors(fts_i2c_client, writebuf + 1, writelen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:write iic error\n", __func__);
 			return ret;
@@ -342,7 +349,7 @@ static int fts_debug_read( char *page, char **start,
 		break;
 	case PROC_READ_REGISTER:
 		readlen = 1;
-		ret = fts_i2c_read(fts_i2c_client, NULL, 0, buf, readlen);
+		ret = fts_i2c_read_cap_sensors(fts_i2c_client, NULL, 0, buf, readlen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:read iic error\n", __func__);
 			return ret;
@@ -351,7 +358,7 @@ static int fts_debug_read( char *page, char **start,
 		break;
 	case PROC_READ_DATA:
 		readlen = count;
-		ret = fts_i2c_read(fts_i2c_client, NULL, 0, buf, readlen);
+		ret = fts_i2c_read_cap_sensors(fts_i2c_client, NULL, 0, buf, readlen);
 		if (ret < 0) {
 			dev_err(&fts_i2c_client->dev, "%s:read iic error\n", __func__);
 			return ret;
@@ -370,13 +377,13 @@ static int fts_debug_read( char *page, char **start,
 }
 #endif
 /************************************************************************
-* Name: fts_create_apk_debug_channel
+* Name: fts_create_apk_debug_channel_cap_sensors
 * Brief:  create apk debug channel
 * Input: i2c info
 * Output: no
 * Return: success =0
 ***********************************************************************/
-int fts_create_apk_debug_channel(struct i2c_client * client)
+int fts_create_apk_debug_channel_cap_sensors(struct i2c_client * client)
 {	
 	struct proc_dir_entry *fts_proc_entry;
 	struct fts_ts_data *fts_data = i2c_get_clientdata(client);	
@@ -405,13 +412,13 @@ int fts_create_apk_debug_channel(struct i2c_client * client)
 	return 0;
 }
 /************************************************************************
-* Name: fts_release_apk_debug_channel
+* Name: fts_release_apk_debug_channel_cap_sensors
 * Brief:  release apk debug channel
 * Input: no
 * Output: no
 * Return: no
 ***********************************************************************/
-void fts_release_apk_debug_channel(struct i2c_client * client)
+void fts_release_apk_debug_channel_cap_sensors(struct i2c_client * client)
 {
 	struct fts_ts_data *fts_data = i2c_get_clientdata(client);
 	struct proc_dir_entry *fts_proc_entry = fts_data->fts_proc_entry;
@@ -437,8 +444,10 @@ static ssize_t fts_tpfwver_show(struct device *dev, struct device_attribute *att
 	ssize_t num_read_chars = 0;
 	u8 fwver = 0;
 	struct i2c_client *client = container_of(dev, struct i2c_client, dev);
-	struct fts_ts_data *fts_data = i2c_get_clientdata(client);
-	mutex_lock(&fts_data->input_dev->mutex);
+	//<ASUS-BSP Robert_He 20170323> remove unused param and mutex ++++++
+	//struct fts_ts_data *fts_data = i2c_get_clientdata(client);
+	//mutex_lock(&fts_data->input_dev->mutex);
+	//<ASUS-BSP Robert_He 20170323> remove unused param and mutex ------
 	if (fts_read_reg(client, FTS_REG_FW_VER, &fwver) < 0)
 		return -1;
 	
@@ -449,9 +458,10 @@ static ssize_t fts_tpfwver_show(struct device *dev, struct device_attribute *att
 	{
 		num_read_chars = snprintf(buf, 128, "%02X\n", fwver);
 	}
-	
-	mutex_unlock(&fts_data->input_dev->mutex);
-	
+
+	//<ASUS-BSP Robert_He 20170323> remove unused param and mutex ++++++
+	//mutex_unlock(&fts_data->input_dev->mutex);
+	//<ASUS-BSP Robert_He 20170323> remove unused param and mutex ------
 	return num_read_chars;
 }
 /************************************************************************
@@ -466,6 +476,51 @@ static ssize_t fts_tpfwver_store(struct device *dev, struct device_attribute *at
 	/* place holder for future use */
 	return -EPERM;
 }
+
+//<ASUS-BSP Robert_He 20170323> add capsensor vendor and fwver node ++++++
+/************************************************************************
+* Name: fts_tpvendor_show
+* Brief:  show tp fw vwersion
+* Input: device, device attribute, char buf
+* Output: no
+* Return: char number
+***********************************************************************/
+static ssize_t fts_tpvendor_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t num_read_chars = 0;
+	u8 fwver = 0;
+	struct i2c_client *client = container_of(dev, struct i2c_client, dev);
+	//struct fts_ts_data *fts_data = i2c_get_clientdata(client);
+	//mutex_lock(&fts_data->input_dev->mutex);
+	if (fts_read_reg(client, FTS_REG_FW_VENDOR_ID, &fwver) < 0)
+		return -1;
+	
+	
+	if (fwver == 255)
+		num_read_chars = snprintf(buf, 128,"get tp fw version fail!\n");
+	else
+	{
+		num_read_chars = snprintf(buf, 128, "%02X\n", fwver);
+	}
+	
+	//mutex_unlock(&fts_data->input_dev->mutex);
+	
+	return num_read_chars;
+}
+/************************************************************************
+* Name: fts_tpfwver_store
+* Brief:  no
+* Input: device, device attribute, char buf, char count
+* Output: no
+* Return: EPERM
+***********************************************************************/
+static ssize_t fts_tpvendor_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	/* place holder for future use */
+	return -EPERM;
+}
+//<ASUS-BSP Robert_He 20170323> add capsensor vendor and fwver node ------
+
 /************************************************************************
 * Name: fts_tpdriver_version_show
 * Brief:  show tp fw vwersion
@@ -706,18 +761,18 @@ static void fts_sw_reset(struct fts_ts_data *fts_data)
         /*********Step 1:Reset  CTPM *****/
         buf[0] = FTS_RST_CMD_REG2;
         buf[1] = FTS_UPGRADE_AA;
-        fts_i2c_write(fts_data->client, buf, 2);
+        fts_i2c_write_cap_sensors(fts_data->client, buf, 2);
         msleep(fts_data->fts_updateinfo_curr.delay_aa);
         
         buf[0] = FTS_RST_CMD_REG2;
         buf[1] = FTS_UPGRADE_55;
-        fts_i2c_write(fts_data->client, buf, 2);
+        fts_i2c_write_cap_sensors(fts_data->client, buf, 2);
         msleep(fts_data->fts_updateinfo_curr.delay_55);
         /*********Step 2:Enter upgrade mode *****/
         auc_i2c_write_buf[0] = FTS_UPGRADE_55;
-        fts_i2c_write(fts_data->client, auc_i2c_write_buf, 1);
+        fts_i2c_write_cap_sensors(fts_data->client, auc_i2c_write_buf, 1);
         auc_i2c_write_buf[0] = FTS_UPGRADE_AA;
-        fts_i2c_write(fts_data->client, auc_i2c_write_buf, 1);
+        fts_i2c_write_cap_sensors(fts_data->client, auc_i2c_write_buf, 1);
         msleep(10);    
         
         /*********Step 3:check READ-ID***********************/		
@@ -725,7 +780,7 @@ static void fts_sw_reset(struct fts_ts_data *fts_data)
 		auc_i2c_write_buf[1] = auc_i2c_write_buf[2] = auc_i2c_write_buf[3] =0x00;
 		reg_val[0] = 0x00;
 		reg_val[1] = 0x00;
-		fts_i2c_read(fts_data->client, auc_i2c_write_buf, 4, reg_val, 2);
+		fts_i2c_read_cap_sensors(fts_data->client, auc_i2c_write_buf, 4, reg_val, 2);
 
 		if (reg_val[0] == fts_data->fts_updateinfo_curr.upgrade_id_1
 			&& reg_val[1] == fts_data->fts_updateinfo_curr.upgrade_id_2) 
@@ -743,7 +798,7 @@ static void fts_sw_reset(struct fts_ts_data *fts_data)
     
     /*********Step 7: reset the new FW***********************/
 	auc_i2c_write_buf[0] = 0x07;
-	fts_i2c_write(fts_data->client, auc_i2c_write_buf, 1);
+	fts_i2c_write_cap_sensors(fts_data->client, auc_i2c_write_buf, 1);
 	//msleep(200);
 }
 
@@ -757,7 +812,9 @@ static struct file *fts_selftest_file_open(void)
 	int err = 0;
 
 	memset(filepath, 0, sizeof(filepath));
-	sprintf(filepath, "%s%s", FTXXXX_INI_FILEPATH_CONFIG, "test_result.csv");
+//<ASUS-BSP Robert_He 20170315> change filepath for factory test result +++++
+	sprintf(filepath, "%s%s", FTS_RESULT_CAP_PATH, "CapSelfResult.csv");
+//<ASUS-BSP Robert_He 20170315> change filepath for factory test result -----
 
 	oldfs = get_fs();
 	set_fs(get_ds());
@@ -801,7 +858,7 @@ static int fts_ReadInIData(char *config_name, char *config_buf)
 	mm_segment_t old_fs;
 
 	memset(filepath, 0, sizeof(filepath));
-	sprintf(filepath, "%s"/*, FTXXXX_INI_FILEPATH_CONFIG*/, config_name);
+	sprintf(filepath, "%s%s", FTXXXX_INI_FILEPATH_CONFIG, config_name);
 	if (NULL == pfile)
 		pfile = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(pfile)) {
@@ -829,7 +886,7 @@ static int fts_GetInISize(char *config_name)
 	char filepath[128];
 
 	memset(filepath, 0, sizeof(filepath));
-	sprintf(filepath, "%s"/*, FTXXXX_INI_FILEPATH_CONFIG*/, config_name);
+	sprintf(filepath, "%s%s", FTXXXX_INI_FILEPATH_CONFIG, config_name);
 	if (NULL == pfile)
 		pfile = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(pfile)) {
@@ -866,7 +923,7 @@ static int fts_get_testparam_from_ini(char *config_name)
 		pr_info("[FTS][Touch] %s : fts_ReadInIData successful\n", __func__);
 	}
 
-	set_param_data(config_data);
+	set_param_data_cap_sensors(config_data);
 
 	return 0;
 }
@@ -886,7 +943,10 @@ static ssize_t fts_ftsselftest_show(struct device *dev, struct device_attribute 
         } else {
             dev_info(dev, "[FTS] %s : Selftest PASS\n", __func__);
         }
-        return sprintf(buf, "[FTS] : Selftest %s\n", selft_test_result ? "FAIL" : "PASS");	
+//<ASUS-BSP Robert_He 20170314> show result for need ++++++
+        return sprintf(buf, "%s\n", selft_test_result ? "FAIL" : "PASS");	
+//<ASUS-BSP Robert_He 20170314> show result for need ------
+
 }
 /************************************************************************
 * Name: fts_ftsgetprojectcode_store
@@ -931,7 +991,7 @@ static ssize_t fts_ftsselftest_store(struct device *dev, struct device_attribute
         } else {
             dev_info(&client->dev, "[FTS][Touch] %s : tp test Start...\n", __func__);
 
-            if (start_test_tp()) {
+            if (start_test_tp_cap_sensors()) {
                 dev_info(&client->dev, "[FTS][Touch] %s : tp test pass\n", __func__);
                 selft_test_result = 0;
             } else {
@@ -954,7 +1014,7 @@ static ssize_t fts_ftsselftest_store(struct device *dev, struct device_attribute
                 if (!w_buf)
                     dev_err(&client->dev,"[FTS][Touch] %s : allocate memory fail !\n", __func__);
                 else{
-                    w_len = get_test_data(w_buf);
+                    w_len = get_test_data_cap_sensors(w_buf);
                     fts_selftest_file_write(w_file, w_buf, w_len);
                     w_len = sprintf(result_buf, "[FTS] : Selftest %s\n", selft_test_result ? "FAIL" : "PASS");
                     fts_selftest_file_write(w_file, result_buf, w_len);
@@ -973,7 +1033,7 @@ static ssize_t fts_ftsselftest_store(struct device *dev, struct device_attribute
         
     return count;
 }
-#if 0
+
 //add by Holt 20160825+
 /************************************************************************
 * Name: fts_buttonmode_show
@@ -1009,7 +1069,7 @@ static ssize_t fts_buttonmode_store(struct device *dev, struct device_attribute 
 	return count;
 }
 //add by Holt 20160825-
-#endif
+
 
 
 /************************************************************************
@@ -1046,7 +1106,7 @@ static ssize_t fts_glovemode_store(struct device *dev, struct device_attribute *
 
         reg_val[0] = 0xC0;				//ID_G_GLOVE_MODE_EN
         reg_val[1] = data->glovemode;
-        fts_i2c_write(data->client, reg_val, 2);	
+        fts_i2c_write_cap_sensors(data->client, reg_val, 2);	
 
 	dev_info(&client->dev, "[Focal][Virtual] glovemode: %d\n",data->glovemode);
 	return count;
@@ -1067,7 +1127,7 @@ static ssize_t fts_touch_status_show(struct device *dev, struct device_attribute
 	unsigned char reg_addr,reg_value;
 	/* check the controller id */
 	reg_addr = FTS_REG_ID;
-	err = fts_i2c_read(client, &reg_addr, 1, &reg_value, 1);
+	err = fts_i2c_read_cap_sensors(client, &reg_addr, 1, &reg_value, 1);
 	if (err < 0) {
 		dev_err(&client->dev, "[touch_status] version read failed");
 		touch_status = 0;
@@ -1140,13 +1200,48 @@ static ssize_t fts_vendorid_show(struct device *dev, struct device_attribute *at
 
 	return num_read_chars;
 }
+//<ASUS-BSP Robert_He 20170410> add capsensor vkled node ++++++
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+static ssize_t focal_cap_led_show(struct device *dev,struct device_attribute *attr,char *buf)
+{
+	return 0;
+}
+static ssize_t focal_cap_led_store(struct device *dev,struct device_attribute *attr,const char *buf,size_t count)
+{
+	if (strnicmp(buf, "1", 1)  == 0)
+    {
+       set_button_backlight(true);
+	   msleep(10);
+    }
+	else
+	{
+	   set_button_backlight(false);
+	   msleep(10);
+	}
+	return count;
+}
+#endif
+#endif
+
 
 /****************************************/
+
+static DEVICE_ATTR(ftscapvendor, S_IRUGO|S_IWUSR, fts_tpvendor_show, fts_tpvendor_store);
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+static DEVICE_ATTR(ftscapled, S_IRUGO|S_IWUSR, focal_cap_led_show, focal_cap_led_store);
+
+#endif
+#endif
+//<ASUS-BSP Robert_He 20170410> add capsensor vkled node ------
+
 /* sysfs */
 /*get the fw version
 *example:cat ftstpfwver
 */
 static DEVICE_ATTR(ftstpfwver, S_IRUGO|S_IWUSR, fts_tpfwver_show, fts_tpfwver_store);
+//<ASUS-BSP Robert_He 20170323> add capsensor vendor and fwver node ------
 
 static DEVICE_ATTR(ftstpdriverver, S_IRUGO|S_IWUSR, fts_tpdriver_version_show, fts_tpdriver_version_store);
 /*upgrade from *.i
@@ -1169,35 +1264,44 @@ static DEVICE_ATTR(ftsselftest, S_IRUGO|S_IWUSR, fts_ftsselftest_show, fts_ftsse
 static DEVICE_ATTR(touch_status, S_IRUGO, fts_touch_status_show, NULL);
 static DEVICE_ATTR(touch_function, S_IRUGO|S_IWUSR, fts_touch_function_show, fts_touch_function_store);
 static DEVICE_ATTR(ftsvendorid, S_IRUGO, fts_vendorid_show, NULL);
-#if 0
 //add by Holt 20160825+
 /*
 	buttonmode = 0 back,home,recent
 	buttonmode = 1 recent,home,back
 */
+
 static DEVICE_ATTR(buttonmode, S_IRUGO|S_IWUSR, fts_buttonmode_show, fts_buttonmode_store);
-#endif
 static DEVICE_ATTR(glovemode, S_IRUGO|S_IWUSR, fts_glovemode_show, fts_glovemode_store);
 //add by Holt 20160825-
 
 /*add your attr in here*/
 static struct attribute *fts_attributes[] = {
+//<ASUS-BSP Robert_He 20170323> add capsensor vendor and fwver node and support two project++++++
+//<ASUS-BSP Robert_He 20170410> add capsensor vkled node ++++++
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+    &dev_attr_ftscapled.attr,
+#endif
+#endif
+//<ASUS-BSP Robert_He 20170410> add capsensor vkled node ------
+
+	&dev_attr_ftscapvendor.attr,
 	&dev_attr_ftstpfwver.attr,
+//<ASUS-BSP Robert_He 20170323> add capsensor vendor and fwver node ++++++
 	&dev_attr_ftstpdriverver.attr,
 	&dev_attr_ftsfwupdate.attr,
 	&dev_attr_ftstprwreg.attr,
 	&dev_attr_ftsfwupgradeapp.attr,
 	&dev_attr_ftsgetprojectcode.attr,
 //add by Holt 20160825+
-#if 0
 	&dev_attr_buttonmode.attr,
-#endif
 	&dev_attr_ftsselftest.attr,
 	&dev_attr_touch_status.attr,
 	&dev_attr_touch_function.attr,
 	&dev_attr_ftsvendorid.attr,
 	&dev_attr_glovemode.attr,
 //add by Holt 20160825-
+
 	NULL
 };
 
@@ -1206,13 +1310,13 @@ static struct attribute_group fts_attribute_group = {
 };
 
 /************************************************************************
-* Name: fts_create_sysfs
+* Name: fts_create_sysfs_cap_sensors
 * Brief:  create sysfs for debug
 * Input: i2c info
 * Output: no
 * Return: success =0
 ***********************************************************************/
-int fts_create_sysfs(struct i2c_client * client)
+int fts_create_sysfs_cap_sensors(struct i2c_client * client)
 {
 	int err;
 	
@@ -1230,13 +1334,13 @@ int fts_create_sysfs(struct i2c_client * client)
 	return err;
 }
 /************************************************************************
-* Name: fts_remove_sysfs
+* Name: fts_remove_sysfs_cap_sensors
 * Brief:  remove sys
 * Input: i2c info
 * Output: no
 * Return: no
 ***********************************************************************/
-int fts_remove_sysfs(struct i2c_client * client)
+int fts_remove_sysfs_cap_sensors(struct i2c_client * client)
 {
 	sysfs_remove_group(&client->dev.kobj, &fts_attribute_group);
 	return 0;

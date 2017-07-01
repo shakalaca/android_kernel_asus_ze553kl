@@ -26,6 +26,7 @@
 #include "bus.h"
 #include "mmc_ops.h"
 #include "sd_ops.h"
+
 static u8  storage_primary_health;
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
@@ -124,7 +125,7 @@ static void mmc_dump_status(struct mmc_card *card)
 		card->ext_csd.device_life_time[1],
 		card->ext_csd.pre_device_eol);
 	pr_info("%s", mmc_status);
-	ASUSEvtlog("%s", mmc_status);
+	//ASUSEvtlog("%s", mmc_status);
 }
 
 static char* asus_get_emmc_status(struct mmc_card *card)
@@ -162,6 +163,15 @@ static char* asus_get_emmc_status(struct mmc_card *card)
 }
 //ASUS_BSP --- jessie_tian "emmc info for ATD"
 
+//<ASUS_BSP +++ Hank2_Liu 20170302> Add EMMC Node for ATD ++++++
+static int asus_get_emmc_prv(struct mmc_card *card)
+{
+	int prv;
+	u32 *resp = card->raw_cid;
+	prv = UNSTUFF_BITS(resp, 48, 8);
+	return prv;
+}
+//<ASUS_BSP +++ Hank2_Liu 20170302> Add EMMC Node for ATD ------
 
 /*
  * Given the decoded CSD structure, decode the raw CID to our CID structure.
@@ -240,15 +250,6 @@ static const struct mmc_fixup mmc_fixups[] = {
 
 	END_FIXUP
 };
-//<ASUS alex wang20160309>add emmc prv+++++
-static int asus_get_emmc_prv(struct mmc_card *card)
-{
-	int prv;
-	u32 *resp = card->raw_cid;
-	prv = UNSTUFF_BITS(resp, 48, 8);
-	return prv;
-}
-//<ASUS alex wang20160309>add emmc prv-----
 
 /*
  * Given a 128-bit response, decode to our card CSD structure.
@@ -959,12 +960,6 @@ MMC_DEV_ATTR(raw_rpmb_size_mult, "%#x\n", card->ext_csd.raw_rpmb_size_mult);
 MMC_DEV_ATTR(enhanced_rpmb_supported, "%#x\n",
 		card->ext_csd.enhanced_rpmb_supported);
 MMC_DEV_ATTR(rel_sectors, "%#x\n", card->ext_csd.rel_sectors);
-//<ASUS alex wang20160309>add emmc prv and emmc size+++
-MMC_DEV_ATTR(emmc_prv, "0x%x\n", asus_get_emmc_prv(card));
-MMC_DEV_ATTR(emmc_size, "0x%02x%02x%02x%02x\n",
-	card->ext_csd.raw_sectors[3], card->ext_csd.raw_sectors[2],
-	card->ext_csd.raw_sectors[1], card->ext_csd.raw_sectors[0]);
-//<ASUS alex wang20160309>add emmc prv and emmc size----
 
 //ASUS_BSP +++ jessie_tian "emmc info for ATD"
 MMC_DEV_ATTR(emmc_status, "%s\n", asus_get_emmc_status(card));
@@ -979,6 +974,11 @@ MMC_DEV_ATTR(emmc_fw_version, "0x%02x%02x%02x%02x%02x%02x%02x%02x\n", card->ext_
 //ASUS_BSP +++ jessie_tian "add eMMC total size for AMAX"
 MMC_DEV_ATTR(emmc_total_size, "%s\n", asus_get_emmc_total_size(card));
 
+//<ASUS_BSP +++ Hank2_Liu 20170302> Add EMMC Node for ATD ++++++
+MMC_DEV_ATTR(emmc_prv, "0x%x\n", asus_get_emmc_prv(card));
+MMC_DEV_ATTR(emmc_size, "0x%02x%02x%02x%02x\n", card->ext_csd.raw_sectors[3], card->ext_csd.raw_sectors[2],
+	card->ext_csd.raw_sectors[1], card->ext_csd.raw_sectors[0]);
+//<ASUS_BSP +++ Hank2_Liu 20170302> Add EMMC Node for ATD ------
 
 static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_cid.attr,
@@ -998,16 +998,16 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_raw_rpmb_size_mult.attr,
 	&dev_attr_enhanced_rpmb_supported.attr,
 	&dev_attr_rel_sectors.attr,
-	//<ASUS alex wang20160309>add emmc prv and emmc size+++
-	&dev_attr_emmc_prv.attr,
-	&dev_attr_emmc_size.attr,
-	//<ASUS alex wang20160309>add emmc prv and emmc size----
 
 	//ASUS_BSP jessie_tian:add emmc info && total_size+++
 	&dev_attr_emmc_status.attr,
 	&dev_attr_emmc_fw_version.attr,
 	&dev_attr_emmc_total_size.attr,
 	//ASUS_BSP jessie_tian:add emmc info && total_size---
+	//<ASUS_BSP +++ Hank2_Liu 20170302> Add EMMC Node for ATD ++++++
+	&dev_attr_emmc_prv.attr,
+	&dev_attr_emmc_size.attr,
+	//<ASUS_BSP +++ Hank2_Liu 20170302> Add EMMC Node for ATD ------
 	NULL,
 };
 ATTRIBUTE_GROUPS(mmc_std);
@@ -2661,6 +2661,7 @@ static int mmc_suspend(struct mmc_host *host)
 	int err;
 	ktime_t start = ktime_get();
 
+	MMC_TRACE(host, "%s: Enter\n", __func__);
 	err = _mmc_suspend(host, true);
 	if (!err) {
 		pm_runtime_disable(&host->card->dev);
@@ -2669,6 +2670,7 @@ static int mmc_suspend(struct mmc_host *host)
 
 	trace_mmc_suspend(mmc_hostname(host), err,
 			ktime_to_us(ktime_sub(ktime_get(), start)));
+	MMC_TRACE(host, "%s: Exit err: %d\n", __func__, err);
 	return err;
 }
 
@@ -2744,6 +2746,7 @@ static int mmc_resume(struct mmc_host *host)
 	int err = 0;
 	ktime_t start = ktime_get();
 
+	MMC_TRACE(host, "%s: Enter\n", __func__);
 	if (!(host->caps & MMC_CAP_RUNTIME_RESUME)) {
 		err = _mmc_resume(host);
 		pm_runtime_set_active(&host->card->dev);
@@ -2753,7 +2756,7 @@ static int mmc_resume(struct mmc_host *host)
 
 	trace_mmc_resume(mmc_hostname(host), err,
 			ktime_to_us(ktime_sub(ktime_get(), start)));
-
+	MMC_TRACE(host, "%s: Exit err: %d\n", __func__, err);
 	return err;
 }
 
@@ -3008,4 +3011,3 @@ void create_emmc_health_proc_file(void)
 }
 EXPORT_SYMBOL(create_emmc_health_proc_file);
 //ASUS_BSP Hank2_Liu 20161202 : Add proc file node to read emmc health status ---
-

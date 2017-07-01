@@ -21,14 +21,14 @@
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
-
+#include "../fac_camera.h"
 
 DEFINE_MSM_MUTEX(msm_actuator_mutex);
 
 
 #undef CDBG
 #ifdef MSM_ACTUATOR_DEBUG
-#define CDBG(fmt, args...) pr_err(fmt, ##args)
+#define CDBG(fmt, args...) pr_info(fmt, ##args)
 #else
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 #endif
@@ -43,13 +43,6 @@ static struct v4l2_file_operations msm_actuator_v4l2_subdev_fops;
 static int32_t msm_actuator_power_up(struct msm_actuator_ctrl_t *a_ctrl);
 static int32_t msm_actuator_power_down(struct msm_actuator_ctrl_t *a_ctrl);
 
-/*For ASUS VCM+++*/
-extern int asus_project_id;
-static int16_t rear_vcm_value = 0;
-static int16_t rear_vcm_value_2 = 0;
-static int16_t front_vcm_value = 0;
-/*For ASUS VCM---*/
-
 static struct msm_actuator msm_vcm_actuator_table;
 static struct msm_actuator msm_piezo_actuator_table;
 static struct msm_actuator msm_hvcm_actuator_table;
@@ -63,107 +56,7 @@ static struct msm_actuator *actuators[] = {
 	&msm_bivcm_actuator_table,
 };
 
-/*For ASUS VCM+++*/
-static ssize_t rear_vcm_show(struct file *dev, char *buffer, size_t count, loff_t *ppos)
-{
-	int ret;
-	char *buff;
-	int desc = 0;
 
-	buff = kmalloc(5,GFP_KERNEL);
-
-	if(!buff)
-	{
-		return -ENOMEM;
-	}
-
-	//printk("\n[actuator] %s rear_vcm_value = :%d\n",__func__,rear_vcm_value);
-	desc += sprintf(buff + desc, "%d\n",rear_vcm_value);
-	ret = simple_read_from_buffer(buffer,count,ppos,buff,desc);
-
-	kfree(buff);
-
-	return ret;
-}
-
-static const struct file_operations rear_vcm_proc_fops = {
-	.read = rear_vcm_show,
-};
-
-static ssize_t rear_vcm_2_show(struct file *dev, char *buffer, size_t count, loff_t *ppos)
-{
-	int ret;
-	char *buff;
-	int desc = 0;
-
-	buff = kmalloc(5,GFP_KERNEL);
-
-	if(!buff)
-	{
-		return -ENOMEM;
-	}
-
-	desc += sprintf(buff + desc, "%d\n",rear_vcm_value_2);
-	ret = simple_read_from_buffer(buffer,count,ppos,buff,desc);
-
-	kfree(buff);
-
-	return ret;
-}
-
-static const struct file_operations rear_vcm_2_proc_fops = {
-	.read = rear_vcm_2_show,
-};
-
-
-static ssize_t front_vcm_show(struct file *dev, char *buffer, size_t count, loff_t *ppos)
-{
-	int ret;
-	char *buff;
-	int desc = 0;
-
-	buff = kmalloc(5,GFP_KERNEL);
-
-	if(!buff)
-	{
-		return -ENOMEM;
-	}
-
-	//printk("\n[actuator] %s front_vcm_value = :%d\n",__func__,front_vcm_value);
-	desc += sprintf(buff + desc, "%d\n",front_vcm_value);
-	ret = simple_read_from_buffer(buffer,count,ppos,buff,desc);
-
-	kfree(buff);
-
-	return ret;
-}
-
-static const struct file_operations front_vcm_proc_fops = {
-	.read =front_vcm_show,
-};
-/*For ASUS VCM---*/
-
-//asus bsp ralf>>
-int32_t bu63165_set_len_postion(struct msm_camera_i2c_client *client,
-	uint32_t addr, uint32_t next_lens_pos)
-{
-	int32_t rc = 0;
-	struct msm_camera_i2c_seq_reg_array new_reg_setting={0};
-	if(!client)
-		return -ENOMEM;
-	new_reg_setting.reg_addr =addr;
-	new_reg_setting.reg_data[0] = 0;//(uint8_t)((next_lens_pos & 0xFF000000) >> 24);
-	new_reg_setting.reg_data[1] = (uint8_t)((next_lens_pos & 0x0000FF00) >> 8);
-	new_reg_setting.reg_data[2] = (uint8_t)(next_lens_pos & 0x000000FF);
-	new_reg_setting.reg_data_size = 3;
-	CDBG("[bu63165_vcm]next_pos=%d,reg_addr=0x%x,reg_data[0]=0x%x,reg_data[1]=0x%x,reg_data[2]=0x%x"
-	,next_lens_pos,new_reg_setting.reg_addr,new_reg_setting.reg_data[0]
-	,new_reg_setting.reg_data[1],new_reg_setting.reg_data[2]);
-	rc =msm_camera_cci_i2c_write_seq(client
-		,new_reg_setting.reg_addr,new_reg_setting.reg_data,new_reg_setting.reg_data_size);
-	return rc;
-}
-//asus bsp ralf<<
 static int32_t msm_actuator_piezo_set_default_focus(
 	struct msm_actuator_ctrl_t *a_ctrl,
 	struct msm_actuator_move_params_t *move_params)
@@ -727,8 +620,6 @@ static int32_t msm_actuator_move_focus(
 	a_ctrl->i2c_tbl_index = 0;
 	CDBG("curr_step_pos =%d dest_step_pos =%d curr_lens_pos=%d\n",
 		a_ctrl->curr_step_pos, dest_step_pos, curr_lens_pos);
-	printk("curr_step_pos =%d dest_step_pos =%d curr_lens_pos=%d\n",
-		a_ctrl->curr_step_pos, dest_step_pos, curr_lens_pos);
 
 	while (a_ctrl->curr_step_pos != dest_step_pos) {
 		step_boundary =
@@ -1050,8 +941,8 @@ static int32_t msm_actuator_bivcm_init_step_table(
 						step_index] =
 						max_code_size;
 			}
-			CDBG("step_position_table[%d] = %d\n", step_index,
-				a_ctrl->step_position_table[step_index]);
+			//CDBG("step_position_table[%d] = %d\n", step_index,
+			//	a_ctrl->step_position_table[step_index]);
 		}
 	}
 	CDBG("Exit\n");
@@ -1139,8 +1030,8 @@ static int32_t msm_actuator_init_step_table(struct msm_actuator_ctrl_t *a_ctrl,
 						step_index] =
 						max_code_size;
 			}
-			CDBG("step_position_table[%d] = %d\n", step_index,
-				a_ctrl->step_position_table[step_index]);
+			//CDBG("step_position_table[%d] = %d\n", step_index,
+			//	a_ctrl->step_position_table[step_index]);
 		}
 	}
 	CDBG("Exit\n");
@@ -1293,16 +1184,8 @@ static int32_t msm_actuator_set_position(
 	a_ctrl->i2c_tbl_index = 0;
 	for (index = 0; index < set_pos->number_of_steps; index++) {
 		next_lens_position = set_pos->pos[index];
-		/*For ASUS VCM+++*/
-		//printk("\n[actuator] %s next_lens_position:%d, a_ctrl->cam_name = %d\n",__func__,next_lens_position, a_ctrl->cam_name);
-		if(a_ctrl->cam_name == ACTUATOR_MAIN_CAM_0 ){
-			rear_vcm_value = next_lens_position;
-		}else{
-			rear_vcm_value_2 = next_lens_position;
-			front_vcm_value = next_lens_position;
-		}
-		/*For ASUS VCM---*/
 		delay = set_pos->delay[index];
+		a_ctrl->last_lens_pos=next_lens_position;//asus bsp ralf
 		a_ctrl->func_tbl->actuator_parse_i2c_params(a_ctrl,
 			next_lens_position, hw_params, delay);
 
@@ -1320,6 +1203,7 @@ static int32_t msm_actuator_set_position(
 		}
 		a_ctrl->i2c_tbl_index = 0;
 	}
+	
 	CDBG("%s exit %d\n", __func__, __LINE__);
 	return rc;
 }
@@ -1355,20 +1239,13 @@ static int32_t msm_actuator_bivcm_set_position(
 	hw_params = set_pos->hw_params;
 	for (index = 0; index < set_pos->number_of_steps; index++) {
 		next_lens_position = set_pos->pos[index];
-		/*For ASUS VCM+++*/
-		//printk("\n[actuator] %s next_lens_position:%d, a_ctrl->cam_name = %d\n",__func__,next_lens_position, a_ctrl->cam_name);
-		if(a_ctrl->cam_name == ACTUATOR_MAIN_CAM_0 ){
-			rear_vcm_value = next_lens_position;
-		}else{
-			rear_vcm_value_2 = next_lens_position;
-			front_vcm_value = next_lens_position;
-		}
-		/*For ASUS VCM---*/
+		a_ctrl->last_lens_pos=next_lens_position;//asus bsp ralf
 		delay = set_pos->delay[index];
 		rc = msm_actuator_bivcm_handle_i2c_ops(a_ctrl,
 		next_lens_position, hw_params, delay);
 		a_ctrl->i2c_tbl_index = 0;
 	}
+	
 	CDBG("%s exit %d\n", __func__, __LINE__);
 	return rc;
 }
@@ -1570,6 +1447,7 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 			&cdata->cfg.move);
 		if (rc < 0)
 			pr_err("move focus failed %d\n", rc);
+		CDBG("a_ctrl=%p,last_lens_pos=%d",a_ctrl,a_ctrl->last_lens_pos);//asus bsp ralf
 		break;
 
 	case CFG_MOVE_FOCUS:
@@ -1577,6 +1455,7 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 			&cdata->cfg.move);
 		if (rc < 0)
 			pr_err("move focus failed %d\n", rc);
+		CDBG("a_ctrl=%p,last_lens_pos=%d",a_ctrl,a_ctrl->last_lens_pos);//asus bsp ralf
 		break;
 	case CFG_ACTUATOR_POWERDOWN:
 		rc = msm_actuator_power_down(a_ctrl);
@@ -1589,6 +1468,7 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 			&cdata->cfg.setpos);
 		if (rc < 0)
 			pr_err("actuator_set_position failed %d\n", rc);
+		CDBG("a_ctrl=%p,last_lens_pos=%d",a_ctrl,a_ctrl->last_lens_pos);//asus bsp ralf
 		break;
 
 	case CFG_ACTUATOR_POWERUP:
@@ -1668,11 +1548,6 @@ static int msm_actuator_close(struct v4l2_subdev *sd,
 	a_ctrl->i2c_reg_tbl = NULL;
 	a_ctrl->actuator_state = ACT_DISABLE_STATE;
 	mutex_unlock(a_ctrl->actuator_mutex);
-	//[sheldon]:clear value after close+++
-	rear_vcm_value=0;
-	rear_vcm_value_2=0;
-	front_vcm_value=0;
-	//[sheldon]:clear value after close---
 	CDBG("Exit\n");
 	return rc;
 }
@@ -2122,18 +1997,7 @@ static int32_t msm_actuator_platform_probe(struct platform_device *pdev)
 	msm_actuator_t->msm_sd.sd.devnode->fops =
 		&msm_actuator_v4l2_subdev_fops;
 
-	/*For ASUS VCM+++*/
-	//printk("[sheldon] msm_actuator_t->cam_name = %d, apid = %d\n",msm_actuator_t->cam_name, asus_project_id);
-	if(asus_project_id == ASUS_ZD552KL && msm_actuator_t->cam_name == ACTUATOR_MAIN_CAM_1){
-		proc_create_data("driver/front_vcm", 0666, NULL, &front_vcm_proc_fops, NULL);
-	}else if(asus_project_id == ASUS_ZE553KL){
-		if(msm_actuator_t->cam_name == ACTUATOR_MAIN_CAM_0){
-			proc_create_data("driver/vcm", 0666, NULL, &rear_vcm_proc_fops, NULL);
-		}else{
-			proc_create_data("driver/vcm2", 0666, NULL, &rear_vcm_2_proc_fops, NULL);
-		}	
-	}
-	/*For ASUS VCM---*/
+	vcm_create_proc_file(msm_actuator_t);//asus bsp ralf
 
 	CDBG("Exit\n");
 	return rc;

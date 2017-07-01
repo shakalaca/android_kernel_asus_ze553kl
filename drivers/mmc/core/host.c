@@ -26,6 +26,8 @@
 
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
+#include <linux/mmc/ring_buffer.h>
+
 #include <linux/mmc/slot-gpio.h>
 
 #include "core.h"
@@ -563,7 +565,7 @@ static ssize_t store_enable(struct device *dev,
 	struct mmc_host *host = cls_dev_to_mmc_host(dev);
 	unsigned long value;
 
-	if (!host || kstrtoul(buf, 0, &value))
+	if (!host || !host->card || kstrtoul(buf, 0, &value))
 		return -EINVAL;
 
 	mmc_get_card(host->card);
@@ -742,6 +744,22 @@ set_perf(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
+//<ASUS_BSP +++ Hank2_Liu 20170302> Add sd_status Node for ATD ++++++
+static ssize_t
+show_sdstatus(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct mmc_host *host = cls_dev_to_mmc_host(dev);
+	BUG_ON(!host);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", host->sd_status);
+}
+
+static DEVICE_ATTR(sd_status, S_IRUGO | S_IWUSR,
+		show_sdstatus, NULL);
+//<ASUS_BSP +++ Hank2_Liu 20170302> Add sd_status Node for ATD ------
+
+
+
 static DEVICE_ATTR(perf, S_IRUGO | S_IWUSR,
 		show_perf, set_perf);
 
@@ -751,6 +769,7 @@ static struct attribute *dev_attrs[] = {
 #ifdef CONFIG_MMC_PERF_PROFILING
 	&dev_attr_perf.attr,
 #endif
+	&dev_attr_sd_status.attr, //<ASUS_BSP +++ Hank2_Liu 20170302> Add sd_status Node for ATD ------
 	NULL,
 };
 static struct attribute_group dev_attr_grp = {
@@ -787,6 +806,7 @@ int mmc_add_host(struct mmc_host *host)
 	mmc_add_host_debugfs(host);
 #endif
 	mmc_host_clk_sysfs_init(host);
+	mmc_trace_init(host);
 
 	err = sysfs_create_group(&host->class_dev.kobj, &clk_scaling_attr_grp);
 	if (err)

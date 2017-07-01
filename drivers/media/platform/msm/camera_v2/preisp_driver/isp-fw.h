@@ -78,6 +78,6 @@ struct rkl_boot_request {
  *
  * It returns zero on success, else a negative error code.
  **/
-int spi_download_fw(struct spi_device *spi, const char *fw_name);
+int spi_download_fw(struct spi_device *spi, const char *fw_name,uint32_t fw_speed,uint32_t normal_speed);
 
 #endif

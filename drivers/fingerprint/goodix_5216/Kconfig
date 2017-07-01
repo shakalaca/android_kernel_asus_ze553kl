@@ -1,0 +1,5 @@
+config FINGERPRINT_GOODIX_GF5216
+	tristate "Goodix_GF5216 OEM fingerprint drvier support"
+	help
+	  Say Y here to enable goodix fingerprint driver support!
+

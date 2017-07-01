@@ -48,8 +48,13 @@
 /* Early-suspend level */
 #define FTS_SUSPEND_LEVEL 1
 #endif
-
-
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ++++++
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+#include "../../../leds/leds-qpnp.h"
+#endif
+#endif
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ------
 
 
 /*******************************************************************************
@@ -131,6 +136,10 @@ static struct sensors_classdev __maybe_unused sensors_proximity_cdev = {
 #endif
 
 extern int synaptics_tp_done;
+//<ASUS-BSP Robert_He 20170313> add capsensor global data ++++++
+struct fts_ts_data* fts_data_global;
+//<ASUS-BSP Robert_He 20170313> add capsensor global data ------
+
 //<ASUS_Proximity+>
 static unsigned int touch_proximity_at_phone = 0;
 void asus_psensor_disable_virtualkey(bool enable)
@@ -163,6 +172,53 @@ EXPORT_SYMBOL(asus_get_capsensor_fw_ver);
 static int fts_ts_start(struct device *dev);
 static int fts_ts_stop(struct device *dev);
 
+//<ASUS-BSP Robert_He 20170313> add capsensor test node ++++++
+static ssize_t focal_cap_status_show(struct device *dev,struct device_attribute *attr,char *buf);
+static ssize_t focal_cap_error_store(struct device *dev,struct device_attribute *attr,const char *buf,size_t count);
+
+
+static struct device_attribute attrs[] = {
+	__ATTR(cap_status,S_IRUGO,
+			focal_cap_status_show,
+			focal_cap_error_store),
+};
+
+
+static ssize_t focal_cap_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int retval;
+	u8 status = 0;
+	retval = fts_read_reg(fts_data_global->client,FTS_REG_FW_VENDOR_ID,&status);
+	if (retval < 0) {
+		printk("[Capsensor]:%s: Failed to read device status1, error = %d\n",
+				__func__, retval);
+		return snprintf(buf, PAGE_SIZE, "%d\n",0);	
+	}
+	
+	if(status == 0)
+	{
+		return snprintf(buf, PAGE_SIZE, "%d\n",0);
+	}
+	else
+	{
+		printk("[Capsensor]: %s : Capsensor IC Status1 is %x\n",__func__,status);
+		return snprintf(buf, PAGE_SIZE, "%d\n",1);	
+	}
+
+}
+
+
+static ssize_t focal_cap_error_store(struct device *dev,struct device_attribute *attr,const char *buf,size_t count)
+{
+	dev_warn(dev, "%s Attempted to write to read-only attribute %s\n",
+			__func__, attr->attr.name);
+	return -EPERM;
+}
+//<ASUS-BSP Robert_He 20170313> add capsensor test node ------
+
+
+
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
 /*******************************************************************************
 *  Name: fts_psensor_support_enabled
@@ -178,13 +234,13 @@ static inline bool fts_psensor_support_enabled(void)
 #endif
 
 /*******************************************************************************
-*  Name: fts_i2c_read
+*  Name: fts_i2c_read_cap_sensors
 *  Brief:
 *  Input:
 *  Output: 
 *  Return: 
 *******************************************************************************/
-int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *readbuf, int readlen)
+int fts_i2c_read_cap_sensors(struct i2c_client *client, char *writebuf, int writelen, char *readbuf, int readlen)
 {
 	int ret = 0;
 
@@ -228,13 +284,13 @@ int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *
 }
 
 /*******************************************************************************
-*  Name: fts_i2c_write
+*  Name: fts_i2c_write_cap_sensors
 *  Brief:
 *  Input:
 *  Output: 
 *  Return: 
 *******************************************************************************/
-int fts_i2c_write(struct i2c_client *client, char *writebuf, int writelen)
+int fts_i2c_write_cap_sensors(struct i2c_client *client, char *writebuf, int writelen)
 {
 	int ret;
 
@@ -270,7 +326,7 @@ int fts_write_reg(struct i2c_client *client, u8 addr, const u8 val)
 	buf[0] = addr;
 	buf[1] = val;
 
-	return fts_i2c_write(client, buf, sizeof(buf));
+	return fts_i2c_write_cap_sensors(client, buf, sizeof(buf));
 }
 
 /*******************************************************************************
@@ -282,7 +338,7 @@ int fts_write_reg(struct i2c_client *client, u8 addr, const u8 val)
 *******************************************************************************/
 int fts_read_reg(struct i2c_client *client, u8 addr, u8 *val)
 {
-	return fts_i2c_read(client, &addr, 1, val, 1);
+	return fts_i2c_read_cap_sensors(client, &addr, 1, val, 1);
 }
 
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
@@ -454,7 +510,7 @@ static int fts_read_Touchdata(struct fts_ts_data *data)
 	}
 	#endif
 	
-	ret = fts_i2c_read(data->client, buf, 1, buf, POINT_READ_BUF);
+	ret = fts_i2c_read_cap_sensors(data->client, buf, 1, buf, POINT_READ_BUF);
 	if (ret < 0) {
 		dev_err(&data->client->dev, "%s read touchdata failed.\n", __func__);
 		return ret;
@@ -462,9 +518,13 @@ static int fts_read_Touchdata(struct fts_ts_data *data)
 
 	data->buf_count_add++;
 	memcpy( data->buf_touch_data+(((data->buf_count_add-1)%30)*POINT_READ_BUF), buf, sizeof(u8)*POINT_READ_BUF );
-
+	//printk("cap sensor has irq\n");
 	return 0;
 }
+
+#ifdef ASUS_FACTORY_BUILD
+extern int pwrkey_mode;
+#endif
 
 /*******************************************************************************
 *  Name: fts_report_value
@@ -482,6 +542,14 @@ static void fts_report_value(struct fts_ts_data *data)
 	u8 pointid = FTS_MAX_ID;
 	
 	u8 buf[POINT_READ_BUF] = { 0 };
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ++++++
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+		unsigned long led_timeout;
+		led_timeout = msecs_to_jiffies(2000);
+#endif
+#endif
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ------
 
 	data->buf_count_neg++;
 	
@@ -537,47 +605,76 @@ static void fts_report_value(struct fts_ts_data *data)
 			//key down
 			if (event->au8_touch_event[i] == FTS_TOUCH_DOWN) //|| event->au8_touch_event[i] == FTS_TOUCH_CONTACT
 			{
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ++++++
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+
+					set_button_backlight(true);
+					cancel_delayed_work(&data->led_delay_work);
+					flush_workqueue(data->led_wq);
+					queue_delayed_work(data->led_wq,&data->led_delay_work,led_timeout);
+#endif
+#endif
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ------				
 				if( (event->au16_x[i] == KEY_BACK_X_AREA) && (event->au16_y[i] == KEY_BACK_Y_AREA) )
 				{	
-				#if 0
 					if(data->buttonmode == 0)
 					{
-				#endif	
 						input_report_key(data->input_dev, KEY_BACK, true);
 						input_sync(data->input_dev);
-				#if 0
 					}
 					else
 					{
 						input_report_key(data->input_dev, KEY_MENU, true);
 						input_sync(data->input_dev);					
 					}
-				#endif
 				}
-			
-				if( (event->au16_x[i] == KEY_HOME_X_AREA) && (event->au16_y[i] == KEY_HOME_Y_AREA) )
-				{		
-					input_report_key(data->input_dev, KEY_HOME, true);
-					input_sync(data->input_dev);
-				}
-
-				if( (event->au16_x[i] == KEY_MENU_X_AREA) && (event->au16_y[i] == KEY_MENU_Y_AREA) )
+			if (ASUS_ZD552KL_PHOENIX != asus_project_id)
 				{
-				#if 0
-					if(data->buttonmode != 0)
-					{	
-						input_report_key(data->input_dev, KEY_BACK, true);
+				if( (event->au16_x[i] == KEY_HOME_X_AREA) && (event->au16_y[i] == KEY_HOME_Y_AREA) )
+					{		
+						input_report_key(data->input_dev, KEY_HOME, true);  
 						input_sync(data->input_dev);
 					}
-					else
+				
+				if( (event->au16_x[i] == KEY_MENU_X_AREA) && (event->au16_y[i] == KEY_MENU_Y_AREA) )
 					{
-				#endif
-						input_report_key(data->input_dev, KEY_MENU, true);
-						input_sync(data->input_dev);
-				#if 0					
+			
+						if(data->buttonmode != 0)
+						{	
+							input_report_key(data->input_dev, KEY_BACK, true);
+							input_sync(data->input_dev);
+						}
+						else
+						{
+							input_report_key(data->input_dev, KEY_MENU, true);
+							input_sync(data->input_dev);					
+						}
 					}
-				#endif
 				}
+			else
+				{
+					
+					if( (event->au16_x[i] == KEY_HOME_X_AREA) && (event->au16_y[i] == KEY_HOME_Y_AREA) )
+					{
+						if(data->buttonmode != 0)
+						{
+							input_report_key(data->input_dev, KEY_BACK, true);
+							input_sync(data->input_dev);
+						}
+						else
+						{
+#ifdef ASUS_FACTORY_BUILD
+							if (pwrkey_mode)
+								input_report_key(data->input_dev, KEY_C, true);
+							else
+#endif
+							input_report_key(data->input_dev, KEY_MENU, true);
+							input_sync(data->input_dev);					
+						}
+					}
+				}
+	
 			}
 			//key up
 			if (event->au8_touch_event[i] == FTS_TOUCH_UP)
@@ -585,45 +682,63 @@ static void fts_report_value(struct fts_ts_data *data)
 
 				if( (event->au16_x[i] == KEY_BACK_X_AREA) && (event->au16_y[i] == KEY_BACK_Y_AREA) )
 				{	
-				#if 0
 					if(data->buttonmode == 0)
 					{
-				#endif	
 						input_report_key(data->input_dev, KEY_BACK, false);
 						input_sync(data->input_dev);
-				#if 0
 					}
 					else
 					{
 						input_report_key(data->input_dev, KEY_MENU, false);
 						input_sync(data->input_dev);					
 					}
-				#endif
 				}
-			
-				if( (event->au16_x[i] == KEY_HOME_X_AREA) && (event->au16_y[i] == KEY_HOME_Y_AREA) )
+
+			if (ASUS_ZD552KL_PHOENIX != asus_project_id)
 				{		
-					input_report_key(data->input_dev, KEY_HOME, false);
-					input_sync(data->input_dev);
-				}
-
-				if( (event->au16_x[i] == KEY_MENU_X_AREA) && (event->au16_y[i] == KEY_MENU_Y_AREA) )
-				{
-				#if 0
-					if(data->buttonmode != 0)
-					{	
-
-						input_report_key(data->input_dev, KEY_BACK, false);
+					if( (event->au16_x[i] == KEY_HOME_X_AREA) && (event->au16_y[i] == KEY_HOME_Y_AREA) )
+					{		
+						input_report_key(data->input_dev, KEY_HOME, false);
 						input_sync(data->input_dev);
 					}
-					else
+				
+					if( (event->au16_x[i] == KEY_MENU_X_AREA) && (event->au16_y[i] == KEY_MENU_Y_AREA) )
 					{
-				#endif
-						input_report_key(data->input_dev, KEY_MENU, false);
-						input_sync(data->input_dev);
-				#if 0					
+			
+						if(data->buttonmode != 0)
+						{
+
+							input_report_key(data->input_dev, KEY_BACK, false);
+							input_sync(data->input_dev);
+						}
+						else
+						{
+
+							input_report_key(data->input_dev, KEY_MENU, false);
+							input_sync(data->input_dev);					
+						}
 					}
-				#endif
+				}
+			else
+				{
+					if( (event->au16_x[i] == KEY_HOME_X_AREA) && (event->au16_y[i] == KEY_HOME_Y_AREA) )
+					{
+						if(data->buttonmode != 0)
+						{
+							input_report_key(data->input_dev, KEY_BACK, false);
+							input_sync(data->input_dev);
+						}
+						else
+						{
+#ifdef ASUS_FACTORY_BUILD
+							if (pwrkey_mode)
+								input_report_key(data->input_dev, KEY_C, false);
+							else
+#endif
+							input_report_key(data->input_dev, KEY_MENU, false);
+							input_sync(data->input_dev);					
+						}
+					}
 				}
 			}
 		}
@@ -716,6 +831,18 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	}
 	return IRQ_HANDLED;
 }
+
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ++++++
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+static void led_delay_work_func(struct work_struct *led_delay_work)
+{
+	set_button_backlight(false);
+}
+#endif
+#endif
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ------
+
 /*******************************************************************************
 *  Name: fts_gpio_configure
 *  Brief:
@@ -1037,7 +1164,7 @@ static int fts_ts_start(struct device *dev)
 
 	reg_val[0] = 0xC0;				//ID_G_GLOVE_MODE_EN
 	reg_val[1] = data->glovemode;
-	fts_i2c_write(data->client, reg_val, 2);
+	fts_i2c_write_cap_sensors(data->client, reg_val, 2);
 
 	enable_irq(data->client->irq);
 	data->suspended = false;
@@ -1092,7 +1219,7 @@ static int fts_ts_stop(struct device *dev)
 	if (gpio_is_valid(data->pdata->reset_gpio)) {
 		txbuf[0] = FTS_REG_PMODE;
 		txbuf[1] = FTS_PMODE_HIBERNATE;
-		fts_i2c_write(data->client, txbuf, sizeof(txbuf));
+		fts_i2c_write_cap_sensors(data->client, txbuf, sizeof(txbuf));
 	}
 
 	if (data->pdata->power_on) {
@@ -1758,7 +1885,7 @@ static void update_fw_in_wq(struct work_struct *work)
 	struct fts_ts_data *fts_data = container_of(delayed_work, struct fts_ts_data, update_fw_work);
 
 	//dev_info(&fts_data->client->dev,  "********************Enter CTP Auto Upgrade********************\n");
-	fts_ctpm_auto_upgrade(fts_data->client);
+	fts_ctpm_auto_upgrade_cap_sensors(fts_data->client);
 	fts_read_reg(fts_data->client, FTS_REG_FW_VER, &globe_fw_ver);
 }
 #endif
@@ -1803,6 +1930,21 @@ static void fts_resume_work(struct work_struct *work)
 	fts_ts_resume(&fts_data->client->dev);
 	//dev_info(&fts_data->client->dev,  "[FTS] Virtual key resume over!\n");	
 }
+//<ASUS-BSP Robert_He 20170313> add capsensor read fw version function ++++++
+u8 fts_cap_show_fw_version(void)
+{
+	u8 fwver = 0;
+	if (fts_data_global == NULL)
+	{
+		printk("[FTS][ERROR]fts_data_global is null,can not read fw version\n");
+		return fwver;
+	}
+	if (fts_read_reg(fts_data_global->client, FTS_REG_FW_VER, &fwver) < 0)
+		fwver = 0x00;
+	return fwver;
+}
+//<ASUS-BSP Robert_He 20170313> add capsensor read fw version function ------
+
 
 /*******************************************************************************
 *  Name: fts_ts_probe
@@ -1814,7 +1956,7 @@ static void fts_resume_work(struct work_struct *work)
 static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct fts_ts_platform_data *pdata;
-	
+
 	#ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
 	struct fts_psensor_platform_data *psensor_pdata;
 	struct input_dev *psensor_input_dev;
@@ -1829,6 +1971,9 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	u8 reg_value;
 	u8 reg_addr;
 	int err, len;
+//<ASUS-BSP Robert_He 20170313> add capsensor test node ++++++
+	u8 attr_count = 0;
+//<ASUS-BSP Robert_He 20170313> add capsensor test node ++++++
 
 	dev_info(&client->dev,  "Start Probe!\n");
 	if (client->dev.of_node) {
@@ -1896,7 +2041,9 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	}
 
 	//fts_wq_data = data;
-
+//<ASUS-BSP Robert_He 20170313> add capsensor global data ++++++
+	fts_data_global = data;
+//<ASUS-BSP Robert_He 20170313> add capsensor global data ++++++
 	if (pdata->fw_name) {
 		len = strlen(pdata->fw_name);
 		if (len > FTS_FW_NAME_MAX_LEN - 1) {
@@ -1925,9 +2072,8 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	data->input_dev = input_dev;
 	data->client = client;
 	data->pdata = pdata;
-#if 0
 	data->buttonmode = 0;
-#endif
+	
 	data->buf_count_add = 0;
 	data->buf_count_neg = 0;
 	data->touch_enable = 1;
@@ -2020,10 +2166,18 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		goto exit_create_singlethread;
 	}
 
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ++++++
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+	data->led_wq = create_singlethread_workqueue("led_wq");
+	INIT_DELAYED_WORK(&data->led_delay_work,led_delay_work_func);
+#endif
+#endif
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ------
 
 	/* check the controller id */
 	reg_addr = FTS_REG_ID;
-	err = fts_i2c_read(client, &reg_addr, 1, &reg_value, 1);
+	err = fts_i2c_read_cap_sensors(client, &reg_addr, 1, &reg_value, 1);
 	if (err < 0) {
 		dev_err(&client->dev, "version read failed");
 		goto free_gpio;
@@ -2144,21 +2298,21 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	/*get some register information */
 	reg_addr = FTS_REG_POINT_RATE;
-	fts_i2c_read(client, &reg_addr, 1, &reg_value, 1);
+	fts_i2c_read_cap_sensors(client, &reg_addr, 1, &reg_value, 1);
 	if (err < 0)
 		dev_err(&client->dev, "report rate read failed");
 
 	dev_info(&client->dev, "report rate = %dHz\n", reg_value * 10);
 
 	reg_addr = FTS_REG_THGROUP;
-	err = fts_i2c_read(client, &reg_addr, 1, &reg_value, 1);
+	err = fts_i2c_read_cap_sensors(client, &reg_addr, 1, &reg_value, 1);
 	if (err < 0)
 		dev_err(&client->dev, "threshold read failed");
 
 	dev_dbg(&client->dev, "touch threshold = %d\n", reg_value * 4);
 
-	fts_update_fw_ver(data);
-	fts_update_fw_vendor_id(data);
+	fts_update_fw_ver_cap_sensors(data);
+	fts_update_fw_vendor_id_cap_sensors(data);
 
 	FTS_STORE_TS_INFO(data->ts_info, data->family_id, data->pdata->name,
 			data->pdata->num_max_touches, data->pdata->group_id,
@@ -2167,11 +2321,11 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 			data->fw_ver[1], data->fw_ver[2]);
 
 	#ifdef FTS_APK_DEBUG
-		fts_create_apk_debug_channel(client);
+		fts_create_apk_debug_channel_cap_sensors(client);
 	#endif
 
 	#ifdef FTS_SYSFS_DEBUG
-		fts_create_sysfs(client);
+		fts_create_sysfs_cap_sensors(client);
 	#endif
 
 	
@@ -2190,7 +2344,9 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	__set_bit(KEY_BACK, input_dev->keybit);
 	__set_bit(KEY_HOME, input_dev->keybit);
 	__set_bit(KEY_MENU, input_dev->keybit);
-	
+#ifdef ASUS_FACTORY_BUILD
+	__set_bit(KEY_C, input_dev->keybit);
+#endif
 	
 	#ifdef FTS_AUTO_UPGRADE
 //add by Holt 20160825+
@@ -2205,7 +2361,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		INIT_DELAYED_WORK(&data->update_fw_work,update_fw_in_wq);
 		queue_delayed_work(data->update_fw_wq,&data->update_fw_work,0);
 	}
-	//fts_ctpm_auto_upgrade(client);
+	//fts_ctpm_auto_upgrade_cap_sensors(client);
 //add by Holt 20160825-
 	#endif
 
@@ -2233,10 +2389,31 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	data->early_suspend.resume = fts_ts_late_resume;
 	register_early_suspend(&data->early_suspend);
 #endif
+//<ASUS-BSP Robert_He 20170313> add capsensor test node ++++++
+	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
+		err = sysfs_create_file(&data->input_dev->dev.kobj,
+				&attrs[attr_count].attr);
+		
+		if (err < 0) {
+			printk("[Capsensor ]sysfile %d test %d\n",attr_count,err);
+			goto err_sysfs;
+		}
+	}
+//<ASUS-BSP Robert_He 20170313> add capsensor test node ------
+
 
 	enable_irq(client->irq);
-//	dev_info(&client->dev,  "[Focal] Exit Probe!\n");
+	dev_info(&client->dev,  "[Focal] Exit Probe!\n");
 	return 0;
+
+//<ASUS-BSP Robert_He 20170313> add capsensor test node ++++++
+err_sysfs:
+	for (attr_count--; attr_count >= 0; attr_count--) {
+		sysfs_remove_file(&data->input_dev->dev.kobj,
+			&attrs[attr_count].attr);
+	}
+//<ASUS-BSP Robert_He 20170313> add capsensor test node ------
+
 
 free_debug_dir:
 	debugfs_remove_recursive(data->dir);
@@ -2300,6 +2477,47 @@ free_inputdev:
 	return err;
 }
 
+//<ASUS-BSP Robert_He 20170313> add capsensor charger mode ++++++
+#ifdef ZD552KL_PHOENIX
+bool fts_cap_flag = false;
+void fts_ts_cap_charger_mode(bool enable)
+{
+	int ret = 0;
+	if (fts_data_global == NULL)
+	{
+		printk("[FTS][CAP]fts_data_global is null,cannot enter charger mode\n");
+	}
+
+	if (enable)
+	{
+		if (!fts_cap_flag)
+		{
+			ret = fts_write_reg(fts_data_global->client,0xCB,0x01);
+			if (ret < 0)
+			{
+				printk("[FTS][CAP]enter charger mode fail\n");
+			}
+			fts_cap_flag = true;
+		}
+	}
+	else
+	{
+		if (fts_cap_flag)
+		{
+			ret = fts_write_reg(fts_data_global->client,0xCB,0x00);
+			if (ret < 0)
+			{
+				printk("[FTS][CAP]exit charger mode fail\n");
+			}
+			fts_cap_flag = false;
+		}
+	}
+}
+EXPORT_SYMBOL(fts_ts_cap_charger_mode);
+#endif
+//<ASUS-BSP Robert_He 20170313> add capsensor charger mode -----
+
+
 /*******************************************************************************
 *  Name: fts_ts_remove
 *  Brief:
@@ -2328,11 +2546,11 @@ static int fts_ts_remove(struct i2c_client *client)
 #endif
 	
 #ifdef FTS_APK_DEBUG
-		fts_release_apk_debug_channel(client);
+		fts_release_apk_debug_channel_cap_sensors(client);
 #endif
 
 #ifdef FTS_SYSFS_DEBUG
-		fts_remove_sysfs(client);
+		fts_remove_sysfs_cap_sensors(client);
 #endif
 
 

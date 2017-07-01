@@ -63,10 +63,11 @@ static int __init rtc_hctosys(void)
 		tm.tm_hour, tm.tm_min, tm.tm_sec,
 		(unsigned int) tv.tv_sec);
 
-		if (rtc_ready == 0) {
+	if (rtc_ready == 0) {
 			rtc_ready = 1;
 			printk("%s: RTC set rtc_ready = 1\n", __func__);
 		}
+
 err_invalid:
 err_read:
 	rtc_class_close(rtc);

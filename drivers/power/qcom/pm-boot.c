@@ -38,8 +38,7 @@ static int msm_pm_tz_boot_init(void)
 			flag = SCM_FLAG_WARMBOOT_CPU0;
 		else if (num_possible_cpus() == 2)
 			flag = SCM_FLAG_WARMBOOT_CPU0 | SCM_FLAG_WARMBOOT_CPU1;
-		//else if (num_possible_cpus() == 4)
-		else if (num_possible_cpus() >= 4)
+		else if (num_possible_cpus() == 4)
 			flag = SCM_FLAG_WARMBOOT_CPU0 | SCM_FLAG_WARMBOOT_CPU1 |
 				SCM_FLAG_WARMBOOT_CPU2 | SCM_FLAG_WARMBOOT_CPU3;
 		else

@@ -117,8 +117,8 @@
 #define MASK_2BIT 0x03
 #define MASK_1BIT 0x01
 
-#define VDD_MIN_UV             3000000
-#define VDD_MAX_UV             3000000
+#define VDD_MIN_UV             3300000
+#define VDD_MAX_UV             3300000
 #define VDDA_I2C_MIN_UV         1800000
 #define VDDA_I2C_MAX_UV         1800000
 
@@ -378,6 +378,13 @@ struct synaptics_rmi4_data {
 	unsigned short f12_ctrl23_base_addr;
 	unsigned short f12_ctrl10_base_addr;
 	unsigned short f12_ctrl9_base_addr;
+	unsigned short f54_ctrl113_base_addr;
+
+	unsigned char gloved_finger_threshold;
+	unsigned char noise_floor;
+	unsigned char min_peak_amp;
+	unsigned char tx_axis_obj_threshold;
+
 	//<ASUS_Glove->
 	//<ASUS_COVER+>
 	unsigned short f12_ctrl15_base_addr;
@@ -525,5 +532,9 @@ static inline void hstoba(unsigned char *dest, unsigned short src)
 int synaptics_rmi4_link_input2dev(struct synaptics_rmi4_data *rmi4_data);
 void synaptics_rmi4_unlink_input2dev(struct synaptics_rmi4_data *rmi4_data);
 //<ASUS_link_to_absolute_path->
+
+//ASUS_BSP++++++++++ found F54 Ctrl113 for glove mode
+int synaptics_rmi4_found_f54_ctrl113(struct synaptics_rmi4_data *rmi4_data);
+//ASUS_BSP----------
 
 #endif

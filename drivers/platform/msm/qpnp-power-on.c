@@ -876,7 +876,7 @@ void wait_for_power_key_6s_work(struct work_struct *work)
 		power_key_6s_running = 1;
 		startime = press_time;
 		timeout = startime + HZ*TIMEOUT_COUNT/10;
-		for (i = 0, slow_ok = 0; i < TIMEOUT_COUNT && slow_ok == 0 &&
+		for (i = 0; i < TIMEOUT_COUNT &&
 				time_before(jiffies, timeout) ; i++) {
 			if (is_holding_power_key()) {
 				msleep(100);
@@ -885,7 +885,7 @@ void wait_for_power_key_6s_work(struct work_struct *work)
 			}
 		}
 
-		if (((i == TIMEOUT_COUNT) || (slow_ok == 1) ||
+		if (((i == TIMEOUT_COUNT) ||
 				time_after_eq(jiffies, timeout)) &&
 				(is_holding_power_key()) && (i > 0)) {
 			duration = (jiffies - startime)*10/HZ;
@@ -953,9 +953,9 @@ void wait_for_slowlog_work(struct work_struct *work)
 	}
 }
 
-//<ASUS-Alex wang20160303>for add module for powerkey+++++++
+//<ASUS-stone1 wang20170222>for add module for powerkey+++++++
 #ifdef ASUS_FACTORY_BUILD
-static int pwrkey_mode = 0;
+int pwrkey_mode = 0;
 static int pwrkeyMode_function(const char *val,struct kernel_param *kp)
 {
     int ret = 0;
@@ -978,7 +978,7 @@ static int pwrkeyMode_function(const char *val,struct kernel_param *kp)
 
 module_param_call(pwrkey_mode,pwrkeyMode_function,param_get_int,&pwrkey_mode,0644);
 #endif
-//<ASUS-Alex wang20160303>for add module for powerkey-----------
+//<ASUS-stone1 wang20170222>for add module for powerkey-----------
 
 static int
 qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
@@ -1009,6 +1009,9 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		pon_rt_bit = QPNP_PON_KPDPWR_N_SET;
 		/* for phone hang debug */
 		pon_for_powerkey = pon;
+#ifdef ZE553KL
+		printk("[qpnp-power-on] PON_KPDPWR!!! keycode=%d, state=%d \n",cfg->key_code,(pon_rt_sts & pon_rt_bit));
+#endif
 		if (boot_after_60sec) {
 			if (is_holding_power_key()) {
 				press_time = jiffies;
@@ -1043,7 +1046,7 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		input_report_key(pon->pon_input, cfg->key_code, 1);
 		input_sync(pon->pon_input);
 	}
-//<ASUS-Alex wang20160303>for add module for powerkey+++++++
+//<ASUS-stone1 wang20170223>for add module for powerkey+++++++
 #ifdef ASUS_FACTORY_BUILD
     printk("[mid_powerbtn]cfg->key_code = %d\n",cfg->key_code);
 	printk("[mid_powerbtn]pwrkey_mode =  %d\n",pwrkey_mode);
@@ -1059,7 +1062,7 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		      printk("[mid_powerbtn]normal mode\n");
 		  }	
 #endif
-//<ASUS-Alex wang20160303>for add module for powerkey------
+//<ASUS-stone1 wang20170223>for add module for powerkey------
 	input_report_key(pon->pon_input, cfg->key_code, key_status);
 	input_sync(pon->pon_input);
 
@@ -1468,11 +1471,11 @@ qpnp_pon_config_input(struct qpnp_pon *pon,  struct qpnp_pon_config *cfg)
 	/* don't send dummy release event when system resumes */
 	__set_bit(INPUT_PROP_NO_DUMMY_RELEASE, pon->pon_input->propbit);
 	input_set_capability(pon->pon_input, EV_KEY, cfg->key_code);
-//<ASUS-alex20160303>fix capability KEY_A+++
+//<ASUS-stone120170223>fix capability KEY_A+++
 #ifdef ASUS_FACTORY_BUILD
     input_set_capability(pon->pon_input, EV_KEY, KEY_A);
 #endif
-//<ASUS-alex20160303>fix capability KEY_A---
+//<ASUS-stone120170223>fix capability KEY_A---
 	return 0;
 }
 
@@ -2622,6 +2625,15 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 		dev_err(&spmi->dev, "sys file creation failed rc: %d\n",
 			rc);
 		return rc;
+	}
+
+	if (of_property_read_bool(spmi->dev.of_node,
+					"qcom,pon-reset-off")) {
+		rc = qpnp_pon_trigger_config(PON_CBLPWR_N, false);
+		if (rc) {
+			dev_err(&spmi->dev, "failed update the PON_CBLPWR %d\n",
+				rc);
+		}
 	}
 
 	if (of_property_read_bool(spmi->dev.of_node,

@@ -1365,18 +1365,22 @@ int msm_camera_power_up(struct msm_camera_power_ctrl_t *ctrl,
 			sensor_i2c_client);
 		return -EINVAL;
 	}
-	//asus bsp ralf:for optimize hades ER power consumption>>
-	if(asus_project_id==ASUS_ZE553KL  &&  asus_hw_id >= ASUS_ER)
+#ifdef ZD552KL_PHOENIX
+	if(asus_hw_id == ASUS_SR1)
 	{
-		if(sensor_i2c_client->cci_client 
+#endif
+	//asus bsp ralf:for optimize hades ER power consumption>>
+	if(sensor_i2c_client->cci_client 
 			&& (sensor_i2c_client->cci_client->sid==(0x34>>1)
 			|| sensor_i2c_client->cci_client->sid==(0x20>>1)
 			|| sensor_i2c_client->cci_client->sid==(0x5a>>1) )
 			)
 			rkpreisp_power_on_dsp(1);
 		else rkpreisp_power_on_dsp(0);
-	}
 	//asus bsp ralf:for optimize hades ER power consumption<<
+#ifdef ZD552KL_PHOENIX
+	}
+#endif
 	pr_err("gpio_conf=%p\n",ctrl->gpio_conf);
 	if (ctrl->gpio_conf->cam_gpiomux_conf_tbl != NULL)
 		pr_err("%s:%d mux install\n", __func__, __LINE__);
@@ -1597,6 +1601,14 @@ power_up_failed:
 	msm_camera_request_gpio_table(
 		ctrl->gpio_conf->cam_gpio_req_tbl,
 		ctrl->gpio_conf->cam_gpio_req_tbl_size, 0);
+#ifdef ZD552KL_PHOENIX
+	if(asus_hw_id == ASUS_SR1)
+	{
+#endif
+	rkpreisp_power_off_dsp();//ASUS_BSP Zhengwei "power off rk if power up failed"
+#ifdef ZD552KL_PHOENIX
+	}
+#endif
 	return rc;
 }
 
@@ -1748,10 +1760,16 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 	msm_camera_request_gpio_table(
 		ctrl->gpio_conf->cam_gpio_req_tbl,
 		ctrl->gpio_conf->cam_gpio_req_tbl_size, 0);
+#ifdef ZD552KL_PHOENIX
+	if(asus_hw_id == ASUS_SR1)
+	{
+#endif
 	//asus bsp ralf:for optimize hades ER power consumption>>
-	if(asus_project_id==ASUS_ZE553KL  &&  asus_hw_id >= ASUS_ER)
 			rkpreisp_power_off_dsp();
 	//asus bsp ralf:for optimize hades ER power consumption<<
+#ifdef ZD552KL_PHOENIX
+	}
+#endif
 	CDBG("%s exit\n", __func__);
 	return 0;
 }

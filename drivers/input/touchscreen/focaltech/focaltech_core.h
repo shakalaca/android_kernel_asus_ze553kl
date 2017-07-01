@@ -301,7 +301,11 @@
 #define FTS_UPGRADE_AA		0xAA
 #define FTS_UPGRADE_55		0x55
 #define HIDTOI2C_DISABLE					0
-#define FTXXXX_INI_FILEPATH_CONFIG "/data/data/"
+//<ASUS-BSP Robert_He 20170314>change file path for factory tool +++++
+#define FTXXXX_INI_FILEPATH_CONFIG "/system/bin/"
+#define FTS_RESULT_CAP_PATH "/data/data/"
+//<ASUS-BSP Robert_He 20170314>change file path for factory tool -----
+
 /*******************************************************************************
 * Private enumerations, structures and unions using typedef
 *******************************************************************************/
@@ -436,9 +440,8 @@ struct fts_ts_data {
 #endif
 
 //Holt_Hu 20160913+
-#if 0
+
 	unsigned int buttonmode;
-#endif
 	unsigned int touch_enable;
 	unsigned int glovemode;
 //for diffrent function IC
@@ -470,6 +473,15 @@ struct fts_ts_data {
 	struct fts_rw_i2c_dev *fts_rw_i2c_dev_tt;
 
 //Holt_Hu 20160913-
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ++++++
+#ifdef ZD552KL_PHOENIX
+#ifdef ASUS_FACTORY_BUILD
+	struct delayed_work led_delay_work;
+	struct workqueue_struct *led_wq;
+#endif
+#endif
+//<ASUS-BSP Robert_He 20170405> add capsensor vkled function ------
+
 
 };
 
@@ -505,33 +517,33 @@ extern int fetch_object_sample(unsigned char *buf,short pointnum);
 extern void init_para(int x_pixel,int y_pixel,int time_slot,int cut_x_pixel,int cut_y_pixel);
 
 //upgrade functions
-extern void fts_update_fw_vendor_id(struct fts_ts_data *data);
-extern void fts_update_fw_ver(struct fts_ts_data *data);
+extern void fts_update_fw_vendor_id_cap_sensors(struct fts_ts_data *data);
+extern void fts_update_fw_ver_cap_sensors(struct fts_ts_data *data);
 extern void fts_get_upgrade_array(struct fts_ts_data *data);
-extern int fts_ctpm_auto_upgrade(struct i2c_client *client);
+extern int fts_ctpm_auto_upgrade_cap_sensors(struct i2c_client *client);
 extern int fts_fw_upgrade(struct device *dev, bool force);
-extern int fts_ctpm_auto_clb(struct i2c_client *client);
+extern int fts_ctpm_auto_clb_cap_sensors(struct i2c_client *client);
 extern int fts_ctpm_fw_upgrade_with_app_file(struct i2c_client *client, char *firmware_name);
 extern int fts_ctpm_fw_upgrade_with_i_file(struct i2c_client *client);
 extern int fts_ctpm_get_i_file_ver(struct i2c_client *client);
 
 #ifdef FTS_APK_DEBUG
 //Apk and functions
-extern int fts_create_apk_debug_channel(struct i2c_client * client);
-extern void fts_release_apk_debug_channel(struct i2c_client * client);
+extern int fts_create_apk_debug_channel_cap_sensors(struct i2c_client * client);
+extern void fts_release_apk_debug_channel_cap_sensors(struct i2c_client * client);
 #endif
 
 //ADB functions
-extern int fts_create_sysfs(struct i2c_client *client);
-extern int fts_remove_sysfs(struct i2c_client *client);
+extern int fts_create_sysfs_cap_sensors(struct i2c_client *client);
+extern int fts_remove_sysfs_cap_sensors(struct i2c_client *client);
 
 //char device for old apk
 extern int fts_rw_iic_drv_init(struct i2c_client *client);
 extern void  fts_rw_iic_drv_exit(struct i2c_client *client);
 
 //Base functions
-extern int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *readbuf, int readlen);
-extern int fts_i2c_write(struct i2c_client *client, char *writebuf, int writelen);
+extern int fts_i2c_read_cap_sensors(struct i2c_client *client, char *writebuf, int writelen, char *readbuf, int readlen);
+extern int fts_i2c_write_cap_sensors(struct i2c_client *client, char *writebuf, int writelen);
 extern int fts_read_reg(struct i2c_client *client, u8 addr, u8 *val);
 extern int fts_write_reg(struct i2c_client *client, u8 addr, const u8 val);
 
