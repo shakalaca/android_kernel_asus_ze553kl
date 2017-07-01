@@ -4,7 +4,6 @@
 #include <linux/kernel.h>
 #include <asm/uaccess.h>
 
-
 #undef  pr_fmt
 #define pr_fmt(fmt) " [sz_cam_ois] UTILS %s() " fmt, __func__
 
@@ -46,35 +45,29 @@ int64_t diff_time_us(struct timeval *t1, struct timeval *t2 )
 	return (((t1->tv_sec*1000000)+t1->tv_usec)-((t2->tv_sec*1000000)+t2->tv_usec));
 }
 
-uint64_t get_file_size(const char *filename)
+int32_t get_file_size(const char *filename, uint64_t* size)
 {
     struct kstat stat;
-    int rc;
-
-	mm_segment_t fs;
-	struct file *fp;
+    mm_segment_t fs;
+    int rc = 0;
 
 	stat.size = 0;
 
-    fp =filp_open(filename,O_RDONLY,S_IRWXU | S_IRWXG | S_IRWXO);
-    if (IS_ERR(fp)){
-		pr_err("open(%s) failed, rc = %d\n",filename,rc);
-        return -1;
-    }
-    fs =get_fs();
+    fs = get_fs();
     set_fs(KERNEL_DS);
-
 
 	rc = vfs_stat(filename,&stat);
 	if(rc < 0)
 	{
 		pr_err("vfs_stat(%s) failed, rc = %d\n",filename,rc);
+		rc = -1;
+		goto END;
 	}
 
+    *size = stat.size;
+END:
 	set_fs(fs);
-    filp_close(fp,NULL);
-
-    return stat.size;
+    return rc;
 }
 
 int read_file_into_buffer(const char *filename, uint8_t* data, uint32_t size)
@@ -84,16 +77,16 @@ int read_file_into_buffer(const char *filename, uint8_t* data, uint32_t size)
     loff_t pos;
 	int rc;
 
-    fp =filp_open(filename,O_RDONLY,S_IRWXU | S_IRWXG | S_IRWXO);
+    fp = filp_open(filename,O_RDONLY,S_IRWXU | S_IRWXG | S_IRWXO);
     if (IS_ERR(fp)){
 		pr_err("open(%s) failed, rc = %d\n",filename,rc);
         return -1;
     }
 
-    fs =get_fs();
+    fs = get_fs();
     set_fs(KERNEL_DS);
 
-    pos =0;
+    pos = 0;
 	rc = vfs_read(fp,data, size, &pos);
 
     set_fs(fs);
@@ -102,7 +95,7 @@ int read_file_into_buffer(const char *filename, uint8_t* data, uint32_t size)
     return rc;
 }
 
-bool sysfs_write_byte_seq(char *filename, uint8_t *value, uint32_t size)
+int sysfs_write_byte_seq(char *filename, uint8_t *value, uint32_t size)
 {
 	struct file *fp = NULL;
 	int i = 0;
@@ -118,8 +111,8 @@ bool sysfs_write_byte_seq(char *filename, uint8_t *value, uint32_t size)
 	/* Open file */
 	fp = filp_open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (IS_ERR_OR_NULL(fp)) {
-		pr_err("%s: openfail line = %d\n", __func__, __LINE__);
-		return false;
+		pr_err("%s: open %s fail, line = %d\n", __func__, filename, __LINE__);
+		return -1;
 	}
 
 	/*For purpose that can use read/write system call*/
@@ -142,14 +135,14 @@ bool sysfs_write_byte_seq(char *filename, uint8_t *value, uint32_t size)
 		filp_close(fp, NULL);
 		pr_err("%s: f_op = null or write = null, fail line = %d\n", __func__, __LINE__);
 
-		return false;
+		return -1;
 	}
 	/* Set addr_limit of the current process back to its own */
 	set_fs(old_fs);
 
 	/* Close file */
 	filp_close(fp, NULL);
-	return true;
+	return 0;
 }
 
 /** @brief read many word(two bytes) from file
@@ -170,6 +163,7 @@ int sysfs_read_word_seq(char *filename, int *value, uint32_t size)
 	/* open file */
 	fp = filp_open(filename, O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (IS_ERR_OR_NULL(fp)) {
+		pr_err("%s: open %s fail, line = %d\n", __func__, filename, __LINE__);
 		return -ENOENT;	/*No such file or directory*/
 	}
 
@@ -212,7 +206,67 @@ int sysfs_read_word_seq(char *filename, int *value, uint32_t size)
 
 	return 0;
 }
+/** @brief read many dword(four bytes) from file
+*
+*	@param filename the file to write
+*	@param value the word which will store the calibration data from read file
+*	@param size the size of write data
+*
+*/
+int sysfs_read_dword_seq(char *filename, int *value, uint32_t size)
+{
+	int i = 0;
+	struct file *fp = NULL;
+	mm_segment_t old_fs;
+	loff_t pos_lsts = 0;
+	char buf[size][9];
+	ssize_t buf_size = 0;
+	/* open file */
+	fp = filp_open(filename, O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
+	if (IS_ERR_OR_NULL(fp)) {
+		pr_err("%s: open %s fail, line = %d\n", __func__, filename, __LINE__);
+		return -ENOENT;	/*No such file or directory*/
+	}
 
+	/*For purpose that can use read/write system call*/
+
+	/* Save addr_limit of the current process */
+	old_fs = get_fs();
+	/* Set addr_limit of the current process to that of kernel */
+	set_fs(KERNEL_DS);
+
+	if (fp->f_op != NULL && fp->f_op->read != NULL) {
+		pos_lsts = 0;
+		for(i = 0; i < size; i++){
+			buf_size = fp->f_op->read(fp, buf[i], 9, &pos_lsts);
+			if(buf_size < 9) {
+				/* Set addr_limit of the current process back to its own */
+				set_fs(old_fs);
+				/* close file */
+				filp_close(fp, NULL);
+				return -1;
+			}
+			buf[i][8]='\0';
+			sscanf(buf[i], "%x", &value[i]);
+		}
+	} else {
+		/* Set addr_limit of the current process back to its own */
+		set_fs(old_fs);
+
+		/* close file */
+		filp_close(fp, NULL);
+		pr_err("%s: f_op = null or write = null, fail line = %d\n", __func__, __LINE__);
+
+		return -ENXIO;	/*No such device or address*/
+	}
+	/* Set addr_limit of the current process back to its own */
+	set_fs(old_fs);
+
+	/* close file */
+	filp_close(fp, NULL);
+
+	return 0;
+}
 /** @brief read many byte from file
 *
 *	@param filename the file to write
@@ -232,6 +286,7 @@ int sysfs_read_byte_seq(char *filename, uint8_t *value, uint32_t size)
 	/* open file */
 	fp = filp_open(filename, O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (IS_ERR_OR_NULL(fp)) {
+		pr_err("%s: open %s fail, line = %d\n", __func__, filename, __LINE__);
 		return -ENOENT;	/*No such file or directory*/
 	}
 
@@ -268,7 +323,7 @@ int sysfs_read_byte_seq(char *filename, uint8_t *value, uint32_t size)
 	/* close file */
 	filp_close(fp, NULL);
 
-	return i;
+	return 0;
 }
 
 
@@ -279,7 +334,7 @@ int sysfs_read_byte_seq(char *filename, uint8_t *value, uint32_t size)
 *	@param size the size of write data
 *
 */
-bool sysfs_write_word_seq(char *filename, uint16_t *value, uint32_t size)
+int sysfs_write_word_seq(char *filename, uint16_t *value, uint32_t size)
 {
 	struct file *fp = NULL;
 	int i = 0;
@@ -295,8 +350,8 @@ bool sysfs_write_word_seq(char *filename, uint16_t *value, uint32_t size)
 	/* Open file */
 	fp = filp_open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (IS_ERR_OR_NULL(fp)) {
-		pr_err("%s: openfail line = %d\n", __func__, __LINE__);
-		return false;
+		pr_err("%s: open %s fail, line = %d\n", __func__, filename, __LINE__);
+		return -1;
 	}
 
 	/*For purpose that can use read/write system call*/
@@ -319,14 +374,71 @@ bool sysfs_write_word_seq(char *filename, uint16_t *value, uint32_t size)
 		filp_close(fp, NULL);
 		pr_err("%s: f_op = null or write = null, fail line = %d\n", __func__, __LINE__);
 
-		return false;
+		return -1;
 	}
 	/* Set addr_limit of the current process back to its own */
 	set_fs(old_fs);
 
 	/* Close file */
 	filp_close(fp, NULL);
-	return true;
+	return 0;
+}
+
+/** @brief write many dwords(four bytes)  to file
+*
+*	@param filename the file to write
+*	@param value the word which will be written to file
+*	@param size the size of write data
+*
+*/
+int sysfs_write_dword_seq(char *filename, uint32_t *value, uint32_t size)
+{
+	struct file *fp = NULL;
+	int i = 0;
+	mm_segment_t old_fs;
+	loff_t pos_lsts = 0;
+	char buf[size][9];
+
+	for(i=0; i<size; i++){
+		sprintf(buf[i], "%08x", value[i]);
+		buf[i][8] = ' ';
+	}
+
+	/* Open file */
+	fp = filp_open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
+	if (IS_ERR_OR_NULL(fp)) {
+		pr_err("%s: open %s fail, line = %d\n", __func__, filename, __LINE__);
+		return -1;
+	}
+
+	/*For purpose that can use read/write system call*/
+
+	/* Save addr_limit of the current process */
+	old_fs = get_fs();
+	/* Set addr_limit of the current process to that of kernel */
+	set_fs(KERNEL_DS);
+
+	if (fp->f_op != NULL && fp->f_op->write != NULL) {
+		pos_lsts = 0;
+		for(i = 0; i < size; i++){
+			fp->f_op->write(fp, buf[i], 9, &fp->f_pos);
+		}
+	} else {
+		/* Set addr_limit of the current process back to its own */
+		set_fs(old_fs);
+
+		/* Close file */
+		filp_close(fp, NULL);
+		pr_err("%s: f_op = null or write = null, fail line = %d\n", __func__, __LINE__);
+
+		return -1;
+	}
+	/* Set addr_limit of the current process back to its own */
+	set_fs(old_fs);
+
+	/* Close file */
+	filp_close(fp, NULL);
+	return 0;
 }
 
 int sysfs_read_char_seq(char *filename, int *value, uint32_t size)
@@ -341,6 +453,7 @@ int sysfs_read_char_seq(char *filename, int *value, uint32_t size)
 	/* open file */
 	fp = filp_open(filename, O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (IS_ERR_OR_NULL(fp)) {
+		pr_err("%s: open %s fail, line = %d\n", __func__, filename, __LINE__);
 		return -ENOENT;	/*No such file or directory*/
 	}
 
@@ -378,10 +491,10 @@ int sysfs_read_char_seq(char *filename, int *value, uint32_t size)
 	/* close file */
 	filp_close(fp, NULL);
 
-	return i;
+	return 0;
 }
 
-bool sysfs_write_word_seq_change_line(char *filename, uint16_t *value, uint32_t size,uint32_t number)
+int sysfs_write_word_seq_change_line(char *filename, uint16_t *value, uint32_t size,uint32_t number)
 {
 	struct file *fp = NULL;
 	int i = 0;
@@ -392,8 +505,8 @@ bool sysfs_write_word_seq_change_line(char *filename, uint16_t *value, uint32_t 
 	/* Open file */
 	fp = filp_open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (IS_ERR_OR_NULL(fp)) {
-		pr_err("%s: openfail line = %d\n", __func__, __LINE__);
-		return false;
+		pr_err("%s: open %s fail, line = %d\n", __func__, filename, __LINE__);
+		return -1;
 	}
 
 	/*For purpose that can use read/write system call*/
@@ -421,14 +534,14 @@ bool sysfs_write_word_seq_change_line(char *filename, uint16_t *value, uint32_t 
 		filp_close(fp, NULL);
 		pr_err("%s: f_op = null or write = null, fail line = %d\n", __func__, __LINE__);
 
-		return false;
+		return -1;
 	}
 	/* Set addr_limit of the current process back to its own */
 	set_fs(old_fs);
 
 	/* Close file */
 	filp_close(fp, NULL);
-	return true;
+	return 0;
 }
 
 /*ASUS_BSP --- bill_chen "Implement ois"*/
@@ -528,7 +641,7 @@ bool i2c_seq_setting_contain_address(struct msm_camera_i2c_seq_reg_setting* i2c_
 
 		if(reg_addr >= start_addr  && reg_addr <= start_addr + data_size - 1 )
 		{
-			*reg_val = i2c_seq_setting->reg_setting[i].reg_data[reg_addr-reg_addr];
+			*reg_val = i2c_seq_setting->reg_setting[i].reg_data[reg_addr-start_addr];
 			pr_debug("settings[%d], start addr 0x%04x, offset %d, max 0x%04x, contains target reg 0x%04x, val 0x%02x\n",
 				i,
 				start_addr,
@@ -542,4 +655,34 @@ bool i2c_seq_setting_contain_address(struct msm_camera_i2c_seq_reg_setting* i2c_
 		}
 	}
 	return rc;
+}
+
+void fix_i2c_seq_setting(struct msm_camera_i2c_seq_reg_setting* i2c_seq_setting, uint16_t reg_addr, uint8_t set_val)
+{
+	int i;
+	uint16_t start_addr;
+	uint16_t data_size;
+	uint8_t  original_value;
+
+	for(i=0;i<i2c_seq_setting->size;i++)
+	{
+		start_addr = i2c_seq_setting->reg_setting[i].reg_addr;
+		data_size = i2c_seq_setting->reg_setting[i].reg_data_size;
+
+		if(reg_addr >= start_addr  && reg_addr <= start_addr + data_size - 1 )
+		{
+			original_value = i2c_seq_setting->reg_setting[i].reg_data[reg_addr-start_addr];
+			i2c_seq_setting->reg_setting[i].reg_data[reg_addr-start_addr] = set_val;
+			pr_info("settings[%d], start addr 0x%04x, offset %d, max 0x%04x, contains target reg 0x%04x, val 0x%02x --> 0x%02x\n",
+				i,
+				start_addr,
+				data_size,
+				start_addr + data_size - 1,
+				reg_addr,
+				original_value,
+				set_val
+			);
+			break;
+		}
+	}
 }

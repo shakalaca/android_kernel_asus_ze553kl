@@ -36,8 +36,8 @@
 				regulator-name = "pon_spare_reg";
 				qcom,pon-spare-reg-addr = <0x8c>;
 				qcom,pon-spare-reg-bit = <1>;
-				regulator-boot-on;
-				regulator-always-on;
+                                regulator-boot-on;
+                                regulator-always-on;
 			};
 		};
 
@@ -696,7 +696,7 @@
 			qcom,wave-samples = [3e 3e 3e 3e 3e 3e 3e 3e];
 			qcom,wave-rep-cnt = <1>;
 			qcom,wave-samp-rep-cnt = <1>;
-			vcc_pon-supply = <&pon_perph_reg>;
+                        vcc_pon-supply=<&pon_perph_reg>;
 		};
 	};
 };

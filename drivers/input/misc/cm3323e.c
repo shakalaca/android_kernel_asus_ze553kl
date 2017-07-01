@@ -346,8 +346,8 @@ static int rgbsensor_enable(struct cm3323e_info *lpi)
 		"[LS][CM3323E error]%s: set auto rgb sensor fail\n",
 		__func__);
 	} else {
-		msleep(delay_time);/*wait for 200 ms for the first report*/	
-		report_lsensor_input_event(lpi, 1);/*resume, IOCTL and DEVICE_ATTR*/	
+		//msleep(delay_time);/*wait for 200 ms for the first report*/	
+		//report_lsensor_input_event(lpi, 1);/*resume, IOCTL and DEVICE_ATTR*/	
 	}
 	
 	queue_delayed_work(lpi->lp_wq, &report_work, lpi->polling_delay);

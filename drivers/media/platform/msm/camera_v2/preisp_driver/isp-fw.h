@@ -16,6 +16,7 @@
 #define __ISP_FIRMWARE_H__
 
 #include <linux/types.h>
+#include <linux/firmware.h>
 #include "spi2apb.h"
 
 #define RKL_MAX_SECTION_NUM 10

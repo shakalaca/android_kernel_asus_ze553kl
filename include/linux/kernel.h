@@ -548,6 +548,7 @@ enum ftrace_dump_mode {
 extern int asus_lcd_id;
 extern int asus_project_id;
 extern int asus_hw_id;
+extern int asus_mp_id;
 extern int asus_rf_id;
 extern int asus_fp_id;
 

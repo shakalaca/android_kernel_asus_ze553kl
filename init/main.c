@@ -249,13 +249,16 @@ __setup("ASUS_FP_ID=",set_asus_fp_id);
 
 
 int asus_hw_id = 0;
+int asus_mp_id=0;
 EXPORT_SYMBOL(asus_hw_id);
+EXPORT_SYMBOL(asus_mp_id);
 
 static int set_hw_id(char *str)
 {
 	if(strcmp("0",str) == 0)
 	{
-		asus_hw_id = ASUS_EVB;
+		asus_hw_id = ASUS_MP;
+		asus_mp_id = 2;
 	}
 	else if(strcmp("1",str) == 0)
 	{
@@ -280,7 +283,13 @@ static int set_hw_id(char *str)
 	else if(strcmp("7",str) == 0)
 	{
 		asus_hw_id = ASUS_MP;
-	}	
+		asus_mp_id = 0;
+	}
+	else if(strcmp("3",str) == 0)
+	{
+		asus_hw_id = ASUS_MP;
+		asus_mp_id = 1;
+	}
 	
 	return 0;
 }

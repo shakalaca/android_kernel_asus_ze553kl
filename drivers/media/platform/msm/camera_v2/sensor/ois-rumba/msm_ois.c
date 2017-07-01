@@ -368,12 +368,14 @@ static int32_t msm_ois_power_down(struct msm_ois_ctrl_t *o_ctrl)
 	CDBG("Enter\n");
 	pr_info("%s: E\n", __func__);  /*ASUS_BSP bill_chen "Implement ois"*/
 	if (o_ctrl->ois_state != OIS_DISABLE_STATE) {
-
+		pr_info("Servo off ...\n");
+		rumba_servo_go_off(o_ctrl);
 		rc = msm_ois_vreg_control(o_ctrl, 0);
 		if (rc < 0) {
 			pr_err("%s failed %d\n", __func__, __LINE__);
 			return rc;
 		}
+
 #if 0
 		for (gpio = SENSOR_GPIO_AF_PWDM; gpio < SENSOR_GPIO_MAX;
 			gpio++) {
@@ -523,13 +525,27 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 			pr_err("Failed ois power up%d\n", rc);
 		break;
 	case CFG_OIS_CONTROL:
+
+		if(g_ois_reg_fw_version == 0x1163)
+		{
+			pr_info("CFG_OIS_CONTROL OIS has bad FW, not write any setting ...");
+			break;
+		}
+
 		rc = msm_ois_control(o_ctrl, &cdata->cfg.set_info);
 		if (rc < 0)
 			pr_err("Failed ois control%d\n", rc);
 		break;
 	case CFG_OIS_I2C_WRITE_SEQ_TABLE: {
+
 		struct msm_camera_i2c_seq_reg_setting conf_array;
 		struct msm_camera_i2c_seq_reg_array *reg_setting = NULL;
+
+		if(g_ois_reg_fw_version == 0x1163)
+		{
+			pr_info("CFG_OIS_I2C_WRITE_SEQ_TABLE OIS has bad FW, not write any setting ...");
+			break;
+		}
 
 #ifdef CONFIG_COMPAT
 		if (is_compat_task()) {
@@ -571,6 +587,7 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 		if(is_i2c_seq_setting_address_valid(&conf_array,0x04FC))
 		{
 			conf_array.reg_setting = reg_setting;
+
 			rc = o_ctrl->i2c_client.i2c_func_tbl->
 				i2c_write_seq_table(&o_ctrl->i2c_client,
 				&conf_array);
@@ -641,6 +658,13 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 	/*ASUS_BSP +++ bill_chen "Implement ois command for dit 3A"*/
 	case CFG_OIS_I2C_WRITE_MODE: {
 		struct msm_camera_i2c_seq_reg_setting conf_array;
+
+		if(g_ois_reg_fw_version == 0x1163)
+		{
+			pr_info("CFG_OIS_I2C_WRITE_MODE OIS has bad FW, not write any setting ...");
+			break;
+		}
+
 #ifdef CONFIG_COMPAT
 		if (is_compat_task()) {
 			memcpy(&conf_array,
@@ -823,11 +847,13 @@ static int32_t msm_ois_power_up(struct msm_ois_ctrl_t *o_ctrl)
 	CDBG("%s called\n", __func__);
 	pr_info("%s: E\n", __func__);  /*ASUS_BSP bill_chen "Implement ois"*/
 
+
 	rc = msm_ois_vreg_control(o_ctrl, 1);
 	if (rc < 0) {
 		pr_err("%s failed %d\n", __func__, __LINE__);
 		return rc;
 	}
+
 #if 0
 	for (gpio = SENSOR_GPIO_AF_PWDM;
 		gpio < SENSOR_GPIO_MAX; gpio++) {
@@ -856,6 +882,7 @@ static int32_t msm_ois_power_up(struct msm_ois_ctrl_t *o_ctrl)
 		}
 	}
 #endif
+	delay_ms(130);//wait 100ms for OIS and 30ms for I2C
 	o_ctrl->ois_state = OIS_ENABLE_STATE;
 	g_ois_power_state = 1;
 	g_ois_mode = 0;//servo_off
@@ -1124,7 +1151,6 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 	}
 #endif
 	/*ASUS_BSP --- bill_chen "Implement ois"*/
-	msm_ois_t->ois_v4l2_subdev_ops = &msm_ois_subdev_ops;
 	msm_ois_t->ois_mutex = &msm_ois_mutex;
 
 	/* Set platform device handle */
@@ -1144,28 +1170,7 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 	cci_client = msm_ois_t->i2c_client.cci_client;
 	cci_client->cci_subdev = msm_cci_get_subdev();
 	cci_client->cci_i2c_master = msm_ois_t->cci_master;
-	v4l2_subdev_init(&msm_ois_t->msm_sd.sd,
-		msm_ois_t->ois_v4l2_subdev_ops);
-	v4l2_set_subdevdata(&msm_ois_t->msm_sd.sd, msm_ois_t);
-	msm_ois_t->msm_sd.sd.internal_ops = &msm_ois_internal_ops;
-	msm_ois_t->msm_sd.sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
-	snprintf(msm_ois_t->msm_sd.sd.name,
-		ARRAY_SIZE(msm_ois_t->msm_sd.sd.name), "msm_ois");
-	media_entity_init(&msm_ois_t->msm_sd.sd.entity, 0, NULL, 0);
-	msm_ois_t->msm_sd.sd.entity.type = MEDIA_ENT_T_V4L2_SUBDEV;
-	msm_ois_t->msm_sd.sd.entity.group_id = MSM_CAMERA_SUBDEV_OIS;
-	msm_ois_t->msm_sd.close_seq = MSM_SD_CLOSE_2ND_CATEGORY | 0x2;
-	rc = msm_sd_register(&msm_ois_t->msm_sd);
-	if(rc < 0)
-		pr_err("msm_sd_register ois failed!\n");
-	msm_ois_t->ois_state = OIS_DISABLE_STATE;
-	msm_cam_copy_v4l2_subdev_fops(&msm_ois_v4l2_subdev_fops);
-#ifdef CONFIG_COMPAT
-	msm_ois_v4l2_subdev_fops.compat_ioctl32 =
-		msm_ois_subdev_fops_ioctl;
-#endif
-	msm_ois_t->msm_sd.sd.devnode->fops =
-		&msm_ois_v4l2_subdev_fops;
+
 
 	msm_ois_t->oboard_info = kzalloc(sizeof(
 		struct msm_ois_board_info), GFP_KERNEL);
@@ -1234,13 +1239,20 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 		delay_ms(130);//wait 100ms for OIS and 30ms for I2C
 
 		rc = msm_ois_check_id(msm_ois_t);
-		if (rc < 0) {
+		if(rc < 0)
+		{
 			pr_err("%s msm_ois_check_id fail %d rc = %d\n", __func__, __LINE__, rc);
 			g_ois_status = 0;
 			//goto power_down;
-		} else {
+		}
+		else if(rc == 1)
+		{
+			pr_info("Maybe FW update failed earlier?\n");
+			g_ois_status = 2;//OIS FW Update Failed...
+		}
+		else
+		{
 			g_ois_status = 1;
-
 		}
 		pr_info("%s g_ois_status = %d\n", __func__, g_ois_status);
 
@@ -1254,7 +1266,39 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 	}
 
 	asus_ois_init(msm_ois_t_pointer);
-    pr_info("%s: rc = %d X", __func__, rc);
+
+	if(g_ois_status != 0)
+	{
+		msm_ois_t->ois_v4l2_subdev_ops = &msm_ois_subdev_ops;
+		v4l2_subdev_init(&msm_ois_t->msm_sd.sd,
+			msm_ois_t->ois_v4l2_subdev_ops);
+		v4l2_set_subdevdata(&msm_ois_t->msm_sd.sd, msm_ois_t);
+		msm_ois_t->msm_sd.sd.internal_ops = &msm_ois_internal_ops;
+		msm_ois_t->msm_sd.sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
+		snprintf(msm_ois_t->msm_sd.sd.name,
+			ARRAY_SIZE(msm_ois_t->msm_sd.sd.name), "msm_ois");
+		media_entity_init(&msm_ois_t->msm_sd.sd.entity, 0, NULL, 0);
+		msm_ois_t->msm_sd.sd.entity.type = MEDIA_ENT_T_V4L2_SUBDEV;
+		msm_ois_t->msm_sd.sd.entity.group_id = MSM_CAMERA_SUBDEV_OIS;
+		msm_ois_t->msm_sd.close_seq = MSM_SD_CLOSE_2ND_CATEGORY | 0x2;
+		rc = msm_sd_register(&msm_ois_t->msm_sd);
+		if(rc < 0)
+			pr_err("msm_sd_register ois failed!\n");
+		msm_ois_t->ois_state = OIS_DISABLE_STATE;
+		msm_cam_copy_v4l2_subdev_fops(&msm_ois_v4l2_subdev_fops);
+	#ifdef CONFIG_COMPAT
+		msm_ois_v4l2_subdev_fops.compat_ioctl32 =
+			msm_ois_subdev_fops_ioctl;
+	#endif
+		msm_ois_t->msm_sd.sd.devnode->fops =
+			&msm_ois_v4l2_subdev_fops;
+	}
+    else
+    {
+		rc = -1;
+		pr_err("probe failed, not create v4l2 node\n");
+	}
+	pr_info("%s: rc = %d X", __func__, rc);
 	return rc;
 release_memory:
 	kfree(msm_ois_t->oboard_info);
@@ -1320,30 +1364,43 @@ static int32_t msm_ois_check_id(struct msm_ois_ctrl_t *o_ctrl) {
 	uint16_t chipid = 0;
 	uint32_t fw_version = 0;
 	uint16_t hw_id = 0;
+	int is_fw_bad = 0;
 	rc = rumba_read_byte(o_ctrl,o_ctrl->sensor_id_reg_addr,&chipid);
 
-    pr_info("%s: read id: 0x%x expected: 0x%x\n", __func__, chipid, o_ctrl->sensor_id);
+    pr_info("read id: 0x%x expected: 0x%x\n",chipid, o_ctrl->sensor_id);
 
     if(rc < 0) {
-        pr_err("%s: ois read i2c id fail!", __func__);
+        pr_err("ois read i2c id fail!");
+        rc = -EFAULT;
 		goto OIS_CHECK_FAIL;
     }
 
-    if(chipid != o_ctrl->sensor_id) {
-        pr_err("%s: ois sensor id not match!\n", __func__);
-		rc = -EFAULT;
-        goto OIS_CHECK_FAIL;
+    if(chipid != o_ctrl->sensor_id)
+    {
+        pr_err("ois sensor id not match!\n");
+        if( chipid == 0x80 )
+        {
+			pr_info("FW update failed earlier? for chipid == 0x80\n");
+			is_fw_bad = 1;
+		}
+        else
+        {
+			rc = -EFAULT;
+			goto OIS_CHECK_FAIL;
+		}
     }
+
 	rc = rumba_read_dword(o_ctrl,0x00FC,&fw_version);
 	if(rc == 0)
 	{
-		pr_info("%s: FW revision 0x%4X\n",__func__,fw_version);
+		pr_info("FW revision 0x%4X %d\n",fw_version,fw_version);
+		g_ois_reg_fw_version = fw_version;
 		rc = rumba_read_word(o_ctrl,0x00F8,&hw_id);
 		if(rc == 0)
-			pr_info("%s: HW ID 0x%4X\n",__func__,hw_id);
+			pr_info("HW ID 0x%4X\n",hw_id);
 	}
-
-
+	if(is_fw_bad)
+		rc = 1;
 OIS_CHECK_FAIL:
     pr_err("%s: rc = %d X\n", __func__, rc);
     return rc;

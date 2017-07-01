@@ -22,7 +22,7 @@ static struct msm_ois_ctrl_t * ois_ctrl = NULL;
 #define	PROC_OIS_DATA	"driver/ois_data"
 #define	PROC_DEVICE	"driver/ois_device"
 #define PROC_FW_UPDATE "driver/ois_fw_update"
-
+#define PROC_FW_REV "driver/ois_fw_rev"
 
 #define PROC_SENSOR_I2C_RW "driver/sensor_i2c_rw"
 #define PROC_EEPROM_I2C_R "driver/eeprom_i2c_r"
@@ -34,11 +34,16 @@ static struct msm_ois_ctrl_t * ois_ctrl = NULL;
 #define OIS_GYRO_K_OUTPUT_FILE_OLD "/factory/OIS_calibration_old"
 #define OIS_GYRO_K_OUTPUT_FILE_NEW "/factory/OIS_calibration"
 
-unsigned char g_ois_status = 0;
+#define OIS_FW_VERSION_BACK_UP "/factory/OIS_FW_BACK_UP_VERSION"
+#define OIS_FW_UPDATE_TIMES "/factory/OIS_FW_UPDATE_TIMES"
+
+unsigned char g_ois_status = 1;
 
 uint8_t g_ois_power_state = 0;
 
 uint8_t g_ois_mode = 0;
+
+uint32_t g_ois_reg_fw_version = 0x1163;//default set fw update failed value
 
 static char ois_subdev_string[32] = "";
 
@@ -62,6 +67,25 @@ static uint8_t g_camera_sensor_operation;
 
 static uint16_t g_eeprom_reg_addr = 0x1EB1;//gyro calibration flag by SEMCO
 
+static void ois_block_other_i2c(int enable)
+{
+	if(enable)
+	{
+		Laser_set_enforce_value(300);
+		Laser_switch_measure_mode(0);
+		g_ois_i2c_block_other = 1;
+		pr_info("I2C communication blocked by OIS\n");
+	}
+	else
+	{
+		g_ois_i2c_block_other = 0;
+		Laser_switch_measure_mode(1);
+		Laser_set_enforce_value(0);
+		pr_info("I2C communication return normal\n");
+	}
+
+}
+
 static int ois_probe_status_proc_read(struct seq_file *buf, void *v)
 {
 	mutex_lock(ois_ctrl->ois_mutex);
@@ -80,6 +104,30 @@ static int ois_probe_status_proc_open(struct inode *inode, struct file *file)
 static const struct file_operations ois_probe_status_fops = {
 	.owner = THIS_MODULE,
 	.open = ois_probe_status_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+
+static int ois_fw_rev_proc_read(struct seq_file *buf, void *v)
+{
+	mutex_lock(ois_ctrl->ois_mutex);
+
+	seq_printf(buf, "0x%x %d\n", g_ois_reg_fw_version,g_ois_reg_fw_version);
+
+	mutex_unlock(ois_ctrl->ois_mutex);
+	return 0;
+}
+
+static int ois_fw_rev_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, ois_fw_rev_proc_read, NULL);
+}
+
+static const struct file_operations ois_fw_rev_fops = {
+	.owner = THIS_MODULE,
+	.open = ois_fw_rev_proc_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = single_release,
@@ -185,18 +233,15 @@ static ssize_t ois_i2c_block_proc_write(struct file *filp, const char __user *bu
 	switch(val)
 	{
 		case 0:
-			Laser_set_enforce_value(0);
-			Laser_switch_measure_mode(1);
-			g_ois_i2c_block_other = 0;
+			ois_block_other_i2c(0);
 			break;
 		case 1:
-			Laser_switch_measure_mode(0);
-			Laser_set_enforce_value(300);
-			g_ois_i2c_block_other = 1;
+			ois_block_other_i2c(1);
 			break;
 		default:
-			g_ois_i2c_block_other = 0;
+			ois_block_other_i2c(0);
 	}
+
 	mutex_unlock(ois_ctrl->ois_mutex);
 
 	pr_info("OIS I2C block changed to %d\n",g_ois_i2c_block_other);
@@ -855,9 +900,8 @@ static void test_file_read(const char* path)
 	uint64_t size;
 	uint8_t* pData = NULL;
 	int i;
-	size = get_file_size(path);
 
-	if(size > 0)
+	if(get_file_size(path,&size) == 0 && size > 0)
 	{
 		pData = kzalloc(sizeof(uint8_t)*size,GFP_KERNEL);
 		if (!pData)
@@ -944,17 +988,33 @@ static int ois_gyro_open(struct inode *inode, struct file *file)
 	return single_open(file, ois_gyro_read, NULL);
 }
 
-static ssize_t ois_gyro_write(struct file *dev, const char *buf, size_t count, loff_t *ppos)
+static ssize_t ois_gyro_write(struct file *dev, const char *buff, size_t len, loff_t *ppos)
 {
-	int rc;
 	int old_servo_state;
 	uint8_t * pOldData;
+
+	char messages[16]="";
+	int16_t val1,val2;
+	ssize_t rc;
+
 	pOldData = kzalloc(sizeof(uint8_t)*1024,GFP_KERNEL);
 	if (!pOldData)
 	{
 		pr_err("no memory!\n");
-		return count;
+		return len;
 	}
+
+	rc = len;
+
+	if (len > 16) {
+		len = 16;
+	}
+	if (copy_from_user(messages, buff, len)) {
+		pr_err("%s command fail !!\n", __func__);
+		return -EFAULT;
+	}
+
+	sscanf(messages,"%hd %hd",&val1,&val2);
 
 	mutex_lock(ois_ctrl->ois_mutex);
 
@@ -962,7 +1022,13 @@ static ssize_t ois_gyro_write(struct file *dev, const char *buf, size_t count, l
 
 	rumba_servo_go_off(ois_ctrl);
 
-#if 1
+	pr_info("Get gyro offset limit [%hd %hd]\n",val1,val2);
+
+	rumba_write_word(ois_ctrl,0x0244,(uint16_t)val1);//Max
+	rumba_write_word(ois_ctrl,0x0246,(uint16_t)val2);//Min
+
+	rumba_check_flash_write_result(ois_ctrl,OIS_DATA);
+#if 0
 	rumba_backup_data(ois_ctrl,0x0200,1024,pOldData);
 
 	rc = rumba_hall_calibration(ois_ctrl);
@@ -1088,7 +1154,7 @@ static ssize_t ois_gyro_write(struct file *dev, const char *buf, size_t count, l
 	mutex_unlock(ois_ctrl->ois_mutex);
 
 	kfree(pOldData);
-	return count;
+	return rc;
 }
 
 static const struct file_operations ois_gyro_proc_fops = {
@@ -1175,26 +1241,33 @@ static ssize_t ois_solo_power_write(struct file *filp, const char __user *buff, 
 	}
 	else
 	{
-		count ++;
-		if(count == 1)
+		if(g_ois_power_state == 0)
 		{
-			rc = msm_camera_power_up(&(ois_ctrl->oboard_info->power_info), ois_ctrl->ois_device_type,
-				&ois_ctrl->i2c_client);
+			count ++;
+			if(count == 1)
+			{
+				rc = msm_camera_power_up(&(ois_ctrl->oboard_info->power_info), ois_ctrl->ois_device_type,
+					&ois_ctrl->i2c_client);
 
-			if (rc) {
-				pr_err("%s: msm_camera_power_up fail rc = %d\n", __func__, rc);
+				if (rc) {
+					pr_err("%s: msm_camera_power_up fail rc = %d\n", __func__, rc);
+				}
+				else
+				{
+					g_ois_power_state = 1;
+					delay_ms(130);//wait 100ms for OIS and 30ms for I2C
+					rumba_set_i2c_mode(ois_ctrl,I2C_FAST_MODE);
+					pr_info("OIS POWER UP\n");
+				}
 			}
 			else
 			{
-				g_ois_power_state = 1;
-				delay_ms(130);//wait 100ms for OIS and 30ms for I2C
-				rumba_set_i2c_mode(ois_ctrl,I2C_FAST_MODE);
-				pr_info("OIS POWER UP\n");
+				pr_err("count is %d, not call power up!\n",count);
 			}
 		}
 		else
 		{
-			pr_err("count is %d, not call power up!\n",count);
+			pr_err("OIS power up, do nothing for powering up\n");
 		}
 	}
 	mutex_unlock(ois_ctrl->ois_mutex);
@@ -1408,11 +1481,9 @@ static int ois_rdata_proc_read(struct seq_file *buf, void *v)
 {
 	uint8_t* pText;
 	uint64_t size;
-
 	mutex_lock(ois_ctrl->ois_mutex);
 
-	size = get_file_size(RDATA_OUTPUT_FILE);
-	if(size > 0)
+	if(get_file_size(RDATA_OUTPUT_FILE,&size) == 0 && size > 0)
 	{
 		pText = kzalloc(sizeof(uint8_t)*size,GFP_KERNEL);
 		if (!pText)
@@ -1508,8 +1579,7 @@ static int ois_data_proc_read(struct seq_file *buf, void *v)
 
 	mutex_lock(ois_ctrl->ois_mutex);
 
-	size = get_file_size(OIS_DATA_OUTPUT_FILE);
-	if(size > 0)
+	if(get_file_size(OIS_DATA_OUTPUT_FILE,&size) == 0 && size > 0)
 	{
 		pText = kzalloc(sizeof(uint8_t)*size,GFP_KERNEL);
 		if (!pText)
@@ -1670,15 +1740,133 @@ static int ois_update_fw_open(struct inode *inode, struct file *file)
 	return single_open(file, ois_update_fw_read, NULL);
 }
 
+static int ois_fw_update(const char* fw_file_name,int force_update)
+{
+	int rc = 0;
+	uint32_t fw_update_times = 0;
+	uint32_t previous_fw_revision = 0;
+	uint32_t original_fw_revision = 0;
+	uint32_t fw_bin_revision;
+
+	//check fw update count
+	if(sysfs_read_dword_seq(OIS_FW_UPDATE_TIMES,&fw_update_times,1) == 0 && fw_update_times >= 100)
+	{
+		if(!force_update)
+		{
+			pr_err("fw has updated %d times, can not update anymore for safety\n",fw_update_times);
+			return -1;
+		}
+	}
+
+	rc = rumba_read_dword(ois_ctrl,0x00FC,&original_fw_revision);
+	if(original_fw_revision == 4451)
+	{
+		pr_info("previous fw updating failed ...\n");
+		rc = sysfs_read_dword_seq(OIS_FW_VERSION_BACK_UP,&previous_fw_revision,1);
+		if(rc == 0)
+		{
+			pr_info("get previous fw revision %d\n",previous_fw_revision);
+			original_fw_revision = previous_fw_revision;
+		}
+		else
+		{
+			pr_err("could not get origianl fw revision, open %s failed, can not update fw ...\n",OIS_FW_VERSION_BACK_UP);
+		}
+	}
+
+	if(rc == 0)
+	{
+		//check fw bin revision
+		rc = rumba_get_bin_fw_revision(fw_file_name,&fw_bin_revision);
+		if(rc < 0)
+		{
+			pr_err("could not get bin file %s fw revision, can not update fw ...\n",fw_file_name);
+		}
+	}
+	if(rc == 0)
+	{
+		//check if can update fw only for non 0x1163 revision
+		if(previous_fw_revision == 0 && !rumba_can_update_fw(original_fw_revision,fw_bin_revision,force_update))
+		{
+			pr_err("can not apply update fw from 0x%X %d --> 0x%X %d\n",
+					original_fw_revision,original_fw_revision,
+					fw_bin_revision,fw_bin_revision);
+			rc = -2;
+		}
+	}
+	if(rc == 0)
+	{
+		//back up original fw
+		rc = sysfs_write_dword_seq(OIS_FW_VERSION_BACK_UP,&original_fw_revision,1);
+		if(rc == 0)
+		{
+			pr_info("back up fw revision %d\n",original_fw_revision);
+		}
+		else
+		{
+			pr_err("back up fw revision %d failed! can not update fw ...\n",original_fw_revision);
+		}
+	}
+
+	if(rc != 0)
+	{
+		pr_err("error occurs, can not update FW\n");
+		goto END;
+	}
+
+	ois_block_other_i2c(1);
+
+	if(rc == 0)
+		rc = rumba_servo_go_off(ois_ctrl);
+	if(rc == 0)
+		rc = rumba_update_fw(ois_ctrl,fw_file_name);
+	if(rc == 0)
+	{
+		if(fw_bin_revision >= 15647)
+			rc = rumba_init_params_for_updating_fw(ois_ctrl,fw_bin_revision);//re open OIS to take effect
+		else
+			rc = rumba_update_parameter_for_updating_fw(ois_ctrl,original_fw_revision,fw_bin_revision);
+		if(rc == 0)
+		{
+			pr_info("##### update fw from 0x%X %d --> 0x%X %d succeeded! #####\n",
+					original_fw_revision,original_fw_revision,
+					fw_bin_revision,fw_bin_revision);
+			rumba_read_dword(ois_ctrl,0x00FC,&g_ois_reg_fw_version);
+			fw_update_times++;
+			rc = sysfs_write_dword_seq(OIS_FW_UPDATE_TIMES,&fw_update_times,1);
+			if(rc == 0)
+			{
+				pr_info("##### ois fw update times now updated to %d #####\n",fw_update_times);
+			}
+			else
+			{
+				pr_err("ois fw update times %d save failed!\n",fw_update_times);
+			}
+		}
+	}
+
+	ois_block_other_i2c(0);
+END:
+	return rc;
+}
 static ssize_t ois_update_fw_write(struct file *dev, const char *buf, size_t len, loff_t *ppos)
 {
 	ssize_t ret_len;
 	char messages[64]="";
 	char fw_file_name[64];
-	int rc;
 	int old_servo_state;
+	int n;
+	int force_update = 0;
+	int argument2;
 
 	ret_len = len;
+
+	if(g_ois_power_state != 1)
+	{
+		pr_err("ois not power up, not do fw updating\n");
+		return ret_len;
+	}
+
 	if (len > 64) {
 		len = 64;
 	}
@@ -1687,21 +1875,19 @@ static ssize_t ois_update_fw_write(struct file *dev, const char *buf, size_t len
 		return -EFAULT;
 	}
 
-	sscanf(messages, "%s", fw_file_name);
+	n = sscanf(messages, "%s %d", fw_file_name, &argument2);
+	if(n == 2)
+	{
+		force_update = argument2;
+	}
 
 	mutex_lock(ois_ctrl->ois_mutex);
 
-	pr_info("Get FW bin file path %s\n",fw_file_name);
+	pr_info("Get FW bin file path %s, force update %d\n",fw_file_name,force_update);
 
 	rumba_get_servo_state(ois_ctrl,&old_servo_state);
 
-	rc = rumba_servo_go_off(ois_ctrl);
-	if(rc == 0)
-		rc = rumba_update_fw(ois_ctrl,fw_file_name);
-	if(rc == 0)
-		rc = rumba_update_parameter_for_updating_fw(ois_ctrl);
-	if(rc == 0)
-		rc = rumba_check_flash_write_result(ois_ctrl,OIS_DATA);
+	ois_fw_update(fw_file_name,force_update);
 
 	rumba_restore_servo_state(ois_ctrl,old_servo_state);
 
@@ -1764,6 +1950,7 @@ static void create_ois_proc_files_factory(void)
 		create_proc_file(PROC_GYRO,&ois_gyro_proc_fops);
 		create_proc_file(PROC_OIS_DATA,&ois_data_proc_fops);
 		create_proc_file(PROC_FW_UPDATE, &ois_update_fw_proc_fops);
+		create_proc_file(PROC_FW_REV, &ois_fw_rev_fops);
 		create_proc_file(PROC_EEPROM_I2C_R, &eeprom_i2c_debug_fops);
 		create_proc_file(PROC_SENSOR_I2C_RW, &sensor_i2c_debug_fops);
 
@@ -1788,7 +1975,7 @@ void asus_ois_init(struct msm_ois_ctrl_t * ctrl)
 	}
 	sensor_ctrls = get_msm_sensor_ctrls();
 	create_ois_proc_files_factory();
-	if(g_ois_status == 1)
+	if(g_ois_status != 0)
 	{
 		create_ois_proc_files_shipping();
 	}

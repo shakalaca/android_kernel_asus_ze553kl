@@ -5714,8 +5714,10 @@ int __dev_change_flags(struct net_device *dev, unsigned int flags)
 	 */
 
 	ret = 0;
-	if ((old_flags ^ flags) & IFF_UP)
+	if ((old_flags ^ flags) & IFF_UP){
+		printk(KERN_ERR"PID %d called interface %s change from %d",current->pid, dev->name, old_flags & IFF_UP);
 		ret = ((old_flags & IFF_UP) ? __dev_close : __dev_open)(dev);
+	}
 
 	if ((flags ^ dev->gflags) & IFF_PROMISC) {
 		int inc = (flags & IFF_PROMISC) ? 1 : -1;

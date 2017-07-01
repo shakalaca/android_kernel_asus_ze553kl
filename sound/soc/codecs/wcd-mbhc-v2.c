@@ -1086,56 +1086,6 @@ exit:
 	pr_debug("%s: leave\n", __func__);
 }
 
-/* To determine if cross connection occured */
-static int wcd_check_cross_conn(struct wcd_mbhc *mbhc)
-{
-	u16 swap_res;
-	enum wcd_mbhc_plug_type plug_type = MBHC_PLUG_TYPE_NONE;
-	s16 reg1;
-	bool hphl_sch_res, hphr_sch_res;
-
-	if (wcd_swch_level_remove(mbhc)) {
-		pr_debug("%s: Switch level is low\n", __func__);
-		return -EINVAL;
-	}
-
-	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_SCHMT_ISRC, reg1);
-	/*
-	 * Check if there is any cross connection,
-	 * Micbias and schmitt trigger (HPHL-HPHR)
-	 * needs to be enabled. For some codecs like wcd9335,
-	 * pull-up will already be enabled when this function
-	 * is called for cross-connection identification. No
-	 * need to enable micbias in that case.
-	 */
-	wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
-	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 2);
-
-	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_RESULT, swap_res);
-	pr_debug("%s: swap_res%x\n", __func__, swap_res);
-
-	/*
-	 * Read reg hphl and hphr schmitt result with cross connection
-	 * bit. These bits will both be "0" in case of cross connection
-	 * otherwise, they stay at 1
-	 */
-	WCD_MBHC_REG_READ(WCD_MBHC_HPHL_SCHMT_RESULT, hphl_sch_res);
-	WCD_MBHC_REG_READ(WCD_MBHC_HPHR_SCHMT_RESULT, hphr_sch_res);
-	pr_debug("%s: hphl_sch_res %d, hphr_sch_res %d", __func__, hphl_sch_res, hphr_sch_res);
-	//if (!(hphl_sch_res || hphr_sch_res)) {
-	//	plug_type = MBHC_PLUG_TYPE_GND_MIC_SWAP;
-	//	pr_debug("%s: Cross connection identified\n", __func__);
-	//} else {
-	//	pr_debug("%s: No Cross connection found\n", __func__);
-	//}
-
-	/* Disable schmitt trigger and restore micbias */
-	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, reg1);
-	pr_debug("%s: leave, plug type: %d\n", __func__,  plug_type);
-
-	return (plug_type == MBHC_PLUG_TYPE_GND_MIC_SWAP) ? true : false;
-}
-
 static bool wcd_is_special_headset(struct wcd_mbhc *mbhc)
 {
 	struct snd_soc_codec *codec = mbhc->codec;
@@ -1473,7 +1423,8 @@ correct_plug_type:
 
 		if ((!hs_comp_res) && (!is_pa_on)) {
 			/* Check for cross connection*/
-			ret = wcd_check_cross_conn(mbhc);
+			//ret = wcd_check_cross_conn(mbhc);
+			ret = 0;
 			if (ret < 0) {
 				continue;
 			} else if (ret > 0) {
@@ -1660,7 +1611,8 @@ static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
 		wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 
 	do {
-		cross_conn = wcd_check_cross_conn(mbhc);
+		//cross_conn = wcd_check_cross_conn(mbhc);
+		cross_conn = 0;
 		try++;
 	} while (try < GND_MIC_SWAP_THRESHOLD);
 

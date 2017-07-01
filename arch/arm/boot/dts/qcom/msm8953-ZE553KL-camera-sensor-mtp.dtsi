@@ -164,14 +164,14 @@
 		"sensor_gpio_vaf",	"sensor_cam_mclk","sensor_gpio_standby";
 		qcom,cam-power-seq-cfg-val = <0 
 		// 0
-		0 0 0
+		0 1 0
 		// 1
 		1 19200000 1>;
 		qcom,cam-power-seq-delay = <1 
 		// 0
 		0 0  0
 		// 0
-		1 1 30 >;
+		1 1 0 >;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_default  &cam_sensor_rear_vcm_en_default>;
 		pinctrl-1 = <&cam_sensor_mclk0_sleep    &cam_sensor_rear_vcm_en_sleep>;

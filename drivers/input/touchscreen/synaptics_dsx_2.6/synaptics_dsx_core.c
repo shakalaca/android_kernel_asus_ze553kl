@@ -1687,10 +1687,12 @@ static ssize_t synaptics_rmi4_vendor_id_show(struct device *dev,
 {
 	ssize_t num_read_chars = 0;
 
-//	if(asus_lcd_id == 3)
+	if(asus_lcd_id == 1)
 		num_read_chars = snprintf(buf, 128,"EDO\n");
-//	else
-//		num_read_chars = snprintf(buf, 128,"Unkown\n");
+	else if(asus_lcd_id == 0)
+		num_read_chars = snprintf(buf, 128,"TIANMA\n");
+	else
+		num_read_chars = snprintf(buf, 128,"Unkown\n");
 
 	return num_read_chars; //<ASUS_vendorid+>
 }

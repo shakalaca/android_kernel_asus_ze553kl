@@ -350,6 +350,9 @@ struct qpnp_hap {
 	u8 lra_res_cal_period;
 	u8 sc_duration;
 	u8 ext_pwm_dtest_line;
+	//<asus alex_wang20170206>support vcc pon enable+++
+	bool vcc_pon_enabled;
+	//<asus alex_wang20170206>support vcc pon enable----
 	bool state;
 	bool use_play_irq;
 	bool use_sc_irq;
@@ -755,7 +758,7 @@ static int qpnp_hap_vmax_config(struct qpnp_hap *hap)
 	if (rc)
 		return rc;
 //wxtest
-	pr_err("wxtest : vmax = %d\n", hap->vmax_mv);
+	pr_err("haptic : vmax = %d\n", hap->vmax_mv);
 //wxtest
 
 	return 0;
@@ -1379,7 +1382,7 @@ static ssize_t qpnp_hap_vmax_store(struct device *dev,
 		return -EINVAL;
 	}
 	hap->vmax_level = index;
-	pr_err("wxtest : vmax_level = %d\n", hap->vmax_level);
+	pr_err("haptic : vmax_level = %d\n", hap->vmax_level);
 
 	return count;
 }
@@ -2029,7 +2032,6 @@ static void qpnp_hap_worker(struct work_struct *work)
 					 work);
 	u8 val = 0x00;
 	int rc, reg_en;
-
 	if (hap->vcc_pon) {
 		reg_en = regulator_enable(hap->vcc_pon);
 		if (reg_en)
@@ -2048,7 +2050,6 @@ static void qpnp_hap_worker(struct work_struct *work)
 			qpnp_hap_mod_enable(hap, hap->state);
 		qpnp_hap_set(hap, hap->state);
 	}
-
 	if (hap->vcc_pon && !reg_en) {
 		rc = regulator_disable(hap->vcc_pon);
 		if (rc)

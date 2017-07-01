@@ -693,6 +693,7 @@
 			compatible =  "rockchip,spi_rk_preisp";
 			reg = <0 0x0000>;
 			spi-max-frequency = <19200000>;
+			firmware-nowait-mode = <1>; 
 			vio-en-gpio = <&tlmm 40 1>;
 			irq-gpio = <&tlmm 17 0>;
 			reset-gpio=<&tlmm 141 0>;

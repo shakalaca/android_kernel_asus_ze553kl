@@ -1644,7 +1644,7 @@ static uint8_t ignore_i2c_cmd(struct msm_camera_cci_ctrl *cci_ctrl)
 	else
 	{
 		ignore = 1;
-		pr_info("sz_cam_ois_block_i2c: block slave id 0x%x i2c command\n",cci_ctrl->cci_info->sid);
+		//pr_info("sz_cam_ois_block_i2c: block slave id 0x%x i2c command\n",cci_ctrl->cci_info->sid);
 	}
 
 	return ignore;

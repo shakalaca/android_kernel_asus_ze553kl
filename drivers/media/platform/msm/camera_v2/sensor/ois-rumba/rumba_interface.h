@@ -89,6 +89,11 @@ int rumba_compare_data(struct msm_ois_ctrl_t *ctrl,uint16_t reg_addr, uint32_t s
 int rumba_write_user_data(struct msm_ois_ctrl_t *ctrl,uint16_t reg_offset,uint8_t* data, uint32_t size);
 int rumba_read_user_data(struct msm_ois_ctrl_t *ctrl,uint16_t reg_offset,uint8_t* data, uint32_t size);
 
+int rumba_get_bin_fw_revision(const char * file_path, uint32_t* read_fw_rev);
+int rumba_can_update_fw(uint32_t dev_fw_rev, uint32_t bin_fw_rev, int force_update);
 int rumba_update_fw(struct msm_ois_ctrl_t *ctrl, const char *file_path);
-int rumba_update_parameter_for_updating_fw(struct msm_ois_ctrl_t *ctrl);
+
+int rumba_update_parameter_for_updating_fw(struct msm_ois_ctrl_t *ctrl,uint32_t src_fw_rev, uint32_t target_fw_rev);
+int rumba_init_params_for_updating_fw(struct msm_ois_ctrl_t *ctrl, uint32_t fw_revision);
+
 #endif

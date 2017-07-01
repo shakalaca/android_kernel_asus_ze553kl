@@ -44,12 +44,22 @@
 #include "synaptics_dsx_core.h"
 
 //<ASUS+>#define FW_IMAGE_NAME "synaptics/startup_fw_update.img"
+
+//EDO
 //#define FW_IMAGE_NAME_ZE553KL "synaptics/PR1959551-s3508r_hybrid_GestureOn_20160919.img"
 //#define FW_IMAGE_NAME_ZE553KL "synaptics/PR2424644-s3508t_hybrid_cdm10_asus_00050007.img"
 //#define FW_IMAGE_NAME_ZE553KL "synaptics/PR2474684-s3508r_hybrid_cdm10_asus_20160002.img"
 //#define FW_IMAGE_NAME_ZE553KL "synaptics/PR2474684-s3508r_hybrid_cdm10_asus_101816.img"
 //#define FW_IMAGE_NAME_ZE553KL "synaptics/PR2474684_45440004_S3508R_102616.img"
-#define FW_IMAGE_NAME_ZE553KL "synaptics/PR2507195-45440006-S3508R_111616.img"
+//#define FW_IMAGE_NAME_ZE553KL_EDO "synaptics/PR2507195-45440006-S3508R_111616.img"
+#define FW_IMAGE_NAME_ZE553KL_EDO "synaptics/PR2555971_45440009_s3508r_EDO_20170302.img"
+
+
+//TM
+//#define FW_IMAGE_NAME_ZE553KL_TM "synaptics/PR2515137-s3508r_tianma_20161230.img"
+#define FW_IMAGE_NAME_ZE553KL_TM "synaptics/PR2547188_544D0001_s3508r_TM_20170223.img"
+
+
 //<ASUS+>/*
 #define DO_STARTUP_FW_UPDATE
 //<ASUS+>*/
@@ -138,7 +148,7 @@ static int fwu_recovery_check_status(void);
 
 int fw_update_state = 0;
 
-//extern int asus_lcd_id;
+extern int asus_lcd_id;
 
 static ssize_t fwu_sysfs_show_image(struct file *data_file,
 		struct kobject *kobj, struct bin_attribute *attributes,
@@ -3481,28 +3491,43 @@ static int fwu_start_reflash(void)
 		dev_info(rmi4_data->pdev->dev.parent,
 					"%s: Project is ZE553KL\n",
 					__func__);
-//		if(asus_lcd_id == 3)
-//		{
+		if(asus_lcd_id == 1)//EDO
+		{
 			dev_info(rmi4_data->pdev->dev.parent,
-						"%s:TP IC is synaptics s3508r!\n",
+						"%s:TP IC is synaptics s3508r,LCM is EDO!\n",
 						__func__);			
 			retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
-					FW_IMAGE_NAME_ZE553KL, sizeof(FW_IMAGE_NAME_ZE553KL),
-					sizeof(FW_IMAGE_NAME_ZE553KL));
+					FW_IMAGE_NAME_ZE553KL_EDO, sizeof(FW_IMAGE_NAME_ZE553KL_EDO),
+					sizeof(FW_IMAGE_NAME_ZE553KL_EDO));
 			if (retval < 0) {
 				dev_err(rmi4_data->pdev->dev.parent,
-						"%s: Failed to copy image file name\n",
+						"%s: Failed to copy EDO image file name\n",
 						__func__);
 				goto exit;
 			}
-//		}
-//		else
-//		{
-//			dev_err(rmi4_data->pdev->dev.parent,
-//						"%s: Panel id fail\n",
-//						__func__);
-//			goto exit;
-//		}
+		}
+		else if(asus_lcd_id == 0)//TM
+		{
+			dev_info(rmi4_data->pdev->dev.parent,
+						"%s:TP IC is synaptics s3508r,LCM is TM!\n",
+						__func__);			
+			retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
+					FW_IMAGE_NAME_ZE553KL_TM, sizeof(FW_IMAGE_NAME_ZE553KL_TM),
+					sizeof(FW_IMAGE_NAME_ZE553KL_TM));
+			if (retval < 0) {
+				dev_err(rmi4_data->pdev->dev.parent,
+						"%s: Failed to copy TM image file name\n",
+						__func__);
+				goto exit;
+			}		
+		}
+		else
+		{
+			dev_err(rmi4_data->pdev->dev.parent,
+						"%s: Panel id fail\n",
+						__func__);
+			goto exit;
+		}
 		dev_dbg(rmi4_data->pdev->dev.parent,
 				"%s: Requesting firmware image %s\n",
 				__func__, fwu->image_name);

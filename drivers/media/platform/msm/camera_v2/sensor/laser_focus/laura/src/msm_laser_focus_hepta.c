@@ -84,7 +84,7 @@ bool OLI_device_invalid(void){
 
 static void start_continuous_measure_work(void)
 {
-	int wait_count = 0;
+	//int wait_count = 0;
 	if(!measure_thread_run)
 	{
 		Disable_Device = false;
@@ -93,6 +93,7 @@ static void start_continuous_measure_work(void)
 		schedule_delayed_work(&measure_work, 0);
 		measure_thread_run = true;
 
+#if 0
 		while(!measure_cached_range_updated)
 		{
 			usleep_range(2000,2001);
@@ -105,6 +106,7 @@ static void start_continuous_measure_work(void)
 		}
 		if(measure_cached_range_updated)
 			LOG_Handler(LOG_ERR,"%s(), measure get first result, start measure work done!\n",__func__);
+#endif
 	}
 	else
 	{
@@ -265,9 +267,18 @@ int Laser_Disable(enum msm_laser_focus_atd_device_trun_on_type val){
 		return rc;
 }
 
+extern uint8_t g_ois_i2c_block_other;
+
 int Laser_Enable(enum msm_laser_focus_atd_device_trun_on_type val){
 
 		int rc=0;
+
+		if(g_ois_i2c_block_other)
+		{
+			LOG_Handler(LOG_CDBG, "%s: OIS Block I2C, not open laser\n ", __func__);
+			return -1;
+		}
+
 		mutex_ctrl(laura_t, MUTEX_LOCK);
 		client++;
 		if(client>1)
@@ -584,9 +595,9 @@ static int ATD_Laura_device_get_range_read(struct seq_file *buf, void *v)
 		return 0;
 	}
 
+	proc_read_value_cnt++;
 	if(!continuous_measure)
 	{
-		proc_read_value_cnt++;
 		Range = Laura_device_read_range_interface(laura_t, load_calibration_data, &calibration_flag);
 	}
 	else
@@ -657,9 +668,9 @@ static int ATD_Laura_device_get_range_read_more_info(struct seq_file *buf, void 
 		return 0;
 	}
 
+	proc_read_value_cnt++;
 	if(!continuous_measure)
 	{
-		proc_read_value_cnt++;
 		RawRange = (int) Laura_device_read_range_interface(laura_t, load_calibration_data, &calibration_flag);
 	}
 	else
@@ -1750,10 +1761,10 @@ int Olivia_get_measure(int* distance){
 static int Olivia_misc_open(struct inode *inode, struct file *file)
 {
 	int rc;
-	HPTG_Customize(HPTG_t);
+	//HPTG_Customize(HPTG_t);
 	camera_on_flag = true;
 	rc = Laser_Enable(MSM_LASER_FOCUS_DEVICE_APPLY_CALIBRATION);
-	LOG_Handler(LOG_CDBG, "Olivia_misc_open return %d",rc);
+	//LOG_Handler(LOG_CDBG, "Olivia_misc_open return %d",rc);
 	return rc;
 }
 
@@ -2134,7 +2145,11 @@ static int32_t Olivia_platform_probe(struct platform_device *pdev)
 
 	/* Check I2C status */
 	if(dev_I2C_status_check(laura_t, MSM_CAMERA_I2C_WORD_DATA) == 0)
+	{
+		rc = -1;
+		Laser_GPIO_Low(laura_t);
 		goto probe_failure;
+	}
 
 	/* Init mutex */
     mutex_ctrl(laura_t, MUTEX_ALLOCATE);

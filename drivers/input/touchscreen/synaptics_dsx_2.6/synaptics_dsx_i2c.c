@@ -54,6 +54,14 @@
 #define XFER_MSGS_LIMIT 8
 */
 
+//EDP
+//#define FW_NAME_ZE553KL_EDO "PR2507195-45440006-S3508R_111616.img"
+#define FW_NAME_ZE553KL_EDO "PR2555971_45440009_s3508r_EDO_20170302.img"
+//TM
+#define FW_NAME_ZE553KL_TM "PR2547188_544D0001_s3508r_TM_20170223.img"
+
+extern int asus_lcd_id;
+
 static unsigned char *wr_buf;
 
 static struct synaptics_dsx_hw_interface hw_if;
@@ -312,15 +320,26 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		bdata->vir_button_map->nbuttons = 0;
 		bdata->vir_button_map->map = NULL;
 	}
-	
-	bdata->fw_name = "PRXXX_fw.img";
+	if(asus_lcd_id == 0) //TM
+	{
+		bdata->fw_name = FW_NAME_ZE553KL_EDO;
+	}
+	else if(asus_lcd_id == 1) //EDO
+	{
+		bdata->fw_name = FW_NAME_ZE553KL_TM;
+	}
+	else
+	{
+		bdata->fw_name = "PRXXX_fw.img";
+	}
+/*
 	retval = of_property_read_string(np, "synaptics,fw-name",
 					&bdata->fw_name);
 	if (retval && (retval != -EINVAL)) {
 		dev_err(dev, "Unable to read fw name\n");
 		return retval;
 	}
-	
+*/	
 	retval = synaptics_dsx_get_dt_coords(dev, "synaptics,display-coords",
 				bdata, NULL);
 	if (retval && (retval != -EINVAL))

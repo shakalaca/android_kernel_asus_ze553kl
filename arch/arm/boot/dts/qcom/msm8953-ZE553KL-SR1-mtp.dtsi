@@ -399,6 +399,12 @@
 };
 /*---------ASUS ZE553KL Panel----------*/
 
+/*+++++++++ASUS ZE553KL second Panel++++++++++*/
+&dsi_rm67198_1080p_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
+};
+/*---------ASUS ZE553KL second Panel----------*/
+
 &dsi_truly_1080_vid {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,mdss-dsi-pan-enable-dynamic-fps;

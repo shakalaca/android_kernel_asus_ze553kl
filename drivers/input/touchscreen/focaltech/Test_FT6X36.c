@@ -555,23 +555,23 @@ static void AllocateMemory(void)
 	//New buff
 	g_pStoreMsgArea =NULL;	
 	if(NULL == g_pStoreMsgArea)
-		g_pStoreMsgArea = kmalloc(1024*80, GFP_ATOMIC);
+		g_pStoreMsgArea = kmalloc(1024*80, GFP_KERNEL);
         
 	g_pMsgAreaLine2 =NULL;	
 	if(NULL == g_pMsgAreaLine2)
-		g_pMsgAreaLine2 = kmalloc(1024*80, GFP_ATOMIC);
+		g_pMsgAreaLine2 = kmalloc(1024*80, GFP_KERNEL);
         
 	g_pStoreDataArea =NULL;	
 	if(NULL == g_pStoreDataArea)
-		g_pStoreDataArea = kmalloc(1024*80, GFP_ATOMIC);
+		g_pStoreDataArea = kmalloc(1024*80, GFP_KERNEL);
         
 	g_pStoreAllData =NULL;	
 	if(NULL == g_pStoreAllData)
-		g_pStoreAllData = kmalloc(1024*8, GFP_ATOMIC);
+		g_pStoreAllData = kmalloc(1024*8, GFP_KERNEL);
         
 	g_pTmpBuff =NULL;
 	if(NULL == g_pTmpBuff)
-		g_pTmpBuff = kmalloc(1024*16, GFP_ATOMIC);
+		g_pTmpBuff = kmalloc(1024*16, GFP_KERNEL);
 
 }
 

@@ -676,6 +676,11 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 			selected_oom_score_adj = selected->signal->oom_score_adj;
 		if (selected->mm)
 			selected_tasksize = get_mm_rss(selected->mm);
+		if(selected->pid == current->pid) {
+			lowmem_print(1, "lowmem:Skip killing '%s' (adj=%d), pid=%d itself\n", selected->comm, selected_oom_score_adj, selected->pid);
+			task_unlock(selected);
+			continue;
+		}
 		task_unlock(selected);
 
 		// when a_lmk is activated, do not kill until the app is larger than 80MB

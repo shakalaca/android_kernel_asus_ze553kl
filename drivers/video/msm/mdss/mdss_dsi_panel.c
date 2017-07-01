@@ -37,6 +37,10 @@
 #define TD4300_BL_THRESHOLD 180
 #define TM_TD4300_BL_THRESHOLD 180
 
+//asus bsp always on+++
+#define TM_PANEL 0
+#define EDO_PANEL 1
+//asus bsp always on--- 
 
 #define VSYNC_DELAY msecs_to_jiffies(17)
 struct mdss_panel_data *gdata;
@@ -106,8 +110,10 @@ static char cabc_mode[2] = {0x55, OFF_MODE};
 #endif
 
 /*asus always on display+++*/
-struct dsi_panel_cmds alpm_on_cmds;
-struct dsi_panel_cmds alpm_off_cmds;
+struct dsi_panel_cmds alpm_on_cmds;//for edo panel
+struct dsi_panel_cmds alpm_off_cmds;//for edo panel
+struct dsi_panel_cmds alpm_on_5nits_cmds;//for tm panel
+struct dsi_panel_cmds alpm_on_40nits_cmds;//for tm panel
 /*asus always on display---*/
 /*asus high brightness mode+++*/
 struct dsi_panel_cmds hbm_on_cmds;
@@ -515,21 +521,50 @@ static int bkl_level_hbm = 255;
 static char hbm_mode_page0[2] = {0xFE, 0x00};  /* DTYPE_DCS_WRITE1 */
 static char hbm_mode_bkl[2] = {0x51, 0xFF};    /* DTYPE_DCS_WRITE1 */
 static char hbm_mode_page4[2] = {0xFE, 0x04};  /* DTYPE_DCS_WRITE1 */
-static char hbm_mode_switch[2] = {0x41, 0xCA}; /* DTYPE_DCS_WRITE1 */
-static struct dsi_cmd_desc hbm_mode_on_cmd[] = {
+static char set_edo_hbm_mode[2] = {0x41, 0xCA}; /* DTYPE_DCS_WRITE1 */
+static struct dsi_cmd_desc set_edo_hbm_mode_on_cmd[] = {
        {{DTYPE_DCS_WRITE1, 0, 0, 0, 0, sizeof(hbm_mode_page0)}, hbm_mode_page0},
        {{DTYPE_DCS_WRITE1, 0, 0, 0, 0, sizeof(hbm_mode_bkl)}, hbm_mode_bkl},
        {{DTYPE_DCS_WRITE1, 0, 0, 0, 0, sizeof(hbm_mode_page4)}, hbm_mode_page4},
-       {{DTYPE_DCS_WRITE1, 0, 0, 0, 0, sizeof(hbm_mode_switch)}, hbm_mode_switch},
+       {{DTYPE_DCS_WRITE1, 0, 0, 0, 0, sizeof(set_edo_hbm_mode)}, set_edo_hbm_mode},
        {{DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(hbm_mode_page0)}, hbm_mode_page0},
 };
-static struct dsi_cmd_desc hbm_mode_off_cmd[] = {
+static struct dsi_cmd_desc set_edo_hbm_mode_off_cmd[] = {
        {{DTYPE_DCS_WRITE1, 0, 0, 0, 0, sizeof(hbm_mode_page4)}, hbm_mode_page4},
-       {{DTYPE_DCS_WRITE1, 0, 0, 0, 0, sizeof(hbm_mode_switch)}, hbm_mode_switch},
+       {{DTYPE_DCS_WRITE1, 0, 0, 0, 0, sizeof(set_edo_hbm_mode)}, set_edo_hbm_mode},
        {{DTYPE_DCS_WRITE1, 0, 0, 0, 0, sizeof(hbm_mode_page0)}, hbm_mode_page0},
        {{DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(hbm_mode_bkl)}, hbm_mode_bkl},
 };
 
+static char set_tm_hbm_mode[2] = {0x53, 0x0};
+static struct dsi_cmd_desc set_tm_hbm_mode_cmd = {
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_tm_hbm_mode)}, set_tm_hbm_mode
+};
+static char get_tm_hbm_mode[2] = {0x54, 0x0};	/* DTYPE_DCS_WRITE1 */
+static struct dsi_cmd_desc get_tm_hbm_mode_cmd = {
+	{DTYPE_DCS_READ, 1, 0, 0, 0, sizeof(get_tm_hbm_mode)}, get_tm_hbm_mode
+};
+
+void tm_read_hbm_mode(char *rbuf)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	struct dcs_cmd_req cmdreq;
+
+	ctrl_pdata = container_of(gdata, struct mdss_dsi_ctrl_pdata,
+                panel_data);
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+
+	cmdreq.cmds = &get_tm_hbm_mode_cmd;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_RX | CMD_REQ_COMMIT;
+	cmdreq.rlen = 1;
+	cmdreq.rbuf = rbuf;
+	cmdreq.cb = NULL;
+
+	mdss_dsi_cmdlist_put(ctrl_pdata, &cmdreq);
+	pr_info("%s rbuf:%x\n",__func__,rbuf[0]);
+}
 static ssize_t hbm_mode_proc_write(struct file *filp, const char *buff, size_t len, loff_t *off)
 {
     char messages;
@@ -550,19 +585,31 @@ static ssize_t hbm_mode_proc_write(struct file *filp, const char *buff, size_t l
     if(((messages-0x30) == 1)&&(hbm_mode != 1)){//turn on hbm mode when hbm mode is off
 
 			pr_info("%s turn on hbm mode\n",__func__);
-			hbm_mode_bkl[1]=0xFF;
-			hbm_mode_switch[1]=0xCA;
-			cmdreq.cmds_cnt = 5;
-			cmdreq.cmds = hbm_mode_on_cmd;
+			if(EDO_PANEL == asus_lcd_id){
+				hbm_mode_bkl[1]=0xFF;
+				set_edo_hbm_mode[1]=0xCA;
+				cmdreq.cmds = set_edo_hbm_mode_on_cmd;
+				cmdreq.cmds_cnt = 5;
+			}else{
+				set_tm_hbm_mode[1] = 0xE0;
+				cmdreq.cmds = &set_tm_hbm_mode_cmd;
+				cmdreq.cmds_cnt = 1;
+			}
 			hbm_mode = 1;
 
     }else if(((messages-0x30) == 0)&&(hbm_mode != 0)){//turn off hbm mode when hbm mode is on
 
 			pr_info("%s turn off hbm mode bkl_level_hbm:%d\n",__func__,bkl_level_hbm);
-			hbm_mode_bkl[1]=(unsigned char)bkl_level_hbm;
-			hbm_mode_switch[1]=0xE0;
-			cmdreq.cmds_cnt = 4;
-			cmdreq.cmds = hbm_mode_off_cmd;
+			if(EDO_PANEL == asus_lcd_id){
+				hbm_mode_bkl[1]=(unsigned char)bkl_level_hbm;
+				set_edo_hbm_mode[1]=0xE0;
+				cmdreq.cmds = set_edo_hbm_mode_off_cmd;
+				cmdreq.cmds_cnt = 4;
+			}else{
+				set_tm_hbm_mode[1] = 0x20;
+				cmdreq.cmds = &set_tm_hbm_mode_cmd;
+				cmdreq.cmds_cnt = 1;
+			}
 			hbm_mode = 0;
 
     }else if(((messages-0x30) != 1) && ((messages-0x30) != 0)){
@@ -583,8 +630,14 @@ static ssize_t hbm_mode_proc_write(struct file *filp, const char *buff, size_t l
 
 static int hbm_mode_proc_read(struct seq_file *buf, void *v)
 {
-		seq_printf(buf, "0x%x\n", (((alpm_mode&&0x1)<<4)|hbm_mode));
-		return 0;
+	char hbm_reg;
+
+	if(TM_PANEL == asus_lcd_id){
+		tm_read_hbm_mode(&hbm_reg);
+		hbm_mode = ((hbm_reg & 0xC0) == 0xC0);
+	}
+	seq_printf(buf, "0x%x\n", (((alpm_mode&&0x1)<<4)|hbm_mode));
+	return 0;
 }
 
 static int hbm_mode_proc_open(struct inode *inode, struct file *file)
@@ -3165,8 +3218,15 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 
 	/*asus always on display+++*/
-	mdss_dsi_parse_dcs_cmds(np, &alpm_on_cmds,
-		"qcom,mdss-dsi-alpm-on-command", "");
+	if(EDO_PANEL == asus_lcd_id){
+		mdss_dsi_parse_dcs_cmds(np, &alpm_on_cmds,
+			"qcom,mdss-dsi-alpm-on-command", "");
+	}else if(TM_PANEL == asus_lcd_id){
+		mdss_dsi_parse_dcs_cmds(np, &alpm_on_40nits_cmds,
+			"qcom,mdss-dsi-alpm-on-40nits-command", "");
+		mdss_dsi_parse_dcs_cmds(np, &alpm_on_5nits_cmds,
+			"qcom,mdss-dsi-alpm-on-5nits-command", "");
+	}
 	mdss_dsi_parse_dcs_cmds(np, &alpm_off_cmds,
 		"qcom,mdss-dsi-alpm-off-command", "");
 	/*asus always on display--*/
@@ -3294,7 +3354,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 void set_alpm_cmd(short alpm_mode)
 {
     struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
-    pr_debug("%s:alpm_mode:%d]+\n", __func__,alpm_mode);
+    pr_debug("%s:alpm_mode:%d]+ asus_lcd_id:%d\n", __func__,alpm_mode,asus_lcd_id);
 
     if((alpm_mode > 4) || (alpm_mode < 0)){
 		pr_err("wrong alpm_mode number\n");
@@ -3315,25 +3375,33 @@ void set_alpm_cmd(short alpm_mode)
 			break;
 		case 1:
 			//alpm on 40nits
-			if (alpm_on_cmds.cmd_cnt){
+			if ((EDO_PANEL == asus_lcd_id) && alpm_on_cmds.cmd_cnt){
 				mdss_dsi_panel_cmds_send(ctrl_pdata, &alpm_on_cmds, CMD_REQ_COMMIT);
 				mdss_dsi_panel_bklt_dcs(ctrl_pdata,0x1B);
-			}
+			}else if((TM_PANEL == asus_lcd_id) && alpm_on_40nits_cmds.cmd_cnt)
+					mdss_dsi_panel_cmds_send(ctrl_pdata, &alpm_on_40nits_cmds, CMD_REQ_COMMIT);
 			break;
 		case 2:
 			//alpm on 5nits
-			if (alpm_on_cmds.cmd_cnt){
+			if ((EDO_PANEL == asus_lcd_id) && alpm_on_cmds.cmd_cnt){
 				mdss_dsi_panel_cmds_send(ctrl_pdata, &alpm_on_cmds, CMD_REQ_COMMIT);
 				mdss_dsi_panel_bklt_dcs(ctrl_pdata,0x03);
-			}
+			}else if((TM_PANEL == asus_lcd_id) && alpm_on_5nits_cmds.cmd_cnt)
+					mdss_dsi_panel_cmds_send(ctrl_pdata, &alpm_on_5nits_cmds, CMD_REQ_COMMIT);
 			break;
 		case 3:
 			//alpm 5 nits(0x03) -> alpm 40 nits(0x1D)
-			mdss_dsi_panel_bklt_dcs(ctrl_pdata,0x1B);
+			if(EDO_PANEL == asus_lcd_id)
+				mdss_dsi_panel_bklt_dcs(ctrl_pdata,0x1B);
+			else if ((TM_PANEL == asus_lcd_id) && alpm_on_40nits_cmds.cmd_cnt)
+					mdss_dsi_panel_cmds_send(ctrl_pdata, &alpm_on_40nits_cmds, CMD_REQ_COMMIT);
 			break;
 		case 4:
 			//alpm 40 nits -> alpm 5 nits
-			mdss_dsi_panel_bklt_dcs(ctrl_pdata,0x03);
+			if(EDO_PANEL == asus_lcd_id)
+				mdss_dsi_panel_bklt_dcs(ctrl_pdata,0x03);
+			else if((TM_PANEL == asus_lcd_id) && alpm_on_5nits_cmds.cmd_cnt)
+					mdss_dsi_panel_cmds_send(ctrl_pdata, &alpm_on_5nits_cmds, CMD_REQ_COMMIT);
 			break;
 		default:
 			break;

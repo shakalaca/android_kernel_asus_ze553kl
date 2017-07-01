@@ -27,7 +27,8 @@ int rumba_is_servo_on(struct msm_ois_ctrl_t * ctrl)
 
 int rumba_servo_on(struct msm_ois_ctrl_t * ctrl)
 {
-	int rc = rumba_write_byte(ctrl,0x0000,1);
+	int rc;
+	rc = rumba_write_byte(ctrl,0x0000,1);
 	delay_ms(10);
 	return rc;
 }
@@ -124,13 +125,13 @@ int rumba_switch_mode(struct msm_ois_ctrl_t *ctrl, uint8_t mode)
 #ifdef ASUS_FACTORY_BUILD
 		rc = rumba_servo_go_off(ctrl);
 #else
-		pr_info("Shipping mode, not turn ois off to switch mode\n");
+		//pr_info("Shipping mode, not turn ois off to switch mode\n");
 #endif
 		rc = rumba_switch_mode_internal(ctrl,internal_mode);
 #ifdef ASUS_FACTORY_BUILD
 		rc = rumba_servo_on(ctrl);//OIS on
 #else
-		pr_info("Shipping mode, not turn ois on to switch mode\n");
+		//pr_info("Shipping mode, not turn ois on to switch mode\n");
 #endif
 	}
 	return rc;
@@ -579,12 +580,22 @@ int rumba_gyro_calibration(struct msm_ois_ctrl_t * ctrl)
 {
 	uint16_t reg_data = 0xeeee;
 	int rc;
-
+	uint32_t fw_version;
+	uint16_t gyro_value_max,gyro_value_min;
+	uint16_t gyro_value_x,gyro_value_y;
+	int i;
 	//rumba_sw_reset(ctrl);Timeout...
 
 	if(!rumba_is_idle_state(ctrl))
 		return -1;
 
+	rumba_read_dword(ctrl,0x00FC,&fw_version);
+	rumba_read_word(ctrl,0x0244,&gyro_value_max);
+	rumba_read_word(ctrl,0x0246,&gyro_value_min);
+	pr_info("FW rev %d, gyro valid value range is [%d %d]",
+			fw_version,
+			(int16_t)gyro_value_min, (int16_t)gyro_value_max
+			);
 	//rumba_gyro_communication_check(ctrl);
 
 	rumba_write_byte(ctrl,0x0014,0x0001);//GCCTRL GSCEN set, calibration start
@@ -609,6 +620,19 @@ int rumba_gyro_calibration(struct msm_ois_ctrl_t * ctrl)
 	else
 	{
 		pr_err("Gyro Calibration Failed, reg 0x0004 val is 0x%x\n",reg_data);
+		// x x x x x x 1 1
+		if((reg_data & 0x03) != 0)
+		{
+			pr_err("Gyro Output value not valid!\n");
+			rumba_fw_info_enable(ctrl);
+			for(i=0;i<10;i++)
+			{
+				rumba_read_word(ctrl,0x0082,&gyro_value_x);
+				rumba_read_word(ctrl,0x0084,&gyro_value_y);
+				pr_info("check %d time, gyro x,y value [%d %d]\n",i,(int16_t)gyro_value_x,(int16_t)gyro_value_y);
+		    }
+			rumba_fw_info_disable(ctrl);
+		}
 		rc = -1;
 	}
 	//rumba_idle2standy_state(ctrl);
@@ -1282,10 +1306,12 @@ static uint16_t get_check_sum(uint8_t* data, uint16_t size)
 	{
 		check_sum+=data[i];
 	}
-	pr_info("check sum of char type is 0x%x -> %hu, size %hu\n",check_sum,check_sum,size);
+	pr_info("check sum of char type is 0x%x %hu, size %hu\n",check_sum,check_sum,size);
 	return check_sum;
 }
 #endif
+
+
 static uint16_t get_check_sum_short(uint16_t* data, uint16_t size)
 {
 	uint16_t i;
@@ -1296,8 +1322,154 @@ static uint16_t get_check_sum_short(uint16_t* data, uint16_t size)
 	{
 		check_sum+=data[i];
 	}
-	pr_info("check sum of short type is 0x%x -> %hu, size %hu\n",check_sum,check_sum,size);
+	pr_info("check sum of short type is 0x%x %hu\n",check_sum,check_sum);
 	return check_sum;
+}
+
+int rumba_get_bin_fw_revision(const char * file_path, uint32_t* read_fw_rev)
+{
+	struct kstat stat;
+	int rc;
+
+	mm_segment_t fs;
+	struct file *fp;
+	loff_t pos;
+	uint8_t rev_data[4];
+
+	stat.size = 0;
+
+	fp =filp_open(file_path,O_RDONLY,S_IRWXU | S_IRWXG | S_IRWXO);
+	if (IS_ERR(fp)){
+		pr_err("open(%s) failed\n",file_path);
+		return -1;
+	}
+
+	fs =get_fs();
+	set_fs(KERNEL_DS);
+
+	rc = vfs_stat(file_path,&stat);
+	if(rc < 0)
+	{
+		pr_err("vfs_stat(%s) failed, rc = %d\n",file_path,rc);
+		rc = -2;
+		goto END;
+	}
+
+	if(stat.size != 28672)
+	{
+		pr_err("%s size is not 28672!\n",file_path);
+		rc = -3;
+		goto END;
+	}
+
+	//vfs_llseek(fp, 0x6FF4, SEEK_SET);
+
+	pos = 0x6FF4;
+	rc = vfs_read(fp,rev_data,4,&pos);
+	if(rc == 4)
+	{
+		*read_fw_rev = ((uint32_t)(rev_data[3] <<24)|
+						(uint32_t)(rev_data[2] <<16)|
+						(uint32_t)(rev_data[1] <<8)|
+						(uint32_t)(rev_data[0] )
+					   );
+		pr_info("get bin fw version 0x%x %d\n",*read_fw_rev,*read_fw_rev);
+		rc = 0;
+	}
+	else
+	{
+		pr_err("get bin fw version failed!\n");
+		rc = -4;
+		goto END;
+	}
+END:
+	set_fs(fs);
+	filp_close(fp,NULL);
+
+	return rc;
+}
+static int is_fw_type2(uint32_t fw_rev)
+{
+	uint32_t i;
+	uint32_t type2_fw_rev_list[] = {
+										16174,
+										16039,
+										15953,
+										15945
+								    };
+	for(i=0;i<sizeof(type2_fw_rev_list)/sizeof(uint32_t);i++)
+	{
+		if(fw_rev == type2_fw_rev_list[i])
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static int is_fw_valid(uint32_t fw_rev)
+{
+	uint32_t i;
+	uint32_t valid_fw_rev_list[] = {
+										16174,
+										16173,
+										16039,
+										15964,
+										15959,
+										15953,
+										15945,
+										15647,
+										15569,
+										15456,
+										15197,
+										14819,
+										14490
+								   };
+	for(i=0;i<sizeof(valid_fw_rev_list)/sizeof(uint32_t);i++)
+	{
+		if(fw_rev == valid_fw_rev_list[i])
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int rumba_can_update_fw(uint32_t dev_fw_rev, uint32_t bin_fw_rev, int force_update)
+{
+	int rc = 1;
+
+	int module_type;
+	int fw_type;
+
+	module_type = is_fw_type2(dev_fw_rev)?2:1;
+	fw_type = is_fw_type2(bin_fw_rev)?2:1;
+
+	if(module_type != fw_type)
+	{
+		pr_err("type %d module fw 0x%X %d can not update to type %d fw rev 0x%X %d\n",
+				module_type,dev_fw_rev,dev_fw_rev,
+				fw_type,bin_fw_rev,bin_fw_rev);
+		rc = 0;
+	}
+
+	//check version number
+	if(rc == 1 && !force_update)
+	{
+		if( bin_fw_rev <= dev_fw_rev )
+		{
+			pr_err("bin_fw_rev 0x%X %d not higher than dev_fw_rev 0x%x %d, can not do FW updating\n",
+					bin_fw_rev,bin_fw_rev,dev_fw_rev,dev_fw_rev);
+			rc = 0;
+		}
+		if(!is_fw_valid(bin_fw_rev))
+		{
+			pr_err("bin_fw_rev 0x%X %d not valid, can not do FW updating\n",bin_fw_rev,bin_fw_rev);
+			rc = 0;
+		}
+	}
+
+	return rc;
 }
 
 int rumba_update_fw(struct msm_ois_ctrl_t *ctrl, const char *file_path)
@@ -1317,18 +1489,17 @@ int rumba_update_fw(struct msm_ois_ctrl_t *ctrl, const char *file_path)
 	char dumpFileName[64];
 	uint8_t  send_block_data[SEND_SIZE];
 #endif
-	uint32_t checksum_val = 0xeeee;
+
 	if(!rumba_is_idle_state(ctrl))
 	{
 		return -1;
 	}
 
-	fw_file_size = get_file_size(file_path);
-
-	if(fw_file_size < 0x6FF7+1)
+	rc = get_file_size(file_path,&fw_file_size);
+	if(rc < 0)
 	{
-		pr_err("fw file size %lld is less than 0x6FF8, not valid firmware!\n",fw_file_size);
-		return -2;
+		pr_err("fw file %s open failed!",file_path);
+		return -12;
 	}
 
 	if(fw_file_size != 28672)
@@ -1338,7 +1509,7 @@ int rumba_update_fw(struct msm_ois_ctrl_t *ctrl, const char *file_path)
 	}
 
 	fw_code_data = kzalloc(sizeof(uint8_t)*fw_file_size,GFP_KERNEL);
-	if (!fw_code_data)
+	if(!fw_code_data)
 	{
 		pr_err("no memory!\n");
 		return -ENOMEM;
@@ -1355,35 +1526,7 @@ int rumba_update_fw(struct msm_ois_ctrl_t *ctrl, const char *file_path)
 
 	rumba_read_dword(ctrl,0x00FC,&reg_fw_revision);
 
-#if 0
-	if(reg_fw_revision != 15197 && reg_fw_revision != 14819)
-	{
-		pr_err("device FW revision %d not valid, can not update!\n",
-			reg_fw_revision
-		);
-		rc = -10;
-		goto Error;
-	}
-#endif
-	if(fw_revision != 15456)
-	{
-		pr_err("File %s FW revision %d not valid, can not update!\n",
-			file_path,fw_revision
-		);
-		rc = -11;
-		goto Error;
-	}
-
-	if(fw_revision < reg_fw_revision)
-	{
-		pr_err("Warning! FW file revision %d less than device FW revision %d\n",
-			fw_revision,reg_fw_revision
-		);
-		rc = -8;
-		goto Error;
-	}
-
-	pr_info("Going update FW, dev_fw_rev 0x%x -> %d, bin_fw_rev 0x%x -> %d, bin file size %lld\n",
+	pr_info("Going update FW, dev_fw_rev 0x%x %d --> bin_fw_rev 0x%x %d, bin file size %lld\n",
 			reg_fw_revision,reg_fw_revision,
 			fw_revision,fw_revision,
 			fw_file_size
@@ -1436,8 +1579,6 @@ int rumba_update_fw(struct msm_ois_ctrl_t *ctrl, const char *file_path)
 
 		rumba_write_seq_bytes(ctrl,0x0008,send_data,4);
 
-		rumba_read_dword(ctrl,0x0008,&checksum_val);
-		pr_info("0x0008 val is 0x%x\n",checksum_val);
 		delay_ms(190);//Wait Self Reset + OIS Data Section init, 20+170 ms
 
 		rumba_read_word(ctrl,0x0006,&reg_data);//Error Status read
@@ -1447,7 +1588,7 @@ int rumba_update_fw(struct msm_ois_ctrl_t *ctrl, const char *file_path)
 			rumba_read_dword(ctrl,0x00FC,&reg_fw_revision);
 			if(reg_fw_revision == fw_revision)
 			{
-				pr_info("FW revision 0x%x -> %d update Succeeded!\n",
+				pr_info("FW revision 0x%x %d update Succeeded!\n",
 					reg_fw_revision,
 					reg_fw_revision
 					);
@@ -1487,11 +1628,11 @@ typedef struct
 	uint16_t reg_addr;
 	uint32_t reg_val;
 	uint8_t  length;
-}update_command_t;
+}reg_write_array_t;
 
-int rumba_update_parameter_for_updating_fw(struct msm_ois_ctrl_t *ctrl)
+int rumba_update_parameter_for_updating_fw(struct msm_ois_ctrl_t *ctrl,uint32_t src_fw_rev, uint32_t target_fw_rev)
 {
-	update_command_t commands[18] =
+	reg_write_array_t fw_init_setting_rev15456[] =
 	{
 		{0x0230,0x50,1},
 		{0x0231,0x14,1},
@@ -1512,21 +1653,82 @@ int rumba_update_parameter_for_updating_fw(struct msm_ois_ctrl_t *ctrl)
 		{0x045C,0x3AF6999E,4},
 		{0x0460,0x000000FA,4}
 	};
+	reg_write_array_t fw_init_setting_rev15197[] =
+	{
+		{0x0244,0x098F,2},
+		{0x0246,0xF671,2},
+		{0x0430,0x43FA0000,4},
+		{0x0454,0x3B03126F,4},
+		{0x0458,0x3F7FD6D9,4},
+		{0x045C,0x3A249B44,4},
+		{0x0460,0x000001F4,4},
+		{0x0464,0x00000000,4},
+		{0x0468,0x00000000,4},
+		{0x046C,0x00000000,4},
+		{0x0470,0x00000000,4},
+		{0x04AC,0x00000000,4}
+	};
+	reg_write_array_t *p_write_array;
 	int i;
 	int rc = 0;
-	for(i=0;i<18;i++)
+	int size = 0;
+	if((src_fw_rev == 15197 || src_fw_rev == 14819) && target_fw_rev == 15456)
 	{
-		if(commands[i].length == 1)
+		p_write_array = fw_init_setting_rev15456;
+		size = sizeof(fw_init_setting_rev15456)/sizeof(reg_write_array_t);
+	}
+	else if(src_fw_rev == 16173 && target_fw_rev == 15197)
+	{
+		p_write_array = fw_init_setting_rev15197;
+		size = sizeof(fw_init_setting_rev15197)/sizeof(reg_write_array_t);
+	}
+	else
+	{
+		pr_err("can not apply any parameter updating register array!\n");
+		return -1;
+	}
+
+	for(i=0;i<size;i++)
+	{
+		if(p_write_array[i].length == 1)
 		{
-			pr_info("Write 0x%hX to reg 0x%04X for updating FW\n",(uint16_t)commands[i].reg_val,commands[i].reg_addr);
-			rc = rumba_write_byte(ctrl,commands[i].reg_addr,(uint16_t)commands[i].reg_val);
+			pr_info("Write 0x%hX to reg 0x%04X for FW init\n",(uint16_t)p_write_array[i].reg_val,p_write_array[i].reg_addr);
+			rc = rumba_write_byte(ctrl,p_write_array[i].reg_addr,(uint16_t)p_write_array[i].reg_val);
 		}
-		else if(commands[i].length == 4)
+		else if(p_write_array[i].length == 2)
 		{
-			pr_info("Write 0x%X to reg 0x%04X for updating FW\n",commands[i].reg_val,commands[i].reg_addr);
-			rc = rumba_write_dword(ctrl,commands[i].reg_addr,commands[i].reg_val);
+			pr_info("Write 0x%hX to reg 0x%04X for FW init\n",(uint16_t)p_write_array[i].reg_val,p_write_array[i].reg_addr);
+			rc = rumba_write_word(ctrl,p_write_array[i].reg_addr,(uint16_t)p_write_array[i].reg_val);
 		}
+		else if(p_write_array[i].length == 4)
+		{
+			pr_info("Write 0x%X to reg 0x%04X for FW init\n",(uint16_t)p_write_array[i].reg_val,p_write_array[i].reg_addr);
+			rc = rumba_write_dword(ctrl,p_write_array[i].reg_addr,p_write_array[i].reg_val);
+		}
+		if(rc != 0)
+		{
+			break;
+		}
+	}
+
+	if(rc == 0)
+	{
+		rc = rumba_check_flash_write_result(ctrl,OIS_DATA);
 	}
 	return rc;
 
+}
+int rumba_init_params_for_updating_fw(struct msm_ois_ctrl_t *ctrl,uint32_t fw_revision)
+{
+	int rc;
+
+	if(fw_revision >= 15647)
+		rc = rumba_write_byte(ctrl,0x0036,0x41);//above rev15647 set 0x41 instead of 0x81
+	else
+		rc = rumba_write_byte(ctrl,0x0036,0x81);
+	if(rc == 0)
+	{
+		delay_ms(170);
+	}
+	return rc;
 }

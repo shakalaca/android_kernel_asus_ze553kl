@@ -174,6 +174,7 @@ enum asus_charging_type {
 	CDP_1P5A,
 	FLOATING_0P5A,
 	OTHERS_1A,
+	DCP_2A,
 	UNDEFINED,
 	NONE,
 };
@@ -207,6 +208,7 @@ static char *asus_charging_type_str[]={
 	[CDP_1P5A]	="CDP_1P5A",
 	[FLOATING_0P5A] ="FLOATING_0P5A",
 	[OTHERS_1A]	="OTHES_1A",
+	[DCP_2A]="DCP_2A",
 	[UNDEFINED]	="UNDEFINED",
 	[NONE]	="NONE",
 };
@@ -469,8 +471,11 @@ struct smbchg_chip {
 	struct delayed_work thermal_policy_work;
 	struct delayed_work otgoc_retry_work;
 	struct delayed_work otgdcp_check_work;
+	struct delayed_work read_BR_countrycode_work;
 	int thermal_temp[6];  //off_temp1 off_temp2  off_temp3 on_temp1  on_temp2  on_temp3
 	struct regulator *usb_alert_reg;      //ldo10
+	int BR_countrycode_flag;
+	bool BR_countrycode_read_pending;
 };
 
 static void smbchg_pre_config(struct smbchg_chip * chip);
@@ -6187,7 +6192,8 @@ static void asus_otgoc_retry_work(struct work_struct *work)
 	struct smbchg_chip *chip= container_of(
 		work, struct smbchg_chip, otgoc_retry_work.work);
 
-	if(otgoc_count > 2)return;
+	if(otgoc_count == 0)return;
+	if(otgoc_count >= 4)return;
 	printk("otgdcp retry:%d\n",otgoc_count);
 
 	//
@@ -7313,7 +7319,7 @@ static irqreturn_t otg_oc_handler(int irq, void *_chip)
 
 	//
 	otgoc_count++;
-	if(otgoc_count<3)schedule_delayed_work(&chip->otgoc_retry_work, msecs_to_jiffies(1000));
+	if(otgoc_count <= 3)schedule_delayed_work(&chip->otgoc_retry_work, msecs_to_jiffies(1000));
 
 	if (chip->schg_version == QPNP_SCHG_LITE) {
 		pr_warn("OTG OC triggered - OTG disabled\n");
@@ -8760,8 +8766,10 @@ static ssize_t otg_dcp_write(struct file *filp, const char __user *buff, size_t 
 	int temp;
 	char messages[256];
 
-	if(len>256) len=256;
+	//otgdcp support is removed for some battery security reason currently
+	return len;
 
+	if(len>256) len=256;
 	if (copy_from_user(messages, buff, len)) return -EFAULT;
 
 	sscanf(buff,"%d", &temp);
@@ -9148,6 +9156,8 @@ static int asus_charge_type_proc_read(struct seq_file *buf, void *data)
 		seq_printf(buf, "ASUS_750K\n");
 	else if(asus_charge_type == 2)
 		seq_printf(buf, "ASUS_200K\n");
+	else if(asus_charge_type == 3)
+		seq_printf(buf, "DCP_2A_BR\n");
 	else
 		seq_printf(buf, "None\n");
 
@@ -9445,6 +9455,9 @@ static int asus_do_soft_jeita(struct smbchg_chip *chip)
 	int batt_temp,batt_volt,batt_soc,batt_float_volt;
 	bool charging_enable;
 	int fcc_value,float_volt;
+	u8 reg;
+	int aicl_result;
+	bool aicl_done;
 
 	batt_temp = get_prop_batt_temp(chip);
 	batt_volt = get_prop_batt_voltage_now(chip);
@@ -9453,6 +9466,24 @@ static int asus_do_soft_jeita(struct smbchg_chip *chip)
 
 	//update jeita state according  to batt_temp
 	asus_jeita_judge_state(chip,batt_temp);
+
+	//check if new aicl result get
+	ret = smbchg_read(chip, &reg,
+			chip->usb_chgpth_base + ICL_STS_1_REG, 1);
+	if (!ret)
+			aicl_done = (bool)(reg & AICL_STS_BIT);
+
+	aicl_result = smbchg_get_aicl_level_ma(chip);
+	printk("[CHARGE]asus_charging_type=%d,aicl_done=%d,aicl_result=%d\n",
+		chip->asus_charging_type,aicl_done,aicl_result);
+	if((chip->asus_charging_type==DCP_2A) && (aicl_done==1) && (aicl_result<=1600)){
+		pr_smb(PR_STATUS,"BR country DCP_2A change to DCP_OTHERS_1A");
+		chip->asus_charging_type=DCP_OTHERS_1A;
+		chip->dual_charge=SINGLE;
+		ret= vote(chip->usb_icl_votable,PSY_ICL_VOTER, true, 900);
+		if (ret < 0)
+			pr_err("Couldn't vote for 900mA for jeita rc=%d\n",ret);
+	}
 
 	asus_soft_jeita_config_ze553kl(chip,&charging_enable,&fcc_value,&float_volt);
 	pr_smb(PR_STATUS,"jeita_state=%d,voltage=%dmV,temp=%d fcc =%d, float_volt =%d,charging_en = %d\n",chip->soft_jeita_state
@@ -9511,6 +9542,19 @@ static void asus_batt_temp_work(struct work_struct *work)
 	/*if((batt_charge_state == true)&&
 		((type==POWER_SUPPLY_TYPE_USB_DCP)||(type==POWER_SUPPLY_TYPE_USB_HVDCP)||(type==POWER_SUPPLY_TYPE_USB_HVDCP_3))){*/
 	if(batt_charge_state == true){
+
+		//do asus adpter check, country code not BR, now we get it, update!!
+		if((chip->BR_countrycode_read_pending==1) && (chip->BR_countrycode_flag==1)){
+				chip->asus_charging_type=DCP_2A;
+				chip->dual_charge=ASUS_2A;
+				asus_change_usbin(chip,1910);
+				chip->BR_countrycode_read_pending=0;
+				pr_smb(PR_STATUS,"change type to DCP_2A since BR country code, do jeita 5s later\n");
+				cancel_delayed_work(&chip->asus_batt_temp_work);
+				schedule_delayed_work(&chip->asus_batt_temp_work,5*HZ);
+				return;
+		}
+		
 		ret = asus_do_soft_jeita(chip);
 		if(!ret){
 			pr_debug("[CHARGE]%s do soft jeita after 60s\n",__FUNCTION__);
@@ -9571,11 +9615,11 @@ static void asus_typec_dfp_setting_work_1A5(struct work_struct *work)
 			if(usb_supply_type==POWER_SUPPLY_TYPE_USB){
 				rc = vote(chip->usb_icl_votable,PSY_ICL_VOTER, true, 500);
 				if (rc < 0)
-					pr_err("Couldn't vote for 1910mA for jeita rc=%d\n",rc);
+					pr_err("Couldn't vote for 500mA for typec rc=%d\n",rc);
 			}else{
 				rc = vote(chip->usb_icl_votable,PSY_ICL_VOTER, true, 900);
 				if (rc < 0)
-					pr_err("Couldn't vote for 1910mA for jeita rc=%d\n",rc);
+					pr_err("Couldn't vote for 900mA for typec rc=%d\n",rc);
 			}
 				
 		}
@@ -9607,7 +9651,7 @@ static void asus_typec_dfp_setting_work_3A(struct work_struct *work)
 			if(usb_supply_type==POWER_SUPPLY_TYPE_USB){
 				rc = vote(chip->usb_icl_votable,PSY_ICL_VOTER, true, 500);
 				if (rc < 0)
-					pr_err("Couldn't vote for 1910mA for jeita rc=%d\n",rc);
+					pr_err("Couldn't vote for 500 for typec rc=%d\n",rc);
 			}else{
 				asus_change_usbin(chip,900);
 			}
@@ -9679,19 +9723,35 @@ static void asus_adapter_detect_reset_work(struct smbchg_chip *chip)
 		return;
 	}
 
-	if(chip->dual_charge==ASUS_2A){
-		pr_debug("[CHARGE]change usb in to 1910mA\n");
-		asus_change_usbin(chip,1910);
+	if(chip->BR_countrycode_flag==0){
+		if(chip->dual_charge==ASUS_2A){
+			pr_info("[CHARGE]change usb in to 1910mA\n");
+			asus_change_usbin(chip,1910);
 	
-	}else{
-		if (chip->typec_psy){
+		}else{
+			if (chip->typec_psy){
 				if(chip->typec_mode!=DFP_MODE_OTHERS){
 					update_typec_dfp_setting(chip);
 				}else{
 					chip->asus_charging_type=DCP_OTHERS_1A;
 				}
+			}
+		}
+	}else{
+		if (chip->typec_psy){
+			if((chip->typec_mode==DFP_MODE_1A5) ||(chip->typec_mode==DFP_MODE_3A)){
+				pr_smb(PR_STATUS,"[CHARGE]in BR country typec first");
+				update_typec_dfp_setting(chip);
+				return;
+			}
+		}
+
+		if(chip->dual_charge==ASUS_2A){
+			pr_smb(PR_STATUS,"[CHARGE]change usb in to 1910mA\n");
+			asus_change_usbin(chip,1910);	
 		}
 	}
+	
 	return;
 }
 static void asus_adapter_read_adc_work(struct work_struct *work)
@@ -9708,6 +9768,7 @@ static void asus_adapter_read_adc_work(struct work_struct *work)
 #endif
 
 	pr_debug("[CHARGE]asus_adapter_read_adc_work\n");
+	chip->BR_countrycode_read_pending=0;
 	chip->read_adc_ignore = true;
 	rc = vote(chip->usb_suspend_votable, USER_EN_VOTER,true, 0);
 	if(rc){
@@ -9730,8 +9791,19 @@ static void asus_adapter_read_adc_work(struct work_struct *work)
 		pr_info("[CHARGE]adc_sw_en2 =%d,adc_pwren2 =%d value2=%x\n",gpio_get_value(chip->adc_sw_en),reg,adc_val);
 
 		if(adc_val>=chip->asus_tb.asus_adapter_adc_table[1]){
-			chip->asus_charging_type=UNDEFINED;
-			chip->dual_charge=SINGLE;
+			//this if-else is for BR country adapter, no id pin
+			if(chip->BR_countrycode_flag==1){
+				pr_smb(PR_STATUS,"change BR to ASUS_2A \n");
+				chip->asus_charging_type=DCP_2A;
+				chip->dual_charge=ASUS_2A;
+#ifdef ASUS_FACTORY_BUILD
+				asus_charge_type=3;
+#endif
+			}else{
+				chip->asus_charging_type=UNDEFINED;
+				chip->dual_charge=SINGLE;
+				chip->BR_countrycode_read_pending=1;
+			}
 		}else{			//asus adapter detect 
 			if((adc_val>chip->asus_tb.asus_adapter_adc_table[2])
 				&&(adc_val<chip->asus_tb.asus_adapter_adc_table[3])){
@@ -9749,9 +9821,8 @@ static void asus_adapter_read_adc_work(struct work_struct *work)
 				asus_charge_type=2;
 #endif
 				}
-			else {
+			else 
 				chip->asus_charging_type = asus_find_charging_type(chip,ADC_OTHERS);
-				}
 		}
 	}else{
 		if(adc_val>=chip->asus_tb.asus_adapter_adc_table[1]){
@@ -9788,6 +9859,56 @@ static void asus_adapter_read_adc_work(struct work_struct *work)
 
 	
 }
+
+#define COUNTRY_CODE_PATH "/factory/PhoneInfodisk/country_code"
+static mm_segment_t oldfs_1;
+static void initKernelEnv_1(void)
+{
+	oldfs_1 = get_fs();
+	set_fs(KERNEL_DS);
+}
+
+static void deinitKernelEnv_1(void)
+{
+	set_fs(oldfs_1);
+}
+
+void asus_read_BR_countrycode_work(struct work_struct *work)
+{
+    char buf[32];
+    int readlen = 0;
+	struct file *fd;
+
+	struct smbchg_chip *chip = container_of(work,
+						struct smbchg_chip,
+						read_BR_countrycode_work.work);
+
+	initKernelEnv_1();
+
+	fd = filp_open(COUNTRY_CODE_PATH, O_RDONLY, 0);
+	if (IS_ERR_OR_NULL(fd)) {
+        printk("[BAT][CHG] OPEN (%s) failed\n", COUNTRY_CODE_PATH);
+		return;
+    }
+
+	readlen = fd->f_op->read(fd, buf, strlen(buf), &fd->f_pos);
+	if (readlen < 0) {
+		printk("[BAT][CHG] Read (%s) error\n", COUNTRY_CODE_PATH);
+		deinitKernelEnv_1();
+		filp_close(fd, NULL);
+		kfree(buf);
+		return;
+	}
+	buf[readlen] = '\0';
+	printk("[BAT][CHG] country code = %s\n", buf);
+	//if (strcmp(buf, "BR") == 0){
+	if((buf[0]=='B') && (buf[1]=='R')){
+		chip->BR_countrycode_flag = 1;
+		}
+	deinitKernelEnv_1();
+    filp_close(fd,NULL);
+}
+
 
 static struct delayed_work Set_COS_APSD_work;
 bool COS_APSD = 0;
@@ -9907,6 +10028,7 @@ static void asus_handler_usb_removal(struct smbchg_chip *chip)
 	//clear thermal vote
 	vote(chip->usb_icl_votable, THERMAL_ICL_VOTER, false, 0);
 	usb_alert_suspend =false;
+	chip->BR_countrycode_read_pending=0;
 #ifdef ASUS_FACTORY_BUILD
 	asus_charge_type=0;
 #endif
@@ -10915,6 +11037,7 @@ static int smbchg_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->thermal_policy_work, asus_thermal_policy_work);
 	INIT_DELAYED_WORK(&chip->otgoc_retry_work, asus_otgoc_retry_work);
 	INIT_DELAYED_WORK(&chip->otgdcp_check_work, asus_otgdcp_check_work);
+	INIT_DELAYED_WORK(&chip->read_BR_countrycode_work, asus_read_BR_countrycode_work);
 	INIT_DELAYED_WORK(&Set_COS_APSD_work, Set_COS_APSD_FLASE_work);
 	wake_lock_init(&UsbCable_Lock, WAKE_LOCK_SUSPEND, "UsbCable_Lock_Wake");
 	init_completion(&chip->src_det_lowered);
@@ -11101,6 +11224,9 @@ static int smbchg_probe(struct spmi_device *spmi)
 			handle_usb_removal(chip);
 		}	
 	}
+
+	chip->BR_countrycode_flag=0;
+	schedule_delayed_work(&chip->read_BR_countrycode_work, msecs_to_jiffies(20000));	
 
 	the_chip = chip;
 	create_charger_limit_proc_file();

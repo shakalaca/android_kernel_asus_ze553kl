@@ -95,6 +95,7 @@ struct spi_rk_preisp_data {
 	int irq_active;
     int irq;
 	//asus bsp ralf>>
+	bool do_force_sleep;
 	int vio_en_gpio;
 	int snapshot_gpio;
 	int snapshot_active;
@@ -107,6 +108,11 @@ struct spi_rk_preisp_data {
 	int pinctrl_status;
 	int power_state;
 	bool is_fw_loaded;
+	bool is_core_supply_enabled;
+	bool is_ddr_supply_enabled;
+	int dsp_rt_status;
+	bool is_suspend_sleep;
+	int sleep_mode;
 	//asus bsp ralf<<
 	int sleepst_gpio;
 	int sleepst_active;
@@ -117,10 +123,13 @@ struct spi_rk_preisp_data {
     int powerdown_active;
     struct clk *mclk;
     atomic_t power_on_cnt;
+    atomic_t wake_sleep_cnt;
     struct mutex send_msg_lock;
     struct mutex power_lock;
+    struct mutex wake_sleep_lock;
     uint32_t max_speed_hz;
     uint32_t min_speed_hz;
+    uint32_t fw_nowait_mode;
     int log_level;
 };
 
@@ -143,6 +152,12 @@ struct auto_args {
     int argc;
     struct auto_arg *argv;
 };
+enum sleep_rt_status{
+	DSP_STATUS_RUNNING,
+	DSP_STATUS_PROCESSING,
+	DSP_STATUS_SLEEPING,
+	DSP_STATUS_POWER_OFF,
+	};
 int asus_power_config( struct spi_rk_preisp_data *data,int type,int value);
 void spi_cs_set_value(struct spi_rk_preisp_data *pdata, int value);
 void preisp_set_spi_speed(struct spi_rk_preisp_data *pdata, uint32_t hz);
@@ -154,6 +169,9 @@ int rkpreisp_power_on_dsp(int is_download_fw);
 int rkpreisp_power_off_dsp(void);
 static int rkpreisp_power_on(struct spi_rk_preisp_data *pdata,int is_download_fw);
 static int rkpreisp_power_off(struct spi_rk_preisp_data *pdata);
+static int asus_core_power_supply_control(struct spi_rk_preisp_data *data,int value);
+static int asus_ddr_power_supply_control(struct spi_rk_preisp_data *data,int value);
+int rkpreisp_wakeup(struct spi_rk_preisp_data *pdata);
 
 
 
@@ -251,7 +269,7 @@ int rkpreisp_gpio_set(int gpio_num,int flags,const char *label)
 	printk("%s:%d gpio2=%d\n",__func__,__LINE__,gpio_get_value(02));\
 	printk("%s:%d gpio40=%d\n",__func__,__LINE__,gpio_get_value(40));\
 	printk("%s:%d gpio141=%d\n",__func__,__LINE__,gpio_get_value(141));}}while(0);
-	
+#if 0	
 void rkpreisp_init_hw(struct spi_rk_preisp_data *pdata)
 {
 	if(pdata)
@@ -327,8 +345,8 @@ static int rkpreisp_suspend(struct spi_device *spi, pm_message_t mesg)
 		data=(struct spi_rk_preisp_data *)spi_get_drvdata(spi);
 		if(data)
 		{
-			if(asus_hw_id<ASUS_ER)
-				asus_power_config(data,3,0);
+			data->is_suspend_sleep=true;
+			rkpreisp_power_off(data);
 			/////////////////////
 			//printk("%s gpios[0,1,2,3,%d,%d,%d,%d,%d]=[%d,%d,%d,%d,%d,%d,%d,%d,%d]\n",__func__
 			//	,data->irq_gpio,data->wakeup_gpio,data->sleepst_gpio,data->snapshot_gpio,data->reset_gpio
@@ -360,6 +378,38 @@ static int rkpreisp_resume(struct spi_device *spi)
 	}
 	return 0;
 }
+#endif
+
+static int asus_core_power_supply_control(struct spi_rk_preisp_data *data,int value)
+{
+	int ret=0;
+	if(!data)ret=-EFAULT;
+	else{
+		dev_info(data->dev, "sz_cam_rk_drv core_supply_enabled=%d,value=%d\n",data->is_core_supply_enabled,value);
+		if((!data->is_core_supply_enabled  &&  value)  ||  (data->is_core_supply_enabled  &&  !value)){
+			data->is_core_supply_enabled=(value>0);
+			ret=preisp_config_single_vreg(data->dev,"core_vdd",&g_core_vdd_vreg,1125000,1125000,80000,(value>0));
+			if(ret<0)
+				dev_err(data->dev,"%s:%d set core_vdd failed\n",__func__,__LINE__);
+		}
+	}
+	return ret;
+}
+static int asus_ddr_power_supply_control(struct spi_rk_preisp_data *data,int value)
+{
+	int ret=0;
+	if(!data)ret=-EFAULT;
+	else{
+		dev_info(data->dev, "sz_cam_rk_drv ddr_supply_enabled=%d,value=%d\n",data->is_ddr_supply_enabled,value);
+		if((!data->is_ddr_supply_enabled  &&  value)  ||  (data->is_ddr_supply_enabled  &&  !value)){
+			data->is_ddr_supply_enabled=(value>0);
+			ret=preisp_config_single_vreg(data->dev,"ddr_vdd",&g_ddr_vdd_vreg,1200000,1200000,80000,(value>0));
+			if(ret<0)
+				dev_err(data->dev,"%s:%d set ddr_vdd failed\n",__func__,__LINE__);
+		}
+	}
+	return ret;
+}
 
 static int asus_power_control(struct spi_rk_preisp_data *data,int value)
 {
@@ -370,21 +420,22 @@ static int asus_power_control(struct spi_rk_preisp_data *data,int value)
 	   ||((data->power_state&2)==0 && value!=0)//for power on
 	   )
 	{
-		err=preisp_config_single_vreg(data->dev,"core_vdd",&g_core_vdd_vreg,1100000,1100000,80000,(value&1));
-		if(err<0)
-			printk("%s:%d set core_vdd failed\n",__func__,__LINE__);
-		err=preisp_config_single_vreg(data->dev,"ddr_vdd",&g_ddr_vdd_vreg,1200000,1200000,80000,(value&1));
-		if(err<0)
-			printk("%s:%d set ddr_vdd failed\n",__func__,__LINE__);
-		if(value)
-			flag=GPIOF_DIR_OUT|GPIOF_INIT_HIGH;
-		else
-			flag=GPIOF_DIR_IN;
-		err = rkpreisp_gpio_set(data->vio_en_gpio,flag,"GPIO40");
-		if(err<0)
-		{
-			printk("%s:%d enable VDD rc=%d FAIL!!!!!!!!!!\n",__func__,__LINE__,err);
-		}
+		//asus bsp ralf:add for enter deep sleep mode when camera close>>
+		//if(value>0){
+			asus_core_power_supply_control(data,value>0);
+			asus_ddr_power_supply_control(data,value>0);
+			if(value)
+				flag=GPIOF_DIR_OUT|GPIOF_INIT_HIGH;
+			else
+				flag=GPIOF_DIR_OUT|GPIOF_INIT_LOW;
+			err = rkpreisp_gpio_set(data->vio_en_gpio,flag,"GPIO40");
+			if(err<0)
+			{
+				printk("%s:%d enable VDD rc=%d FAIL!!!!!!!!!!\n",__func__,__LINE__,err);
+			}
+		//}
+		//asus bsp ralf:add for enter deep sleep mode when camera close<<
+		
 	}
 	if(value)
 		data->power_state|=2;
@@ -573,7 +624,7 @@ void spi_cs_set_value(struct spi_rk_preisp_data *pdata, int value)
 
 void rkpreisp_hw_init(struct spi_device *spi)
 {
-    spi2apb_safe_w32(spi, 0x11010000, 0x0fff0555);
+    //spi2apb_safe_w32(spi, 0x11010000, 0x0fff0555);
 	spi2apb_safe_w32(spi, 0x12008098, 0xff004000);
 }
 
@@ -596,18 +647,140 @@ int rkpreisp_set_log_level(struct spi_rk_preisp_data *pdata, int level)
     ret = preisp_send_msg_to_dsp(pdata, (struct msg*)&m);
     return ret;
 }
+
+int rkpreisp_request_sleep(struct spi_rk_preisp_data *pdata, int32_t mode)
+{
+    int ret;
+    MSG(msg_set_sys_mode_standby_t, m);
+
+    mutex_lock(&pdata->wake_sleep_lock);
+    if (atomic_dec_return(&pdata->wake_sleep_cnt) == 0  ||  pdata->do_force_sleep) {
+	pdata->do_force_sleep=false;
+        if (mode >= PREISP_SLEEP_MODE_MAX || mode < 0) {
+            dev_warn(pdata->dev, "Unkown sleep mode %d\n", mode);
+            return -1;
+        }
+
+        if (mode == PREISP_SLEEP_MODE_BYPASS) {
+            m.type = id_msg_set_sys_mode_bypass_t;
+        }
+
+        if (pdata->wakeup_gpio > 0) {
+            gpio_set_value(pdata->wakeup_gpio, !pdata->wakeup_active);
+        }
+        ret = preisp_send_msg_to_dsp(pdata, (struct msg*)&m);
+
+        dev_info(pdata->dev, "request dsp enter %s mode. ret:%d",
+                mode == PREISP_SLEEP_MODE_BYPASS ? "bypass" : "sleep", ret);
+	
+    } else if (atomic_read(&pdata->wake_sleep_cnt) < 0) {
+        atomic_set(&pdata->wake_sleep_cnt, 0);
+    }
+    mutex_unlock(&pdata->wake_sleep_lock);
+
+    return ret;
+}
+
+static int rkpreisp_restart(struct spi_rk_preisp_data *pdata)
+{
+    int ret = 0;
+
+	dev_info(pdata->dev, "%s E",__func__);
+
+    disable_irq(pdata->irq);
+    if (pdata->sleepst_irq > 0) {
+        disable_irq(pdata->sleepst_irq);
+    }
+    if (pdata->reset_gpio > 0) {
+        gpio_set_value(pdata->reset_gpio, !pdata->reset_active);
+    }
+    mdelay(3);
+
+    //request rkpreisp enter slave mode
+    spi_cs_set_value(pdata, 0);
+    if (pdata->wakeup_gpio > 0) {
+        gpio_set_value(pdata->wakeup_gpio, pdata->wakeup_active);
+    }
+    mdelay(3);
+    if (pdata->reset_gpio > 0) {
+        gpio_set_value(pdata->reset_gpio, pdata->reset_active);
+    }
+    mdelay(5);
+    spi_cs_set_value(pdata, 1);
+    preisp_set_spi_speed(pdata, pdata->min_speed_hz);
+    spi2apb_switch_to_msb(pdata->spi);
+    rkpreisp_hw_init(pdata->spi);
+
+    preisp_set_spi_speed(pdata, pdata->max_speed_hz);
+    //download system firmware
+    ret = spi_download_fw(pdata->spi, NULL);
+    if (ret) {
+        dev_err(pdata->dev, "download firmware failed!");
+    } else {
+        dev_info(pdata->dev, "download firmware success!");
+    }
+
+    enable_irq(pdata->irq);
+    if (pdata->sleepst_irq > 0) {
+        enable_irq(pdata->sleepst_irq);
+    }
+
+	dev_info(pdata->dev, "%s X",__func__);
+
+	return ret;
+
+}
+
+int rkpreisp_wakeup(struct spi_rk_preisp_data *pdata)
+{
+    int32_t reg = 0;
+    int try = 0, ret = 0;
+
+    mutex_lock(&pdata->wake_sleep_lock);
+    if (atomic_inc_return(&pdata->wake_sleep_cnt) == 1   ||  pdata->do_force_sleep) {
+	pdata->do_force_sleep=false;
+        if (pdata->powerdown_gpio > 0) {
+            gpio_set_value(pdata->powerdown_gpio, pdata->powerdown_active);
+        }
+        if (pdata->wakeup_gpio > 0) {
+            gpio_set_value(pdata->wakeup_gpio, pdata->wakeup_active);
+        } else {
+            dev_info(pdata->dev, "please config wakeup gpio first!");
+        }
+
+        do {
+            ret = spi2apb_safe_r32(pdata->spi, DSP_PMU_SYS_REG0, &reg);
+
+            if (!ret && ((reg & DSP_MSG_QUEUE_OK_MASK) == DSP_MSG_QUEUE_OK_TAG)) {
+                dev_info(pdata->dev, "wakeup dsp.");
+                break;
+            }
+
+            if (try++ == PREISP_WAKEUP_TIMEOUT_MS) {
+				dev_err(pdata->dev, "wakeup timeout, restart preisp\n");
+				ret = rkpreisp_restart(pdata);
+                break;
+            }
+            mdelay(1);
+        } while (1);
+	
+    }
+    mutex_unlock(&pdata->wake_sleep_lock);
+
+    return ret;
+}
+
 static int rkpreisp_power_on(struct spi_rk_preisp_data *pdata,int is_download_fw)
 {
     int ret = 0;
-	//printk("%s E power_on_cnt=%d\n",__func__,atomic_read(&pdata->power_on_cnt));
+	//dev_info(pdata->dev, "%s E poweron_count=%d,sleep_count=%d",__func__
+	//	,atomic_read(&pdata->power_on_cnt)
+	//	,atomic_read(&pdata->wake_sleep_cnt));
     mutex_lock(&pdata->power_lock);
-	if(is_download_fw  &&  !pdata->is_fw_loaded &&  atomic_read(&pdata->power_on_cnt)>0)
-	{
-		ret=rkpreisp_download_fw_late(pdata);
-	}
+
     if (atomic_inc_return(&pdata->power_on_cnt) == 1) {
         dev_info(pdata->dev, "dsp power on!");
-		//do power/clk on
+        //do power/clk on
         if (pdata->mclk != NULL) {
             clk_prepare_enable(pdata->mclk);
             clk_set_rate(pdata->mclk, PREISP_MCLK_RATE);
@@ -615,12 +788,9 @@ static int rkpreisp_power_on(struct spi_rk_preisp_data *pdata,int is_download_fw
         //request rkpreisp enter slave mode
         spi_cs_set_value(pdata, 0);
         /*
-	            TODO: config regulator
-	        */
-        if(asus_hw_id>=ASUS_ER)
-		{
-			asus_power_config(pdata,3,1);
-		}
+            TODO: config regulator
+        */
+		asus_power_config(pdata,3,1);
         if (pdata->powerdown_gpio > 0) {
             gpio_set_value(pdata->powerdown_gpio, pdata->powerdown_active);
         }
@@ -636,46 +806,52 @@ static int rkpreisp_power_on(struct spi_rk_preisp_data *pdata,int is_download_fw
         if(pdata->min_speed_hz)
 			preisp_set_spi_speed(pdata, pdata->min_speed_hz);
         spi2apb_switch_to_msb(pdata->spi);
-		rkpreisp_hw_init(pdata->spi);
+        rkpreisp_hw_init(pdata->spi);
+
         preisp_set_spi_speed(pdata, pdata->max_speed_hz);
         //download system firmware
-        if(is_download_fw)
-        {
+        if(is_download_fw){
 	        ret = spi_download_fw(pdata->spi, NULL);
 	        if (ret) {
 	            dev_err(pdata->dev, "download firmware failed!");
 	        } else {
 	            dev_info(pdata->dev, "download firmware success!");
-				pdata->is_fw_loaded=true;
 	        }
         }
-		
-		if (pdata->irq > 0)
-			enable_irq(pdata->irq);
+
+        enable_irq(pdata->irq);
         if (pdata->sleepst_irq > 0) {
             enable_irq(pdata->sleepst_irq);
         }
         rkpreisp_set_log_level(pdata, pdata->log_level);
+
+        atomic_set(&pdata->wake_sleep_cnt, 1);
+    } else {
+        rkpreisp_wakeup(pdata);
     }
     mutex_unlock(&pdata->power_lock);
-	//printk("%s X power_on_cnt=%d\n",__func__,atomic_read(&pdata->power_on_cnt));
+	//dev_info(pdata->dev, "%s X poweron_count=%d,sleep_count=%d",__func__
+	//		,atomic_read(&pdata->power_on_cnt)
+	//		,atomic_read(&pdata->wake_sleep_cnt));
+
     return ret;
 }
 
 static int rkpreisp_power_off(struct spi_rk_preisp_data *pdata)
 {
     int ret = 0;
-	if(!pdata)return -1;
-	//printk("%s E power_on_cnt=%d\n",__func__,atomic_read(&pdata->power_on_cnt));
-	mutex_lock(&pdata->power_lock);
+	//dev_info(pdata->dev, "%s E poweron_count=%d,sleep_count=%d",__func__
+	//	,atomic_read(&pdata->power_on_cnt)
+	//	,atomic_read(&pdata->wake_sleep_cnt));
+    mutex_lock(&pdata->power_lock);
     if (atomic_dec_return(&pdata->power_on_cnt) == 0) {
         //do power/clk off
-        if (pdata->irq > 0)disable_irq(pdata->irq);
-        if (pdata->sleepst_irq > 0)disable_irq(pdata->sleepst_irq);
-		//asus_power_config(pdata,1,0);
-		if (pdata->irq_gpio > 0) {
-            gpio_set_value(pdata->irq_gpio, !pdata->irq_active);
+        dev_info(pdata->dev, "dsp power off!");
+        disable_irq(pdata->irq);
+        if (pdata->sleepst_irq > 0) {
+            disable_irq(pdata->sleepst_irq);
         }
+
         if (pdata->powerdown_gpio > 0) {
             gpio_set_value(pdata->powerdown_gpio, !pdata->powerdown_active);
         }
@@ -685,82 +861,37 @@ static int rkpreisp_power_off(struct spi_rk_preisp_data *pdata)
         if (pdata->reset_gpio > 0) {
             gpio_set_value(pdata->reset_gpio, !pdata->reset_active);
         }
-		if (pdata->snapshot_gpio > 0) {
-            gpio_set_value(pdata->reset_gpio, !pdata->snapshot_active);
-        }
         spi_cs_set_value(pdata, 0);
-		if(asus_hw_id>=ASUS_ER)
-		{
-			asus_power_config(pdata,3,0);
-		}
-		pdata->is_fw_loaded=false;
+		asus_power_config(pdata,3,0);
         if (pdata->mclk != NULL) {
             clk_disable_unprepare(pdata->mclk);
         }
+        atomic_set(&pdata->wake_sleep_cnt, 0);
     } else if (atomic_read(&pdata->power_on_cnt) < 0) {
-        dev_warn(pdata->dev, "power on/off mismatch, power on count set to 0!");
         atomic_set(&pdata->power_on_cnt, 0);
-    }
-	mutex_unlock(&pdata->power_lock);
-	//printk("%s X power_on_cnt=%d\n",__func__,atomic_read(&pdata->power_on_cnt));
-    return ret;
-}
-
-int rkpreisp_request_sleep(struct spi_rk_preisp_data *pdata, int32_t mode)
-{
-    int ret;
-    MSG(msg_set_sys_mode_standby_t, m);
-
-    if (mode >= PREISP_SLEEP_MODE_MAX || mode < 0) {
-        dev_warn(pdata->dev, "Unkown sleep mode %d\n", mode);
-        return -1;
-    }
-
-    if (mode == PREISP_SLEEP_MODE_BYPASS) {
-        m.type = id_msg_set_sys_mode_bypass_t;
-    }
-
-    if (pdata->wakeup_gpio > 0) {
-        gpio_set_value(pdata->wakeup_gpio, !pdata->wakeup_active);
-    }
-    ret = preisp_send_msg_to_dsp(pdata, (struct msg*)&m);
-
-    dev_info(pdata->dev, "request dsp enter %s mode. ret:%d",
-            mode == PREISP_SLEEP_MODE_BYPASS ? "bypass" : "sleep", ret);
-    return ret;
-}
-
-int rkpreisp_wakeup(struct spi_rk_preisp_data *pdata)
-{
-    int32_t reg = 0;
-    int try = 0, ret = 0;
-
-    if (pdata->powerdown_gpio > 0) {
-        gpio_set_value(pdata->powerdown_gpio, pdata->powerdown_active);
-    }
-    if (pdata->wakeup_gpio > 0) {
-        gpio_set_value(pdata->wakeup_gpio, pdata->wakeup_active);
     } else {
-        dev_info(pdata->dev, "please config wakeup gpio first!");
+        rkpreisp_request_sleep(pdata, PREISP_SLEEP_MODE_STANDBY);
     }
-
-    do {
-        ret = spi2apb_safe_r32(pdata->spi, DSP_PMU_SYS_REG0, &reg);
-
-        if (!ret && ((reg & DSP_MSG_QUEUE_OK_MASK) == DSP_MSG_QUEUE_OK_TAG)) {
-            dev_info(pdata->dev, "wakeup dsp.");
-            break;
-        }
-
-        if (try++ == PREISP_WAKEUP_TIMEOUT_MS) {
-            ret = -1;
-            dev_err(pdata->dev, "wakeup timeout\n");
-            break;
-        }
-        mdelay(1);
-    } while (1);
-
+    mutex_unlock(&pdata->power_lock);
+	//dev_info(pdata->dev, "%s X poweron_count=%d,sleep_count=%d",__func__
+	//	,atomic_read(&pdata->power_on_cnt)
+	//	,atomic_read(&pdata->wake_sleep_cnt));
     return ret;
+}
+
+static void fw_nowait_power_on(const struct firmware *fw, void *context)
+{
+    int ret = 0;
+    struct spi_rk_preisp_data *pdata = context;
+	dev_info(pdata->dev,"%s in fw=%p",__func__,fw);
+    ret = rkpreisp_power_on(pdata,1);
+    if (!ret) {
+        mdelay(10); /*delay for dsp boot*/
+        rkpreisp_request_sleep(pdata, PREISP_SLEEP_MODE_STANDBY);
+    }
+    if (fw) {
+        release_firmware(fw);
+    }
 }
 
 int parse_arg(const char *s, struct auto_arg *arg)
@@ -1270,15 +1401,17 @@ static long rkpreisp_ioctl(struct file *file,
         break;
     case PREISP_REQUEST_SLEEP: {
         int sleep_mode = arg;
+	pdata->do_force_sleep=true;
         ret = rkpreisp_request_sleep(pdata, sleep_mode);
         break;
     }
     case PREISP_WAKEUP:
+	pdata->do_force_sleep=true;
         ret = rkpreisp_wakeup(pdata);
         break;
     case PREISP_DOWNLOAD_FW: {
         char fw_name[PREISP_FW_NAME_LEN];
-        if (strncpy_from_user(fw_name, ubuf, PREISP_FW_NAME_LEN)) {
+        if (strncpy_from_user(fw_name, ubuf, PREISP_FW_NAME_LEN) <= 0) {
             ret = -EINVAL;
             break;
         }
@@ -1435,7 +1568,7 @@ static irqreturn_t rkpreisp_threaded_isr(int irq, void *dev_id)
 
     BUG_ON(irq != pdata->irq);
 
-	//if(true)return IRQ_HANDLED;
+
     while (!dsp_msq_recv_msg(pdata->spi, &msg) && msg != NULL) {
         dispatch_received_msg(pdata, msg);
         dsp_msq_free_received_msg(msg);
@@ -1471,7 +1604,7 @@ static int rkpreisp_parse_dt_property(struct device *dev,
 
     ret = of_property_read_u32(node, "spi-min-frequency",
             &pdata->min_speed_hz);
-    if (ret <= 0) {
+    if (ret) {
         dev_warn(dev, "can not get spi-min-frequency!");
         pdata->min_speed_hz = pdata->max_speed_hz / 2;
     }
@@ -1485,28 +1618,29 @@ static int rkpreisp_parse_dt_property(struct device *dev,
     ret = of_get_named_gpio_flags(node, "reset-gpio", 0, &flags);
     if (ret <= 0) {
         dev_warn(dev, "can not find property reset-gpio, error %d\n", ret);
-    }else {
-	    pdata->reset_gpio = ret;
-	    pdata->reset_active = 1;
-	    if (flags == OF_GPIO_ACTIVE_LOW) {
-	        pdata->reset_active = 0;
-	    }
-
-	    if (pdata->reset_gpio > 0) {
-	        ret = devm_gpio_request(dev, pdata->reset_gpio, "preisp-reset");
-	        if (ret) {
-	            dev_err(dev, "gpio %d request error %d\n", pdata->reset_gpio, ret);
-	            return ret;
-	        }
-
-	        ret = gpio_direction_output(pdata->reset_gpio, !pdata->reset_active);
-	        if (ret) {
-	            dev_err(dev, "gpio %d direction output error %d\n",
-	                    pdata->reset_gpio, ret);
-	            return ret;
-	        }
-	    }
     }
+
+    pdata->reset_gpio = ret;
+    pdata->reset_active = 1;
+    if (flags == OF_GPIO_ACTIVE_LOW) {
+        pdata->reset_active = 0;
+    }
+
+    if (pdata->reset_gpio > 0) {
+        ret = devm_gpio_request(dev, pdata->reset_gpio, "preisp-reset");
+        if (ret) {
+            dev_err(dev, "gpio %d request error %d\n", pdata->reset_gpio, ret);
+            return ret;
+        }
+
+        ret = gpio_direction_output(pdata->reset_gpio, !pdata->reset_active);
+        if (ret) {
+            dev_err(dev, "gpio %d direction output error %d\n",
+                    pdata->reset_gpio, ret);
+            return ret;
+        }
+    }
+
 	
 	//asus bsp ralf:add vio gpio info>>
 	ret = of_get_named_gpio_flags(node, "vio-en-gpio", 0, &flags);
@@ -1537,123 +1671,137 @@ static int rkpreisp_parse_dt_property(struct device *dev,
     }
 	//asus bsp ralf:add vio gpio info<<
 	
-    ret = of_get_named_gpio_flags(node, "irq-gpio", 0, &flags);
+    ret = of_get_named_gpio_flags(node, "irq-gpio", 0, NULL);
     if (ret <= 0) {
         dev_warn(dev, "can not find property irq-gpio, error %d\n", ret);
-        //return ret;
-    }else
-    {
-	    pdata->irq_gpio = ret;
-		pdata->irq_active = 1;
-	    if (flags == OF_GPIO_ACTIVE_LOW) {
-	        pdata->irq_active = 0;
-	    }
-
-	    ret = devm_gpio_request(dev, pdata->irq_gpio, "preisp-irq");
-	    if (ret) {
-	        dev_err(dev, "gpio %d request error %d\n", pdata->irq_gpio, ret);
-	    }else
-	    {
-		    ret = gpio_direction_input(pdata->irq_gpio);
-		    if (ret) {
-		        dev_err(dev, "gpio %d direction input error %d\n",pdata->irq_gpio, ret);
-		    }
-		    ret = gpio_to_irq(pdata->irq_gpio);
-		    if (ret < 0) {
-		        dev_err(dev, "Unable to get irq number for GPIO %d, error %d\n",pdata->irq_gpio, ret);
-		    }else {
-			    pdata->irq = ret;
-			    ret = request_threaded_irq(pdata->irq, NULL, rkpreisp_threaded_isr,
-			            IRQF_TRIGGER_RISING | IRQF_ONESHOT, "preisp-irq", pdata); 
-			    if (ret)
-			        dev_err(dev, "cannot request thread irq: %d\n", ret);
-				else
-					disable_irq(pdata->irq);
-		    }
-	    }
+        return ret;
     }
+
+    pdata->irq_gpio = ret;
+
+    ret = devm_gpio_request(dev, pdata->irq_gpio, "preisp-irq");
+    if (ret) {
+        dev_err(dev, "gpio %d request error %d\n", pdata->irq_gpio, ret);
+        return ret;
+    }
+
+    ret = gpio_direction_input(pdata->irq_gpio);
+    if (ret) {
+        dev_err(dev, "gpio %d direction input error %d\n",
+                pdata->irq_gpio, ret);
+        return ret;
+    }
+
+    ret = gpio_to_irq(pdata->irq_gpio);
+    if (ret < 0) {
+        dev_err(dev, "Unable to get irq number for GPIO %d, error %d\n",
+            pdata->irq_gpio, ret);
+        return ret;
+    }
+    pdata->irq = ret;
+    ret = request_threaded_irq(pdata->irq, NULL, rkpreisp_threaded_isr,
+            IRQF_TRIGGER_RISING | IRQF_ONESHOT, "preisp-irq", pdata); 
+    if (ret) {
+        dev_err(dev, "cannot request thread irq: %d\n", ret);
+        return ret;
+    }
+
+    disable_irq(pdata->irq);
 
     ret = of_get_named_gpio_flags(node, "powerdown-gpio", 0, &flags);
     if (ret <= 0) {
         dev_warn(dev, "can not find property powerdown-gpio, error %d\n", ret);
-    }else{
-	    pdata->powerdown_gpio = ret;
-	    pdata->powerdown_active = 1;
-	    if (flags == OF_GPIO_ACTIVE_LOW) {
-	        pdata->powerdown_active = 0;
-	    }
+    }
 
-	    if (pdata->powerdown_gpio > 0) {
-	        ret = devm_gpio_request(dev, pdata->powerdown_gpio, "preisp-powerdown");
-	        if (ret) {
-	            dev_err(dev, "gpio %d request error %d\n", pdata->powerdown_gpio, ret);
-	        }else{
-		        ret = gpio_direction_output(pdata->powerdown_gpio, !pdata->powerdown_active);
-		        if (ret) {
-		            dev_err(dev, "gpio %d direction output error %d\n", pdata->powerdown_gpio, ret);
-		        }
-	        }
-	    }
+    pdata->powerdown_gpio = ret;
+    pdata->powerdown_active = 1;
+    if (flags == OF_GPIO_ACTIVE_LOW) {
+        pdata->powerdown_active = 0;
+    }
+
+    if (pdata->powerdown_gpio > 0) {
+        ret = devm_gpio_request(dev, pdata->powerdown_gpio, "preisp-powerdown");
+        if (ret) {
+            dev_err(dev, "gpio %d request error %d\n", pdata->powerdown_gpio, ret);
+            return ret;
+        }
+
+        ret = gpio_direction_output(pdata->powerdown_gpio, !pdata->powerdown_active);
+        if (ret) {
+            dev_err(dev, "gpio %d direction output error %d\n",
+                    pdata->powerdown_gpio, ret);
+            return ret;
+        }
     }
 
     pdata->sleepst_gpio = -1;
     pdata->sleepst_irq = -1;
     pdata->wakeup_gpio = -1;
 
-    ret = of_get_named_gpio_flags(node, "sleepst-gpio", 0, &flags);
+    ret = of_get_named_gpio_flags(node, "sleepst-gpio", 0, NULL);
     if (ret <= 0) {
         dev_warn(dev, "can not find property sleepst-gpio, error %d\n", ret);
-    }else{
-	    pdata->sleepst_gpio = ret;
-		pdata->sleepst_active = 1;
-	    if (flags == OF_GPIO_ACTIVE_LOW) {
-	        pdata->sleepst_active = 0;
-	    }
-
-	    ret = devm_gpio_request(dev, pdata->sleepst_gpio, "preisp-sleep-irq");
-	    if (ret) {
-	        dev_err(dev, "gpio %d request error %d\n", pdata->sleepst_gpio, ret);
-	    }else{
-		    ret = gpio_direction_input(pdata->sleepst_gpio);
-		    if (ret) {
-		        dev_err(dev, "gpio %d direction input error %d\n", pdata->sleepst_gpio, ret);
-		    }else {
-			    ret = gpio_to_irq(pdata->sleepst_gpio);
-			    if (ret < 0) {
-			        dev_err(dev, "Unable to get irq number for GPIO %d, error %d\n", pdata->sleepst_gpio, ret);
-			    }else {
-				    pdata->sleepst_irq = ret;
-				    ret = request_any_context_irq(pdata->sleepst_irq, rkpreisp_sleep_isr,
-				            IRQF_TRIGGER_RISING, "preisp-sleep-irq", pdata);
-					if (ret)
-				        dev_err(dev, "cannot request thread sleepst_irq: %d\n", ret);
-					else
-					    disable_irq(pdata->sleepst_irq);
-			    }
-		    }
-	    }
+        return 0;
     }
+
+    pdata->sleepst_gpio = ret;
+
+    ret = devm_gpio_request(dev, pdata->sleepst_gpio, "preisp-sleep-irq");
+    if (ret) {
+        dev_err(dev, "gpio %d request error %d\n", pdata->sleepst_gpio, ret);
+        return 0;
+    }
+
+    ret = gpio_direction_input(pdata->sleepst_gpio);
+    if (ret) {
+        dev_err(dev, "gpio %d direction input error %d\n",
+                pdata->sleepst_gpio, ret);
+        return ret;
+    }
+
+    ret = gpio_to_irq(pdata->sleepst_gpio);
+    if (ret < 0) {
+        dev_err(dev, "Unable to get irq number for GPIO %d, error %d\n",
+            pdata->sleepst_gpio, ret);
+        return ret;
+    }
+    pdata->sleepst_irq = ret;
+    ret = request_any_context_irq(pdata->sleepst_irq, rkpreisp_sleep_isr,
+            IRQF_TRIGGER_RISING, "preisp-sleep-irq", pdata);
+    disable_irq(pdata->sleepst_irq);
+
     ret = of_get_named_gpio_flags(node, "wakeup-gpio", 0, &flags);
     if (ret <= 0) {
         dev_warn(dev, "can not find property wakeup-gpio, error %d\n", ret);
-    }else{
-	    pdata->wakeup_gpio = ret;
-	    pdata->wakeup_active = 1;
-	    if (flags == OF_GPIO_ACTIVE_LOW) {
-	        pdata->wakeup_active = 0;
-	    }
+    }
+
+    pdata->wakeup_gpio = ret;
+    pdata->wakeup_active = 1;
+    if (flags == OF_GPIO_ACTIVE_LOW) {
+        pdata->wakeup_active = 0;
+    }
+
+    if (pdata->wakeup_gpio > 0) {
         ret = devm_gpio_request(dev, pdata->wakeup_gpio, "preisp-wakeup");
         if (ret) {
             dev_err(dev, "gpio %d request error %d\n", pdata->wakeup_gpio, ret);
-        }else{
-	        ret = gpio_direction_output(pdata->wakeup_gpio, !pdata->wakeup_active);
-	        if (ret) {
-	            dev_err(dev, "gpio %d direction output error %d\n",pdata->wakeup_gpio, ret);
-	        }
+            return ret;
         }
-	    
-    }
 
+        ret = gpio_direction_output(pdata->wakeup_gpio, !pdata->wakeup_active);
+        if (ret) {
+            dev_err(dev, "gpio %d direction output error %d\n",
+                    pdata->wakeup_gpio, ret);
+            return ret;
+        }
+    }
+	//dev_info(dev,"reading firmware-nowait-mode");
+    ret = of_property_read_u32(node, "firmware-nowait-mode", &pdata->fw_nowait_mode);
+    if (ret) {
+        dev_warn(dev, "can not get firmware-nowait-mode!");
+        pdata->fw_nowait_mode = 0;
+    }
+	//pdata->fw_nowait_mode=1;
     return ret;
 }
 
@@ -1669,9 +1817,11 @@ static int spi_rk_preisp_probe(struct spi_device *spi)
         return -ENOMEM;
     }
     atomic_set(&data->power_on_cnt, 0);
+    atomic_set(&data->wake_sleep_cnt, 0);
     preisp_client_list_init(&data->clients);
     mutex_init(&data->send_msg_lock);
     mutex_init(&data->power_lock);
+    mutex_init(&data->wake_sleep_lock);
 
     data->spi = spi;
     data->dev = &spi->dev;
@@ -1685,10 +1835,10 @@ static int spi_rk_preisp_probe(struct spi_device *spi)
     data->misc.fops = &rkpreisp_fops;
 
     g_preisp_data = data;
-
+    data->do_force_sleep=false;
     err = misc_register(&data->misc);
     if (err < 0) {
-        dev_err(data->dev, "Error: preisp misc_register returned %d", err);
+        dev_err(data->dev, "Error: misc_register returned %d", err);
     }
 
     ///////////////////////////////
@@ -1711,37 +1861,16 @@ static int spi_rk_preisp_probe(struct spi_device *spi)
     {
         printk("%s:%d mclk is NULL !!!!!!!!!!!! \n",__func__,__LINE__);
     }
-	//printk("%s irq_gpio=%d,wakeup_gpio=%d,sleepst_gpio=%d,snapshot_gpio=%d,reset_gpio=%d\n",__func__
-		//,data->irq_gpio
-		//,data->wakeup_gpio
-		//,data->sleepst_gpio
-		//,data->snapshot_gpio
-		//,data->reset_gpio
-		//);
-	if(asus_hw_id<ASUS_ER)
-	{
-		asus_power_config(data,3,1);
-	}
-	err=rkpreisp_power_on(data,0);
-	if(err)
-		printk("%s power on failed\n",__func__);
-	else
-	{
-		int i=0,count=3,state=0;
-		for(i=0;i<count;i++)
-		{
-			spi2apb_operation_query(data->spi, &state);
-		    dev_info(data->dev, "state %x", state);
-			if(state)
-				break;
-			mdelay(20);
-		}
-		rkpreisp_power_off(data);
-		if(!state)
-		{
-			printk("%s rk1608 preisp query state error\n",__func__);
-		}
-	}
+	if (!data->fw_nowait_mode) {
+        return 0;
+    }
+
+    err = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+            RKL_DEFAULT_FW_NAME, data->dev, GFP_KERNEL, data, fw_nowait_power_on);
+    if (err) {
+        dev_err(data->dev, "request firmware nowait failed!");
+    }
+
     return 0;
 }
 
@@ -1753,14 +1882,52 @@ static int spi_rk_preisp_remove(struct spi_device *spi)
     return 0;
 }
 
+static int spi_rk_preisp_suspend(struct spi_device *spi, pm_message_t mesg)
+{
+    struct spi_rk_preisp_data *pdata = spi_get_drvdata(spi);
+
+    if (!pdata->fw_nowait_mode) {
+        return 0;
+    }
+    rkpreisp_power_off(pdata);
+
+    return 0;
+}
+
+static int spi_rk_preisp_resume(struct spi_device *spi)
+{
+    struct spi_rk_preisp_data *pdata = spi_get_drvdata(spi);
+    int ret = 0;
+
+    if (pdata->powerdown_gpio > 0) {
+        gpio_direction_output(pdata->powerdown_gpio, !pdata->powerdown_active);
+    }
+    if (pdata->wakeup_gpio > 0) {
+        gpio_direction_output(pdata->wakeup_gpio, !pdata->wakeup_active);
+    }
+    if (pdata->reset_gpio > 0) {
+        gpio_direction_output(pdata->reset_gpio, !pdata->reset_active);
+    }
+    if (!pdata->fw_nowait_mode)
+        return 0;
+
+    ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+            RKL_DEFAULT_FW_NAME, pdata->dev, GFP_KERNEL, pdata, fw_nowait_power_on);
+    if (ret) {
+        dev_err(pdata->dev, "request firmware nowait failed!");
+    }
+    return ret;
+}
+
 /*
 dts:
     spi_rk_preisp@xx {
         compatible =  "rockchip,spi_rk_preisp";
         reg = <x>;
-        spi-max-frequency = <24000000>;
+        spi-max-frequency = <48000000>;
         //spi-cpol;
         //spi-cpha;
+        firmware-nowait-mode = <0>;
         reset-gpio = <&gpio6 GPIO_A0 GPIO_ACTIVE_HIGH>;
         irq-gpio = <&gpio6 GPIO_A2 GPIO_ACTIVE_HIGH>;
         clocks = <&xxx>;
@@ -1785,8 +1952,8 @@ static struct spi_driver spi_rk_preisp_driver = {
     },
     .probe      = spi_rk_preisp_probe,
     .remove     = spi_rk_preisp_remove,
-	.suspend =	rkpreisp_suspend,
-	.resume =	rkpreisp_resume,
+    .suspend    = spi_rk_preisp_suspend,
+    .resume     = spi_rk_preisp_resume,
 };
 module_spi_driver(spi_rk_preisp_driver);
 

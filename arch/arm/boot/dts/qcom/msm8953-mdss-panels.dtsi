@@ -31,7 +31,9 @@
 /*+++++++++ASUS ZE553KL Panel++++++++++*/
 #include "dsi-panel-rm67191-1080p-cmd.dtsi"
 /*---------ASUS ZE553KL Panel----------*/
-
+/*ze553kl second source+++*/
+#include "dsi-panel-rm67198-1080p-cmd.dtsi"
+/*ze553kl second source---*/
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
 		#address-cells = <1>;

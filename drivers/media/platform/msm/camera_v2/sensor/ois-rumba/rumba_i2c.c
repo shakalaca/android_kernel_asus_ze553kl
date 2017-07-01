@@ -114,7 +114,7 @@ int rumba_read_dword(struct msm_ois_ctrl_t * ctrl,uint16_t reg_addr, uint32_t* r
 				 (uint32_t)(reg_setting->reg_data[1] <<8)|
 				 (uint32_t)(reg_setting->reg_data[0] )
 				);
-	pr_info("read 0x%x from reg 0x%04x, seq_value %x %x %x %x\n",
+	pr_debug("read 0x%x from reg 0x%04x, seq_value %x %x %x %x\n",
 			*reg_data,
 			reg_setting->reg_addr,
 			reg_setting->reg_data[0],
@@ -281,7 +281,7 @@ int rumba_write_dword(struct msm_ois_ctrl_t * ctrl,uint16_t reg_addr, uint32_t r
 		pr_err("write 0x%x to reg 0x%04x failed, rc = %d\n",reg_data,reg_addr,rc);
 	}
 
-	pr_info("write 0x%x to reg 0x%04x, seq_value %x %x %x %x\n",
+	pr_debug("write 0x%x to reg 0x%04x, seq_value %x %x %x %x\n",
 			reg_data,
 			reg_setting->reg_addr,
 			reg_setting->reg_data[0],

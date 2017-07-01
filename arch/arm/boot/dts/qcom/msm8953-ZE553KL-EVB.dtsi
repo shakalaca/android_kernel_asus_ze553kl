@@ -696,6 +696,7 @@
 			compatible =  "rockchip,spi_rk_preisp";
 			reg = <0 0x0000>;
 			spi-max-frequency = <1000000>;
+			firmware-nowait-mode = <1>;
 			//irq-gpio = <&tlmm 5 0x2008>;
 			ddr_vdd-supply=<&pm8953_l23>;
 			core_vdd-supply=<&pm8953_l2>;
