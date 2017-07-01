@@ -27,7 +27,7 @@ else
 acenic-objs := acenic/tg1.bin acenic/tg2.bin
 endif
 
-ifeq ($(TARGET_PRODUCT), Z01H)
+#ifeq ($(TARGET_PRODUCT), Z01H)
 #Hades project synaptics touch fw.
 
 #EDO
@@ -45,7 +45,7 @@ fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2555
 #fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2555971_544D0002_s3508r_TM_20170306.img
 #fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2555971_544D0004_s3508r_TM_20170313.img
 fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_V26) += synaptics/PR2555971_544D0005_s3508r_TM_20170313.img
-endif
+#endif
 
 fw-shipped-$(CONFIG_ACENIC) += $(acenic-objs)
 fw-shipped-$(CONFIG_ADAPTEC_STARFIRE) += adaptec/starfire_rx.bin \
