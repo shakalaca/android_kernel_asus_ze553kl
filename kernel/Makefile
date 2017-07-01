@@ -177,16 +177,10 @@ signing_key.priv signing_key.x509: x509.genkey
 	@echo "### needs to be run as root, and uses a hardware random"
 	@echo "### number generator if one is available."
 	@echo "###"
-#ASUS_BSP Ken_Gan +++ [BSP][BOOT][SIGN][Modify]use regular key to sign modules
-#############################################################
-#	openssl req -new -nodes -utf8 -$(CONFIG_MODULE_SIG_HASH) -days 36500 \
-#		-batch -x509 -config x509.genkey \
-#		-outform DER -out signing_key.x509 \
-#		-keyout signing_key.priv 2>&1
-#############################################################
-	cp ../../../../../../build/target/product/security/signing_key.x509 signing_key.x509
-	cp ../../../../../../build/target/product/security/signing_key.priv signing_key.priv
-#ASUS_BSP Ken_Gan --- [BSP][BOOT][SIGN][Modify]use regular key to sign modules
+	openssl req -new -nodes -utf8 -$(CONFIG_MODULE_SIG_HASH) -days 36500 \
+		-batch -x509 -config x509.genkey \
+		-outform DER -out signing_key.x509 \
+		-keyout signing_key.priv 2>&1
 	@echo "###"
 	@echo "### Key pair generated."
 	@echo "###"
