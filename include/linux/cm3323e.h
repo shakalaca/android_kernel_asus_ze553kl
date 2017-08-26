@@ -19,12 +19,7 @@
 
 #define CM3323E_I2C_NAME		"cm3323e"
 
-#define	CM3323E_ADDR	        0x60		
-//0x20 >> 1
-//hhptest
-#define	CM36656_ADDR			0x60
-
-//hhptest
+#define	CM3323E_ADDR			0x20 >> 1
 
 /* cm3323e command code */
 #define	CM3323E_CONF			0x00
@@ -45,32 +40,6 @@
 #define CM3323E_CONF_IT_1280MS	(5 << 4)
 #define CM3323E_CONF_DEFAULT		0
 
-//hhptest
-/* cm36656 command code */
-#define	CM36656_CONF			0x00
-
-#define CM36656_R_DATA		0xF0
-#define CM36656_G_DATA		0xF1
-#define CM36656_B_DATA		0xF2
-#define CM36656_IR_DATA		0xF3
-
-#define CM36656_CONF_START      (1 << 7)
-#define CM36656_CONF_SD			1
-
-#define CM36656_CONF_TRIG		(1 << 2)
-#define CM36656_CONF_IT_50MS		(0 << 2)
-#define CM36656_CONF_IT_100MS		(1 << 2)
-#define CM36656_CONF_IT_200MS	(2 << 2)
-#define CM36656_CONF_IT_400MS	(3 << 2)
-#define CM36656_CONF_DEFAULT		0
-
-#define CM36656_CONF04L_AF			(1 << 6)
-
-
-/*cm36656 conf command code*/
-
-
-//hhptest
 #define LS_PWR_ON					(1 << 0)
 
 struct cm3323e_platform_data {
@@ -81,10 +50,6 @@ struct cm3323e_platform_data {
 #define BIT6				0x00000040
 #define BIT5				0x00000020
 #define BIT4				0x00000010
-//hhptest
-#define BIT3                0x00000008
-#define BIT2                0x00000004
-//hhptest
 
 
 #define ASUS_RGB_SENSOR_DATA_SIZE	5

@@ -590,7 +590,7 @@ enum enable_voters {
 	FAKE_BATTERY_EN_VOTER,
 	ATD_CMD_VOTER,
 	USB_ALERT_VOTER,
-	DEMO_APP_VOTER,
+	DEMO_APP_USB_VOTER,
 	NUM_EN_VOTERS,
 };
 
@@ -601,6 +601,7 @@ enum battchg_enable_voters {
 	BATTCHG_UNKNOWN_BATTERY_EN_VOTER,
 	/*jeita disable battery charging when temp is high*/
 	BATTCHG_JEITA_EN_VOTER,
+	DEMO_APP_VOTER,
 	NUM_BATTCHG_EN_VOTERS,
 };
 
@@ -8903,16 +8904,19 @@ static ssize_t asus_charge_limit_enable_proc_write(struct file *filp, const char
 		if(Check_ADF_Value()){	
 			charger_limit_enable = true;
 			charger_flag= true;
+			ASUSErclog(ASUS_DEMO_APP, "start WW Demo APP");
 			pr_info("charge_limit_enable\n");
 		}else{
 			charger_limit_enable = false;
 			charger_flag = true;
 			cancel_delayed_work(&charging_limit_work);
+			ASUSErclog(ASUS_DEMO_APP, "start WW Demo APP Error for check ADF");
 			pr_info("charge_limit_disable_1\n");
 		}
 #else
 			charger_limit_enable = true;
 			charger_flag= true;
+			ASUSErclog(ASUS_DEMO_APP, "start CN Demo APP");
 			pr_info("charge_limit_enable\n");
 #endif
 
@@ -8920,12 +8924,15 @@ static ssize_t asus_charge_limit_enable_proc_write(struct file *filp, const char
 		charger_limit_enable = false;
 		charger_flag = true;
 		cancel_delayed_work(&charging_limit_work);
+		ASUSErclog(ASUS_DEMO_APP, "stop Demo APP");
 		pr_info("charge_limit_disable_0\n");
 	}else{
 	    	pr_info("%s input error",__FUNCTION__);
 	}
-	if(charger_limit_enable ==0)
-		vote(the_chip->usb_suspend_votable, DEMO_APP_VOTER, 0, 0);
+	if(charger_limit_enable ==0){
+		vote(the_chip->battchg_suspend_votable, DEMO_APP_VOTER, 0, 0);
+		vote(the_chip->usb_suspend_votable, DEMO_APP_USB_VOTER, 0, 0);
+	}
 	return len;
 }
 static int asus_charge_limit_enable_proc_open(struct inode *inode, struct file *file)
@@ -8954,31 +8961,37 @@ void asus_battery_charging_limit(struct work_struct *dat)
 {
 	int percentage;
 	int rc;
+	static bool enable_usb_suspend = false;
 	printk("[%s],charger_limit_enable = %d,charger_limit_setting=%d\n",__FUNCTION__,charger_limit_enable,charger_limit_setting);
 	percentage = get_prop_batt_capacity(the_chip);
 	if (charger_limit_enable) {
 			if (percentage < charger_limit_setting-5) {
-				printk("[%s], percent: %d < charger_limit_setting , enable charging\n", __FUNCTION__, percentage);
 				charger_flag = true;
-			}else if(percentage >= charger_limit_setting){
-				printk("[%s], percent: %d >= charger_limit_setting , disable charging\n", __FUNCTION__, percentage);
+			}else if(percentage > charger_limit_setting){//if percentage>60 usb suspend
+				enable_usb_suspend = true;
+				goto USB_SUSPEND;
+			}else if((percentage >= charger_limit_setting-2) && (percentage <= charger_limit_setting)){//58% ~ 60%
 				charger_flag = false;
-			}else{
-				printk("[%s], percent: charger_limit_setting-5 <%d < charger_limit_setting,now %s\n", 
-					   __FUNCTION__, percentage,(charger_flag ? "charging":"discharging"));
-				
 			}
 	}
 
-	rc = vote(the_chip->usb_suspend_votable, DEMO_APP_VOTER, !charger_flag, 0);
+	enable_usb_suspend = false;
+
+	rc = vote(the_chip->battchg_suspend_votable, DEMO_APP_VOTER, !charger_flag, 0);
 	if(rc < 0)
-		{
-			pr_info("charger usb_suspend disable failed\n");
-		}
-	if(get_prop_batt_status(the_chip)==POWER_SUPPLY_STATUS_CHARGING){
-		charger_limit_update_work(60);
-	}else{
-		charger_limit_update_work(180);}
+	{
+		pr_info("charger batt_suspend disable failed\n");
+	}
+USB_SUSPEND:
+	if(enable_usb_suspend)
+		vote(the_chip->usb_suspend_votable, DEMO_APP_USB_VOTER, 1, 0);
+	else
+		vote(the_chip->usb_suspend_votable, DEMO_APP_USB_VOTER, 0, 0);
+
+	printk("charger_flag=%d;enable_usb_suspend=%d;percentage=%d\n",
+		charger_flag, enable_usb_suspend, percentage);
+
+	charger_limit_update_work(60);
 }
 
 //<ASUS-alexwang20160309-2>support asus factory battery voltage and current++++
@@ -10048,7 +10061,7 @@ static void smbchg_pre_config_ze553kl(struct smbchg_chip *chip)
 
 	//16. minimum system voltage setting
 	rc = smbchg_sec_masked_write(chip, chip->bat_if_base + 0xF4,
-			BIT(1)|BIT(0) ,BIT(1));
+			BIT(0) ,0);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set SMBCHGL_BAT_IF_CFG_SYSMIN rc=%d\n", rc);
 	}

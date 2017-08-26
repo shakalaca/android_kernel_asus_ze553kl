@@ -40,13 +40,19 @@
 		modem_mem: modem_region@0 {
 			compatible = "removed-dma-pool";
 			no-map-fixup;
-			reg = <0x0 0x86c00000 0x0 0x6a00000>;
+			reg = <0x0 0x86c00000 0x0 0x5600000>;
 		};
 
-		reloc_mem: reloc_region@0 {
+		adsp_fw_mem: adsp_fw_region@0 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x8d600000 0x0 0x1800000>;
+			reg = <0x0 0x8d600000 0x0 0x1100000>;
+		};
+
+		wcnss_fw_mem: wcnss_fw_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0x0 0x8e700000 0x0 0x700000>;
 		};
 
 		venus_mem: venus_region@0 {
@@ -251,7 +257,7 @@
 	};
 	qcom,rmtfs_sharedmem@00000000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x00000000 0x00180000>;
+		reg = <0x00000000 0x00500000>;
 		reg-names = "rmtfs";
 		qcom,client-id = <0x00000001>;
 	};
@@ -848,7 +854,7 @@
 			< 1036800000 2>,
 			< 1401600000 3>,
 			< 1689600000 4>,
-			< 1843200000 5>,
+			< 1804800000 5>,
 			< 1958400000 6>,
 			< 2016000000 7>;
 		qcom,speed0-bin-v0-cci =
@@ -857,7 +863,7 @@
 			<  414720000 2>,
 			<  560640000 3>,
 			<  675840000 4>,
-			<  737280000 5>,
+			<  721920000 5>,
 			<  783360000 6>,
 			<  806400000 7>;
 		qcom,speed2-bin-v0-cl =
@@ -866,7 +872,7 @@
 			< 1036800000 2>,
 			< 1401600000 3>,
 			< 1689600000 4>,
-			< 1843200000 5>,
+			< 1804800000 5>,
 			< 1958400000 6>,
 			< 2016000000 7>;
 		qcom,speed2-bin-v0-cci =
@@ -875,7 +881,7 @@
 			<  414720000 2>,
 			<  560640000 3>,
 			<  675840000 4>,
-			<  737280000 5>,
+			<  721920000 5>,
 			<  783360000 6>,
 			<  806400000 7>;
 		qcom,speed7-bin-v0-cl =
@@ -884,7 +890,7 @@
 			< 1036800000 2>,
 			< 1401600000 3>,
 			< 1689600000 4>,
-			< 1843200000 5>,
+			< 1804800000 5>,
 			< 1958400000 6>,
 			< 2016000000 7>,
 			< 2150400000 8>,
@@ -895,11 +901,25 @@
 			<  414720000 2>,
 			<  560640000 3>,
 			<  675840000 4>,
-			<  737280000 5>,
+			<  721920000 5>,
 			<  783360000 6>,
 			<  806400000 7>,
 			<  860160000 8>,
 			<  883200000 9>;
+		qcom,speed6-bin-v0-cl =
+			<          0 0>,
+			<  652800000 1>,
+			< 1036800000 2>,
+			< 1401600000 3>,
+			< 1689600000 4>,
+			< 1804800000 5>;
+		qcom,speed6-bin-v0-cci =
+			<          0 0>,
+			<  261120000 1>,
+			<  414720000 2>,
+			<  560640000 3>,
+			<  675840000 4>,
+			<  721920000 5>;
 		#clock-cells = <1>;
 	};
 
@@ -923,7 +943,7 @@
 			 < 1036800 >,
 			 < 1401600 >,
 			 < 1689600 >,
-			 < 1843200 >,
+			 < 1804800 >,
 			 < 1958400 >,
 			 < 2016000 >,
 			 < 2150400 >,
@@ -985,7 +1005,7 @@
 			 < 1036800  3221>,
 			 < 1401600  5859>,
 			 < 1689600  6445>,
-			 < 1843200  7104>,
+			 < 1804800  7104>,
 			 < 1958400  7104>,
 			 < 2208000  7104>;
 		};
@@ -1090,7 +1110,7 @@
 		reg = <0xb017000 0x1000>;
 		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
-		qcom,bark-time = <11000>;
+		qcom,bark-time = <15000>;
 		qcom,pet-time = <10000>;
 		qcom,ipi-ping;
 		qcom,wakeup-enable;
@@ -1288,6 +1308,8 @@
 		interrupt-names = "ipa-irq", "bam-irq";
 		qcom,ipa-hw-ver = <6>; /* IPA core version = IPAv2.6L */
 		qcom,ipa-hw-mode = <0>; /* IPA hw type = Normal */
+		qcom,wan-rx-ring-size = <192>; /* IPA WAN-rx-ring-size*/
+		qcom,lan-rx-ring-size = <192>; /* IPA LAN-rx-ring-size*/
 		clock-names = "core_clk";
 		clocks = <&clock_gcc clk_ipa_clk>;
 		qcom,ee = <0>;
@@ -1884,7 +1906,7 @@
 		/* GPIO output to lpass */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_2_out 0 0>;
 
-		memory-region = <&reloc_mem>;
+		memory-region = <&adsp_fw_mem>;
 	};
 
 	qcom,venus@1de0000 {
@@ -1964,7 +1986,7 @@
 
 		/* GPIO output to wcnss */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_4_out 0 0>;
-		memory-region = <&reloc_mem>;
+		memory-region = <&wcnss_fw_mem>;
 	};
 
 	usb3: ssusb@7000000{
@@ -2086,12 +2108,15 @@
 		reg = <0x079000 0x180>,
 			<0x070f8800 0x400>,
 			<0x01841030 0x4>,
-			<0x0193f044 0x4>;
+			<0x0193f044 0x4>,
+			<0x0193f020 0x4>;
 		reg-names = "qusb_phy_base",
 			"qscratch_base",
 			"ref_clk_addr",
-			"tcsr_phy_clk_scheme_sel";
+			"tcsr_phy_clk_scheme_sel",
+			"tcsr_phy_level_shift_keeper";
 
+		USB3_GDSC-supply = <&gdsc_usb30>;
 		vdd-supply = <&pm8953_l3>;
 		vdda18-supply = <&pm8953_l7>;
 		vdda33-supply = <&pm8953_l13>;
@@ -2113,10 +2138,12 @@
 		clocks = <&clock_gcc clk_bb_clk1>,
 			 <&clock_gcc clk_gcc_qusb_ref_clk>,
 			 <&clock_gcc clk_gcc_usb_phy_cfg_ahb_clk>,
-			 <&clock_gcc clk_gcc_qusb2_phy_reset>;
+			 <&clock_gcc clk_gcc_qusb2_phy_reset>,
+			 <&clock_gcc clk_gcc_pcnoc_usb3_axi_clk>,
+			 <&clock_gcc clk_gcc_usb30_master_clk>;
 
 		clock-names = "ref_clk_src", "ref_clk", "cfg_ahb_clk",
-			      "phy_reset";
+			      "phy_reset", "iface_clk", "core_clk";
 
 	};
 
@@ -2229,6 +2256,11 @@
 		clock-names = "aux_clk", "pipe_clk", "cfg_ahb_clk", "phy_reset",
 			      "phy_phy_reset", "ref_clk_src", "ref_clk";
 
+	};
+
+	usb_audio_qmi_dev {
+		compatible = "qcom,usb-audio-qmi-dev";
+		qcom,usb-audio-intr-num = <2>;
 	};
 
 	dbm_1p5: dbm@70f8000 {

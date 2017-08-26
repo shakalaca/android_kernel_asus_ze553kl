@@ -20,7 +20,7 @@
 	qcom,msm-mbhc-hphl-swh = <1>;
 	qcom,msm-mbhc-gnd-swh = <0>;
 	qcom,msm-hs-micbias-type = "external";
-	qcom,msm-micbias1-ext-cap;
+	//qcom,msm-micbias1-ext-cap;
 
 	//add quinary for external tfa speake;asus_bsp++
     qcom,msm-ext-pa = "primary","quinary";
@@ -67,37 +67,53 @@
 		"comp_gpio_quin_us_eu_gpio_pri_i2s_act";
 
 	pinctrl-0 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_sus
-		&cdc_pdm_lines_2_sus &pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
+		&cdc_pdm_lines_2_sus &cross_conn_det_sus
+		&pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
 	pinctrl-1 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_sus
-		&cdc_pdm_lines_2_act &pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
+		&cdc_pdm_lines_2_act &cross_conn_det_sus
+		&pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
 	pinctrl-2 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_sus
-		&cdc_pdm_lines_2_sus &pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
+		&cdc_pdm_lines_2_sus &cross_conn_det_act
+		&pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
 	pinctrl-3 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_sus
-		&cdc_pdm_lines_2_act &pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
+		&cdc_pdm_lines_2_act &cross_conn_det_act
+		&pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
 	pinctrl-4 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_sus
-		&cdc_pdm_lines_2_sus &pri_tlmm_lines_act &pri_tlmm_ws_act>;
+		&cdc_pdm_lines_2_sus &cross_conn_det_sus
+		&pri_tlmm_lines_act &pri_tlmm_ws_act>;
 	pinctrl-5 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_sus
-		&cdc_pdm_lines_2_act &pri_tlmm_lines_act &pri_tlmm_ws_act>;
+		&cdc_pdm_lines_2_act &cross_conn_det_sus
+		&pri_tlmm_lines_act &pri_tlmm_ws_act>;
 	pinctrl-6 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_sus
-		&cdc_pdm_lines_2_sus &pri_tlmm_lines_act &pri_tlmm_ws_act>;
+		&cdc_pdm_lines_2_sus &cross_conn_det_act
+		&pri_tlmm_lines_act &pri_tlmm_ws_act>;
 	pinctrl-7 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_sus
-		&cdc_pdm_lines_2_act  &pri_tlmm_lines_act &pri_tlmm_ws_act>;
+		&cdc_pdm_lines_2_act &cross_conn_det_act
+		&pri_tlmm_lines_act &pri_tlmm_ws_act>;
 	pinctrl-8 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_act
-		&cdc_pdm_lines_2_sus &pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
+		&cdc_pdm_lines_2_sus &cross_conn_det_sus
+		&pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
 	pinctrl-9 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_act
-		&cdc_pdm_lines_2_act  &pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
+		&cdc_pdm_lines_2_act &cross_conn_det_sus
+		&pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
 	pinctrl-10 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_act
-		&cdc_pdm_lines_2_sus  &pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
+		&cdc_pdm_lines_2_sus &cross_conn_det_act
+		&pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
 	pinctrl-11 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_act
-		&cdc_pdm_lines_2_act &pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
+		&cdc_pdm_lines_2_act &cross_conn_det_act
+		&pri_tlmm_lines_sus &pri_tlmm_ws_sus>;
 	pinctrl-12 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_act
-		&cdc_pdm_lines_2_sus  &pri_tlmm_lines_act &pri_tlmm_ws_act>;
+		&cdc_pdm_lines_2_sus &cross_conn_det_sus
+		&pri_tlmm_lines_act &pri_tlmm_ws_act>;
 	pinctrl-13 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_act
-		&cdc_pdm_lines_2_act &pri_tlmm_lines_act &pri_tlmm_ws_act>;
+		&cdc_pdm_lines_2_act &cross_conn_det_sus
+		&pri_tlmm_lines_act &pri_tlmm_ws_act>;
 	pinctrl-14 = <&cdc_pdm_lines_sus &cdc_pdm_comp_lines_act
-		&cdc_pdm_lines_2_sus &pri_tlmm_lines_act &pri_tlmm_ws_act>;
+		&cdc_pdm_lines_2_sus &cross_conn_det_act
+		&pri_tlmm_lines_act &pri_tlmm_ws_act>;
 	pinctrl-15 = <&cdc_pdm_lines_act &cdc_pdm_comp_lines_act
-		&cdc_pdm_lines_2_act &pri_tlmm_lines_act &pri_tlmm_ws_act>;
+		&cdc_pdm_lines_2_act &cross_conn_det_act
+		&pri_tlmm_lines_act &pri_tlmm_ws_act>;
 
 	asoc-codec = <&stub_codec>, <&pm8953_diangu_dig>, <&hdmi_dba>;
 	asoc-codec-names = "msm-stub-codec.1", "cajon_codec",

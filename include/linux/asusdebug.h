@@ -207,6 +207,7 @@ extern phys_addr_t RTB_BUFFER_PA;
 #define ASUS_JEITA_HARD_COLD "ASUS_JEITA_hard_cold"
 #define ASUS_USB_WATER_INVADE "ASUS_USB_water_invade"
 #define ASUS_OUTPUT_OVP "ASUS_Output_OVP"
+#define ASUS_DEMO_APP "ASUS_Demo_APP"
 
 void save_all_thread_info(void);
 void delta_all_thread_info(void);

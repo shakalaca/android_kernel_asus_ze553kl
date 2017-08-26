@@ -1002,6 +1002,7 @@
 			};
 		};
 
+
 		/* WSA VI sense */
 		wsa-vi {
 			wsa_vi_on: wsa_vi_on {

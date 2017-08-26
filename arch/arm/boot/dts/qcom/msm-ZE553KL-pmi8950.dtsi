@@ -31,13 +31,12 @@
 			qcom,secondary-pon-reset;
 			qcom,hard-reset-poweroff-type =
 				<PON_POWER_OFF_SHUTDOWN>;
-
 			pon_perph_reg: qcom,pon_perph_reg {
 				regulator-name = "pon_spare_reg";
 				qcom,pon-spare-reg-addr = <0x8c>;
 				qcom,pon-spare-reg-bit = <1>;
-                                regulator-boot-on;
-                                regulator-always-on;
+				regulator-boot-on;
+				regulator-always-on;
 			};
 		};
 
@@ -235,7 +234,6 @@
 			qcom,force-aicl-rerun;
 			qcom,aicl-rerun-period-s = <180>;
 			qcom,autoadjust-vfloat;
-			qcom,thermal-vadc = <&pmi8950_vadc>;
 
 			qcom,chgr@1000 {
 				reg = <0x1000 0x100>;
@@ -341,15 +339,14 @@
 			status = "okay";
 			qcom,bcl-lm-threshold-ma = <127>;
 			qcom,bcl-mh-threshold-ma = <405>;
-			qcom,fg-iterm-ma = <250>;
-			qcom,fg-chg-iterm-ma = <200>;
+			qcom,fg-iterm-ma = <150>;
+			qcom,fg-chg-iterm-ma = <100>;
 			qcom,pmic-revid = <&pmi8950_revid>;
 			qcom,fg-cutoff-voltage-mv = <3400>;
 			qcom,cycle-counter-en;
 			qcom,capacity-learning-on;
 			qcom,ext-sense-type;
 			qcom,hold-soc-while-full;
-			qcom,vbat-estimate-diff-mv = <250>;
 
 			qcom,fg-soc@4000 {
 			status = "okay";
@@ -446,7 +443,8 @@
 				qcom,mode-ctrl = <0x60>;
 				qcom,vin-ctrl=<3>;
 				pwms = <&pmi8950_pwm 0 0>;
-				qcom,pwm-us = <100>; //setup 0.0001s 
+				qcom,pwm-us = <100>; //setup 0.0001s
+				qcom,in-order-command-processing;
 			};
 		};
 		qcom,leds@a300 {
@@ -467,7 +465,8 @@
 				qcom,mode-ctrl = <0x60>;
 				qcom,vin-ctrl=<3>;
 				pwms = <&pmi8950_pwm 0 0>;
-				qcom,pwm-us = <100>; //setup 0.0001s 
+				qcom,pwm-us = <100>; //setup 0.0001s
+				qcom,in-order-command-processing;
 			};
 		};
 	};
@@ -671,7 +670,7 @@
 				qcom,current = <625>;
 				reg0 {
 					regulator-name = "pon_spare_reg";
-				};	
+				};
 			};
 		};
 
@@ -696,7 +695,6 @@
 			qcom,wave-samples = [3e 3e 3e 3e 3e 3e 3e 3e];
 			qcom,wave-rep-cnt = <1>;
 			qcom,wave-samp-rep-cnt = <1>;
-                        vcc_pon-supply=<&pon_perph_reg>;
 		};
 	};
 };

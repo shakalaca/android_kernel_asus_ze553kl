@@ -21,9 +21,6 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 
-
-
-
 		pmx-uartconsole {
 			uart_console_active: uart_console_active {
 				mux {
@@ -253,9 +250,6 @@
 			};
 		};
 */
-
-
-
 		//bsp jenny+++
               spi0 {
 
@@ -321,6 +315,7 @@
                        };
                };
                //bsp jenny---
+
 		cci {
 			cci0_active: cci0_active {
 				/* cci0 active state */
@@ -382,10 +377,7 @@
 				};
 			};
 		};
-
-
-
-
+/*
 		preisp_mclk_default: preisp_mclk_default {
 			mux {
 				pins = "gpio28";
@@ -408,6 +400,79 @@
 				pins = "gpio28";
 				bias-pull-up;
 				drive-strength = <2>;
+			};
+		};
+*/
+		preisp_mclk_default: preisp_mclk_default {
+			mux {
+				pins = "gpio28";
+				function = "cam_mclk";
+			};
+
+			config {
+				pins = "gpio28";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+		preisp_mclk_sleep: preisp_mclk_sleep {
+			mux {
+				pins = "gpio28";
+				function = "cam_mclk";
+			};
+
+			config {
+				pins = "gpio28";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+		preisp_irq_gpios_default: preisp_irq_gpios_default {
+			mux {
+				pins = "gpio17";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio17";
+				bias-pull-up; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+		preisp_irq_gpios_sleep: preisp_irq_gpios_sleep{
+			mux {
+				pins = "gpio17";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio17";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+		preisp_gpios_default: preisp_gpios_default {
+			mux {
+				pins = "gpio62","gpio64","gpio86","gpio141";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio62","gpio64","gpio86","gpio141";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+		preisp_gpios_sleep: preisp_gpios_sleep{
+			mux {
+				pins = "gpio62","gpio64","gpio86","gpio141";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio62","gpio64","gpio86","gpio141";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
 			};
 		};
 		cam_sensor_mclk0_default: cam_sensor_mclk0_default {
@@ -596,6 +661,38 @@
 				drive-strength = <2>;
 				output-low;
 			};
+//asus bsp ralf>>not use pin-ctrl for sequence issue
+/*
+//bsp jenny+++
+
+		preisp_default1: preisp_default1 {
+			mux {
+				pins = "gpio141","gpio40";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio141","gpio40";
+				drive-strength = <8>;
+				output-high;
+			};
+		};
+		preisp_sleep1: preisp_sleep1 {
+			mux {
+				pins = "gpio141","gpio40";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio141","gpio40";
+				drive-strength = <2>;
+				output-low;
+			};
+		};
+//bsp jenny---
+*/
+//asus bsp ralf<<
+
 		};
 
 
@@ -629,9 +726,6 @@
 			};
 		};
 
-
-
-
 		pmx_mdss: pmx_mdss {
 			mdss_dsi_active: mdss_dsi_active {
 				mux {
@@ -659,6 +753,7 @@
 				};
 			};
 		};
+
 		pmx_mdss_te {
 			mdss_te_active: mdss_te_active {
 				mux {
@@ -671,6 +766,7 @@
 					bias-pull-down; /* pull down*/
 				};
 			};
+
 			mdss_te_suspend: mdss_te_suspend {
 				mux {
 					pins = "gpio24";
@@ -695,6 +791,7 @@
 				drive-strength = <16>;	/* 16 MA */
 			};
 		};
+
 		sdc1_clk_off: sdc1_clk_off {
 			config {
 				pins = "sdc1_clk";
@@ -702,6 +799,7 @@
 				drive-strength = <2>;	/* 2 MA */
 			};
 		};
+
 		sdc1_cmd_on: sdc1_cmd_on {
 			config {
 				pins = "sdc1_cmd";
@@ -709,6 +807,7 @@
 				drive-strength = <10>;	/* 10 MA */
 			};
 		};
+
 		sdc1_cmd_off: sdc1_cmd_off {
 			config {
 				pins = "sdc1_cmd";
@@ -717,6 +816,7 @@
 				drive-strength = <2>;	/* 2 MA */
 			};
 		};
+
 		sdc1_data_on: sdc1_data_on {
 			config {
 				pins = "sdc1_data";
@@ -724,6 +824,7 @@
 				drive-strength = <10>;	/* 10 MA */
 			};
 		};
+
 		sdc1_data_off: sdc1_data_off {
 			config {
 				pins = "sdc1_data";
@@ -731,18 +832,21 @@
 				drive-strength = <2>;	/* 2 MA */
 			};
 		};
+
 		sdc1_rclk_on: sdc1_rclk_on {
 			config {
 				pins = "sdc1_rclk";
 				bias-pull-down; /* pull down */
 			};
 		};
+
 		sdc1_rclk_off: sdc1_rclk_off {
 			config {
 				pins = "sdc1_rclk";
 				bias-pull-down; /* pull down */
 			};
 		};
+
 		sdc2_clk_on: sdc2_clk_on {
 			config {
 				pins = "sdc2_clk";
@@ -750,6 +854,7 @@
 				bias-disable; /* NO pull */
 			};
 		};
+
 		sdc2_clk_off: sdc2_clk_off {
 			config {
 				pins = "sdc2_clk";
@@ -757,6 +862,7 @@
 				drive-strength = <2>; /* 2 MA */
 			};
 		};
+
 		sdc2_cmd_on: sdc2_cmd_on {
 			config {
 				pins = "sdc2_cmd";
@@ -764,6 +870,7 @@
 				drive-strength = <10>; /* 10 MA */
 			};
 		};
+
 		sdc2_cmd_off: sdc2_cmd_off {
 			config {
 				pins = "sdc2_cmd";
@@ -771,6 +878,7 @@
 				drive-strength = <2>; /* 2 MA */
 			};
 		};
+
 		sdc2_data_on: sdc2_data_on {
 			config {
 				pins = "sdc2_data";
@@ -778,6 +886,7 @@
 				drive-strength = <10>; /* 10 MA */
 			};
 		};
+
 		sdc2_data_off: sdc2_data_off {
 			config {
 				pins = "sdc2_data";
@@ -785,6 +894,7 @@
 				drive-strength = <2>; /* 2 MA */
 			};
 		};
+
 		sdc2_cd_on: cd_on {
 			mux {
 				pins = "gpio133";
@@ -797,6 +907,7 @@
 				bias-pull-up;
 			};
 		};
+
 		sdc2_cd_off: cd_off {
 			mux {
 				pins = "gpio133";
@@ -900,6 +1011,7 @@
 				};
 			};
 		};
+
 		wcnss_pmux_gpio: wcnss_pmux_gpio {
 			wcnss_gpio_default: wcnss_gpio_default {
 				/* Active configuration of bus pins */
@@ -920,6 +1032,7 @@
 				};
 			};
 		};
+
 		wcd9xxx_intr {
 			wcd_intr_default: wcd_intr_default{
 				mux {
@@ -935,6 +1048,7 @@
 				};
 			};
 		};
+
 		cdc_reset_ctrl {
 			cdc_reset_sleep: cdc_reset_sleep {
 				mux {
@@ -961,6 +1075,7 @@
 				};
 			};
 		};
+
 		cdc_mclk2_pin {
 			cdc_mclk2_sleep: cdc_mclk2_sleep {
 				mux {
@@ -985,6 +1100,7 @@
 				};
 			};
 		};
+
 		cdc-pdm-2-lines {
 			cdc_pdm_lines_2_act: pdm_lines_2_on {
 				mux {
@@ -1011,6 +1127,7 @@
 				};
 			};
 		};
+
 		cdc-pdm-lines {
 			cdc_pdm_lines_act: pdm_lines_on {
 				mux {
@@ -1036,6 +1153,7 @@
 				};
 			};
 		};
+
 		cdc-pdm-comp-lines {
 			cdc_pdm_comp_lines_act: pdm_comp_lines_on {
 				mux {
@@ -1062,6 +1180,34 @@
 				};
 			};
 		};
+                cross-conn-det {
+                        cross_conn_det_act: lines_on {
+                                mux {
+                                        pins = "gpio63";
+                                        function = "gpio";
+                                };
+
+                                config {
+                                        pins = "gpio63";
+                                        drive-strength = <8>;
+                                        output-low;
+                                        bias-pull-down;
+                                };
+                        };
+
+                        cross_conn_det_sus: lines_off {
+                                mux {
+                                        pins = "gpio63";
+                                        function = "gpio";
+                                };
+
+                                config {
+                                        pins = "gpio63";
+                                        drive-strength = <2>;
+                                        bias-pull-up;
+                                };
+                        };
+                };
 
 		/* WSA VI sense */
 		wsa-vi {
@@ -1117,6 +1263,7 @@
 				};
 			};
 		};
+
 		pri-tlmm-ws-lines {
 			pri_tlmm_ws_act: pri_tlmm_ws_act {
 				mux {
@@ -1216,10 +1363,6 @@
 			};
 		};
 
-
-
-
-
 		tlmm_gpio_key {
 			gpio_key_active: gpio_key_active {
 				mux {
@@ -1247,10 +1390,6 @@
 				};
 			};
 		};
-
-
-
-
 		pmx_qdsd_clk {
 			qdsd_clk_sdcard: clk_sdcard {
 				config {
@@ -1281,6 +1420,7 @@
 				};
 			};
 		};
+
 		pmx_qdsd_cmd {
 			qdsd_cmd_sdcard: cmd_sdcard {
 				config {
@@ -1325,6 +1465,7 @@
 				};
 			};
 		};
+
 		pmx_qdsd_data0 {
 			qdsd_data0_sdcard: data0_sdcard {
 				config {
@@ -1369,6 +1510,7 @@
 				};
 			};
 		};
+
 		pmx_qdsd_data1 {
 			qdsd_data1_sdcard: data1_sdcard {
 				config {
@@ -1406,6 +1548,7 @@
 				};
 			};
 		};
+
 		pmx_qdsd_data2 {
 			qdsd_data2_sdcard: data2_sdcard {
 				config {
@@ -1443,6 +1586,7 @@
 				};
 			};
 		};
+
 		pmx_qdsd_data3 {
 			qdsd_data3_sdcard: data3_sdcard {
 				config {
@@ -1676,10 +1820,10 @@
 		cm36283_irq_pin {
 			cm36283_default: cm36283_default {
 				mux {
-	 				pins = "gpio43";
-	 				function = "gpio";
+					pins = "gpio43";
+					function = "gpio";
 				};
- 
+
 				config {
 					pins = "gpio43";
 					drive-strength = <16>;

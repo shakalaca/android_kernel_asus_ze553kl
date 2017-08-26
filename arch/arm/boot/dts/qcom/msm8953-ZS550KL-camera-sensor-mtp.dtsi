@@ -82,12 +82,7 @@
                 qcom,slave-id = <0x98 0x0328 0x1AD>;
                 compatible = "qcom,ois1";
                 label = "tof";
-                qcom,cci-master = <0>;
-                cam_vaf-supply = <&pm8953_l10>;
-                qcom,cam-vreg-name = "cam_vaf";
-                qcom,cam-vreg-min-voltage = <3000000>;
-                qcom,cam-vreg-max-voltage = <3000000>;
-                qcom,cam-vreg-op-mode = <80000>;
+                qcom,cci-master = <0>;                
                 qcom,clock-rates = <19200000 0>;
         };
 

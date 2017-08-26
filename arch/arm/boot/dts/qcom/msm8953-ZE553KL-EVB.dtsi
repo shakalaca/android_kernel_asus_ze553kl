@@ -440,6 +440,25 @@
 		sensor_information23: qcom,sensor-information-23 {
 			qcom,sensor-type =  "adc";
 			qcom,sensor-name = "pmi8950_tz";
+			qcom,scaling-factor = <1000>;
+		};
+                sensor_information24: qcom,sensor-information-24 {
+                        qcom,sensor-type =  "adc";
+                        qcom,sensor-name = "bms";
+                        qcom,scaling-factor = <1000>;
+                };
+                sensor_information25: qcom,sensor-information-25 {
+                        qcom,sensor-type =  "adc";
+                        qcom,sensor-name = "battery";
+                        qcom,scaling-factor = <1000>;
+                };
+		sensor_information26: qcom,sensor-information-26 {
+			qcom,sensor-type =  "adc";
+			qcom,sensor-name = "rear_camera";
+		};
+		sensor_information27: qcom,sensor-information-27 {
+			qcom,sensor-type =  "adc";
+			qcom,sensor-name = "front_camera";
 		};
 	};
 
@@ -2361,7 +2380,7 @@
 #include "msm8953-ZE553KL-audio-mtp.dtsi"
 #include "msm-gdsc-8916.dtsi"
 #include "msm8953-ZE553KL-camera.dtsi"
-#include "msm8953-mdss.dtsi"
+#include "msm8953-mdss-ZE553KL.dtsi"
 #include "msm8953-mdss-pll.dtsi"
 
 &gdsc_venus {

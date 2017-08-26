@@ -40,7 +40,7 @@
 #include <linux/msm_ion.h>
 #include <linux/msm_dma_iommu_mapping.h>
 #include <trace/events/kmem.h>
-
+#include <linux/proc_fs.h>
 
 #include "ion.h"
 #include "ion_priv.h"
@@ -2029,6 +2029,79 @@ int ion_walk_heaps(struct ion_client *client, int heap_id,
 }
 EXPORT_SYMBOL(ion_walk_heaps);
 
+extern struct ion_heap *heap_internal;
+
+static int ion_used_proc_read(struct seq_file *s, void *v)
+{
+	struct ion_heap *heap = heap_internal;
+	struct ion_device *dev = heap_internal->dev;
+	struct rb_node *n;
+	size_t total_size = 0;
+	size_t total_orphaned_size = 0;
+
+	/*
+	pr_info("%16.s %16.s %16.s\n", "client", "pid", "size");
+	pr_info("----------------------------------------------------\n");
+
+	down_read(&dev->lock);
+	for (n = rb_first(&dev->clients); n; n = rb_next(n)) {
+		struct ion_client *client = rb_entry(n, struct ion_client,
+						     node);
+		size_t size = ion_debug_heap_total(client, heap->id);
+
+		if (!size)
+			continue;
+		if (client->task) {
+			char task_comm[TASK_COMM_LEN];
+
+			get_task_comm(task_comm, client->task);
+			pr_info("%16.s %16u %16zu\n", task_comm, client->pid, size);
+		} else {
+			pr_info("%16.s %16u %16zu\n", client->name, client->pid, size);
+		}
+	}
+	up_read(&dev->lock);
+	pr_info("----------------------------------------------------\n");
+	pr_info("orphaned allocations (info is from last known client):\n");
+	*/
+
+	mutex_lock(&dev->buffer_lock);
+	for (n = rb_first(&dev->buffers); n; n = rb_next(n)) {
+		struct ion_buffer *buffer = rb_entry(n, struct ion_buffer, node);
+		if (buffer->heap->id != heap->id)
+			continue;
+		total_size += buffer->size;
+
+		if (!buffer->handle_count) {
+			/*
+			pr_info("%16.s %16u %16zu %d %d\n",
+				buffer->task_comm, buffer->pid,
+				buffer->size, buffer->kmap_cnt,
+				atomic_read(&buffer->ref.refcount));
+			*/
+			total_orphaned_size += buffer->size;
+		}
+	}
+	mutex_unlock(&dev->buffer_lock);
+
+	pr_info("[ION] total orphaned = %zu, total = %zu\n", total_orphaned_size, total_size);
+
+	return seq_printf(s, "%lu\n", total_size);
+}
+
+static int ion_used_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ion_used_proc_read, inode->i_private);
+}
+
+static struct file_operations proc_ion_used_operations = {
+	.owner = THIS_MODULE,
+	.open = ion_used_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 struct ion_device *ion_device_create(long (*custom_ioctl)
 				     (struct ion_client *client,
 				      unsigned int cmd,
@@ -2075,6 +2148,7 @@ debugfs_done:
 	plist_head_init(&idev->heaps);
 	idev->clients = RB_ROOT;
 	ion_dev = idev;
+	proc_create("ION_Used", S_IRWXUGO, NULL, &proc_ion_used_operations);
 	return idev;
 }
 

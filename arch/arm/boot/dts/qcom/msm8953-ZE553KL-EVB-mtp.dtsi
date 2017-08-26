@@ -29,12 +29,6 @@
 	tps6218x@75{	
 		compatible = "tps6128";
 		reg = <0x75>;
-		status = "disable";
-		};
-	us5587@38{
-		compatible = "us5587-adc";
-		reg = <0x38>;
-		us5587_adc_en = < &tlmm 132 0x0>;
 		};
 };
 
@@ -76,29 +70,26 @@
 	};
 */
 
-	synaptics_dsx@20 {
-		compatible = "synaptics,dsx";
-		reg = <0x20>;
+	synaptics_dsx@70 {
+		compatible = "synaptics,dsx-i2c";
+		reg = <0x70>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <65 0x2008>;
-		vdd-supply = <&pm8953_l10>;
-		avdd-supply = <&pm8953_l6>;
-		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
-		pinctrl-0 = <&ts_active>;
-		pinctrl-1 = <&ts_suspend>;
-		synaptics,display-coords = <0 0 1079 1919>;
-		synaptics,panel-coords = <0 0 1079 1919>;
+		interrupts = <65 0x2>;
+		vdd_ana-supply = <&pm8953_l10>;
+		vcc_i2c-supply = <&pm8953_l6>;
+		synaptics,pwr-reg-name = "vdd_ana";
+		synaptics,bus-reg-name = "vcc_i2c";
 		synaptics,reset-gpio = <&tlmm 16 0x0>;
-		synaptics,irq-gpio = <&tlmm 65 0x2008>;
-		synaptics,disable-gpios;
+		synaptics,irq-gpio = <&tlmm 65 0x00>;
+		synaptics,irq-on-state = <0>;
+		synaptics,irq-flags = <0x2008>; /* IRQF_ONESHOT | IRQF_TRIGGER_LOW */
 		synaptics,power-delay-ms = <200>;
 		synaptics,reset-delay-ms = <200>;
 		synaptics,reset-on-state = <0>;
 		synaptics,reset-active-ms = <20>;
-		synaptics,ub-i2c-addr = <0x70>;
-		synaptics,fw-name = "PR2507195-45440006-S3508R_111616.img";
+		synaptics,ub-i2c-addr = <0x20>;
 		/* uncomment and update line below as appropriate if there are 0D buttons */
-		//synaptics,cap-button-codes = <158 102 139>;
+		synaptics,cap-button-codes = <158 102 139>;
 		/* uncomment and update lines below as appropriate if there are virtual buttons */
 		/* synaptics,vir-button-codes = <102 100 900 100 60 158 300 900 100 60>; */
 		/* synaptics,max-y-for-2d = <800>; */
@@ -129,7 +120,6 @@
 };
 
 &i2c_6 { /* BLSP2 QUP2 */
-/*
 	ap3045@1c{ 
 		compatible = "di,ap3045";
 		reg = <0x1c>;
@@ -147,16 +137,16 @@
 		intel,als-persis-time = <0x0f>;
 		intel,int-ctrl = <0xA8>;
 		intel,ps-gain = < 0x40 >; 
-		intel,ps-led-control = <0x20>;  
+		intel,ps-led-control = <0x20>;  /* 33T */
 		intel,ps-time = <0x01>;  
-		intel,als-gain = < 0x06 >; 
+		intel,als-gain = < 0x06 >; /* 0:full */
 		pm,class-name = "ap3045_class";
 		pm,user-name = "ext_proximity_sensor";
 		pm,state-D0 = "enable";
 		pm,state-D3 = "disable";
 		
 	};
-*/
+
  	capella@60 {
  		compatible = "capella,cm36283";
  		reg = <0x60>;
@@ -185,7 +175,7 @@
 };
 
 &pm8953_l10 {
-	regulator-max-microvolt = <3000000>;
+	regulator-max-microvolt = <3300000>;
 };
 
 &soc {
@@ -213,7 +203,7 @@
 			debounce-interval = <15>;
 		};
 */
-
+/* gpio86 is not used
 		camera_snapshot {
 			label = "camera_snapshot";
 			gpios = <&tlmm 86 0x1>;
@@ -221,7 +211,7 @@
 			linux,code = <0x2fe>;
 			debounce-interval = <15>;
 		};
-
+*/
 		vol_up {
 			label = "volume_up";
 			gpios = <&tlmm 85 0x1>;
@@ -303,7 +293,7 @@
 	qcom,follow-otst2-rb-disabled;
 };
 
-#include "msm8953-mdss-panels.dtsi"
+#include "msm8953-mdss-panels-ZE553KL.dtsi"
 
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
@@ -351,7 +341,6 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
 };
 /*---------ASUS ZE553KL Panel----------*/
-
 /*+++++++++ASUS ZE553KL second Panel++++++++++*/
 &dsi_rm67198_1080p_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
@@ -451,8 +440,6 @@
 		qcom,batt-id-range-pct = <15>;
 		#include "batterydata-itech-3000mah.dtsi"
 		#include "2446501_Asus_Aquarius_3000mAh_averaged_MasterSlave_May26th2016_PMI8952GUI20016.dtsi"
-		#include "2575458_Asus_Hades_4850mAh_averaged_MasterSlave_Sept9th2016_PMI8952.dtsi"
-		#include "2623087_Asus_Hades_4850mAh_averaged_MasterSlave_Oct5th2016_PMI8952GUI20016.dtsi"
 	};
 };
 
@@ -464,7 +451,6 @@
 	qcom,battery-data = <&mtp_batterydata>;
 	adp-power-supply = <&pm8953_l8>;
 
-	qcom,dcp-chg-gpio=<&tlmm 129 0x0>;
  	qcom,adc-sw-gpio=<&tlmm 134 0x0>;
  	qcom,adc-power-gpio=<&pmi8950_gpios 1 0x0>;
 

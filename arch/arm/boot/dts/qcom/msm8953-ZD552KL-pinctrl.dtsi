@@ -1024,34 +1024,6 @@
 			};
 		};
 
-		cross-conn-det {
-			cross_conn_det_act: lines_on {
-				mux {
-					pins = "gpio63";
-					function = "gpio";
-				};
-
-				config {
-					pins = "gpio63";
-					drive-strength = <8>;
-					output-low;
-					bias-pull-down;
-				};
-			};
-
-			cross_conn_det_sus: lines_off {
-				mux {
-					pins = "gpio63";
-					function = "gpio";
-				};
-
-				config {
-					pins = "gpio63";
-					drive-strength = <2>;
-					bias-pull-down;
-				};
-			};
-		};
 
 		/* WSA VI sense */
 		wsa-vi {
@@ -1086,12 +1058,12 @@
 		tfa_int {
 			tfa_int_default: tfa_int_default {
 				mux {
-					pins = "gpio96";
+					pins = "gpio97";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio96";
+					pins = "gpio97";
 					drive-strength = <2>; /* 2 MA */
 					bias-disable; /* No PULL */
 					input-enable;
@@ -1103,12 +1075,12 @@
 		tfa_rst {
 			tfa_rst_default: tfa_rst_default {
 				mux {
-					pins = "gpio97";
+					pins = "gpio96";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio97";
+					pins = "gpio96";
 					drive-strength = <2>; /* 2 MA */
 					bias-pull-down; /* pull down */
 					output-low;

@@ -109,9 +109,9 @@
 		qcom,cam-vreg-name =// "cam_vdig", 
 		"cam_vaf", "cam_vana","cam_vaf_laser";
 		qcom,cam-vreg-min-voltage = <//1000000 
-		2850000 2800000 3000000>;
+		2850000 2800000 3300000>;
 		qcom,cam-vreg-max-voltage = <//1000000
-		2850000 2800000 3000000>;
+		2850000 2800000 3300000>;
 		qcom,cam-vreg-op-mode = <//105000 
 		100000 80000 80000>;
 		gpios = //<&tlmm 35 0>,

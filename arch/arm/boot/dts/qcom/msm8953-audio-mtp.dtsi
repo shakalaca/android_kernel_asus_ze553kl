@@ -14,7 +14,7 @@
 &int_codec {
 	status = "okay";
 	qcom,model = "msm8953-snd-card-mtp";
-	qcom,msm-hs-micbias-type = "internal";
+	qcom,msm-hs-micbias-type = "external";
 };
 
 &pm8953_diangu_dig {

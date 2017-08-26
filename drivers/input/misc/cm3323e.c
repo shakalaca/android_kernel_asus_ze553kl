@@ -41,10 +41,6 @@
 #define REL_GREEN	REL_Y
 #define REL_BLUE	REL_Z
 #define REL_WHITE	REL_MISC
-//hhptest
-#define REL_IR	REL_MISC
-
-//hhptest
 #define CM3323_VDD_MIN_UV	3300000
 #define CM3323_VDD_MAX_UV	3300000
 #define CM3323_VI2C_MIN_UV	1800000
@@ -74,7 +70,7 @@ static struct mutex als_enable_mutex, als_disable_mutex, als_get_adc_mutex;
 static int rgbsensor_enable(struct cm3323e_info *lpi);
 static int rgbsensor_disable(struct cm3323e_info *lpi);
 
-static uint16_t cm3323e_adc_red, cm3323e_adc_green, cm3323e_adc_blue, cm3323e_adc_ir;
+static uint16_t cm3323e_adc_red, cm3323e_adc_green, cm3323e_adc_blue, cm3323e_adc_white;
 int rgb_data[5] = {0};
 static int cm3323_power_set(struct cm3323e_info * info, bool on);
 static uint16_t CONF_SETTING = 0;
@@ -187,17 +183,17 @@ static void report_lsensor_input_event(struct cm3323e_info *lpi, bool resume)
 
 	mutex_lock(&als_get_adc_mutex);
 
-	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_R_DATA, &cm3323e_adc_red);
-	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_G_DATA, &cm3323e_adc_green);
-	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_B_DATA, &cm3323e_adc_blue);
-	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_IR_DATA, &cm3323e_adc_ir);	
+	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_R_DATA, &cm3323e_adc_red);
+	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_G_DATA, &cm3323e_adc_green);
+	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_B_DATA, &cm3323e_adc_blue);
+	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_W_DATA, &cm3323e_adc_white);	
 
 	input_report_rel(lpi->ls_input_dev, REL_RED,   (int) cm3323e_adc_red);
 	input_report_rel(lpi->ls_input_dev, REL_GREEN, (int) cm3323e_adc_green);
 	input_report_rel(lpi->ls_input_dev, REL_BLUE,  (int) cm3323e_adc_blue);
-	input_report_rel(lpi->ls_input_dev, REL_IR, (int) cm3323e_adc_ir);
+	input_report_rel(lpi->ls_input_dev, REL_WHITE, (int) cm3323e_adc_white);
 	input_sync(lpi->ls_input_dev);
-	//D("[LS][CM3323E] %s %x %x %x %x \n", __func__, cm3323e_adc_red, cm3323e_adc_green, cm3323e_adc_blue, cm3323e_adc_ir);
+	//D("[LS][CM3323E] %s %x %x %x %x \n", __func__, cm3323e_adc_red, cm3323e_adc_green, cm3323e_adc_blue, cm3323e_adc_white);
 	  
 	mutex_unlock(&als_get_adc_mutex);
 }
@@ -337,9 +333,9 @@ static int rgbsensor_enable(struct cm3323e_info *lpi)
 
 	mutex_lock(&als_enable_mutex);
 	D("[LS][CM3323E] %s\n", __func__);
-	setting = CONF_SETTING & (~CM36656_CONF_SD) & CM36656_CONF_START;
-	time = (CONF_SETTING & (BIT3+BIT2)) >> 2;
-	delay_time = 50;
+	setting = CONF_SETTING & (~CM3323E_CONF_SD);
+	time = (CONF_SETTING & (BIT4+BIT5+BIT6)) >> 4;
+	delay_time = 40;
 	for (i = 0;i < time;i++) {
 		delay_time *= 2;
 	}
@@ -350,8 +346,8 @@ static int rgbsensor_enable(struct cm3323e_info *lpi)
 		"[LS][CM3323E error]%s: set auto rgb sensor fail\n",
 		__func__);
 	} else {
-		msleep(delay_time);/*wait for 200 ms for the first report*/	
-		report_lsensor_input_event(lpi, 1);/*resume, IOCTL and DEVICE_ATTR*/	
+		//msleep(delay_time);/*wait for 200 ms for the first report*/	
+		//report_lsensor_input_event(lpi, 1);/*resume, IOCTL and DEVICE_ATTR*/	
 	}
 	
 	queue_delayed_work(lpi->lp_wq, &report_work, lpi->polling_delay);
@@ -370,7 +366,7 @@ static int rgbsensor_disable(struct cm3323e_info *lpi)
 
 	D("[LS][CM3323E] %s\n", __func__);
 //wxtest
-	setting = CONF_SETTING | CM36656_CONF_SD;
+	setting = CONF_SETTING | CM3323E_CONF_SD;
 //wxtest
 	ret = _cm3323e_I2C_Write_Word(CM3323E_ADDR, CM3323E_CONF, setting);
 	if (ret < 0){
@@ -438,54 +434,40 @@ static long rgbsensor_ioctl(struct file *file, unsigned int cmd, unsigned long a
 				rc = -EFAULT;
 				break;
 			}
-
-//hhptest
-/*
-			if((0<=val) && ( val <= 60))
+			if((0<=val) && ( val <= 60)) {
 				time = 0;
-			else if ((60<val) && ( val <= 120))
+				val = 40;
+			}
+			else if ((60<val) && ( val <= 120)) {
 				time= 1;
-			else if ((120<val) && ( val <= 240))
+				val = 80;
+			}
+			else if ((120<val) && ( val <= 240)) {
 				time= 2;
-			else if ((240<val) && ( val <= 480))
+				val = 160;
+			}
+			else if ((240<val) && ( val <= 480)) {
 				time= 3;
-			else if ((480<val) && ( val <= 960))
+				val = 320;
+			}
+			else if ((480<val) && ( val <= 960)) {
 				time= 4;
-			else if(960<val)
+				val = 640;
+			}
+			else if(960<val) {
 				time= 5;
-*/
-	if((0<=val) && ( val <= 50 ))
-	{
-		val = 50;
-		time = 0;
-	}
-	else if ((50<val) && ( val <= 100))
-	{
-		val = 100;
-		time= 1;
-	}
-	else if ((100 <val) && ( val <= 200))
-	{
-		val = 200;
-		time= 2;
-	}
-	else if (200<val)
-	{
-		val = 400;
-		time= 3;
-	}
-//hhptest
-
+				val = 1280;
+			}
 //wxtest
 //			_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_CONF, &config_setting);
 			
 //			config_setting  &= ~(BIT4+BIT5+BIT6);
 
-			config_setting = CONF_SETTING & CM36656_CONF_SD; //keep enable/disable conf
-			if ((CONF_SETTING & (BIT2+BIT3)) != (time << 2)) { //write CM3323E_CONF if IT changes
+			config_setting = CONF_SETTING & CM3323E_CONF_SD; //keep enable/disable conf
+			if ((CONF_SETTING & (BIT4+BIT5+BIT6)) != (time << 4)) { //write CM3323E_CONF if IT changes
 			rgbsensor_disable(lpi);
 //wxtest
-			config_setting  |= time<<2;
+			config_setting  |= time<<4;
 			D("%s:ASUS_RGB_SENSOR_IOCTL_IT_SET CONFIG=0x%x, val=%d\n", __func__,config_setting,val);
 			rc= _cm3323e_I2C_Write_Word(CM3323E_ADDR, CM3323E_CONF, config_setting);
 			if(rc <0){
@@ -532,6 +514,10 @@ static long rgbsensor_ioctl(struct file *file, unsigned int cmd, unsigned long a
 					strcpy(modelName,"ZS550KL");
 					//modelName="ZS550KL";
 					break;
+				default:
+					strcpy(modelName,"ZE553KL");
+					//modelName="ZE553KL";
+					break;
 				} 
 
 		  	//D("%s:ASUS model name argp= %p, val = %p sizeof(val)=%lx\n",__func__,argp,&modelName,sizeof(modelName));
@@ -549,16 +535,16 @@ static long rgbsensor_ioctl(struct file *file, unsigned int cmd, unsigned long a
 			// rgbsensor_enable(lpi);
 			mutex_lock(&als_get_adc_mutex);
 			
-			_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_R_DATA, &cm3323e_adc_red);
-			_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_G_DATA, &cm3323e_adc_green);
-			_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_B_DATA, &cm3323e_adc_blue);
-			_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_IR_DATA, &cm3323e_adc_ir);
+			_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_R_DATA, &cm3323e_adc_red);
+			_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_G_DATA, &cm3323e_adc_green);
+			_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_B_DATA, &cm3323e_adc_blue);
+			_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_W_DATA, &cm3323e_adc_white);
 			
-			//D("[LS][CM3323E] %s ASUS_RGB_SENSOR_IOCTL_DATA_READ, r = %d,g = %d,b = %d,w = %d,B/R = 0.%d\n",__func__, cm3323e_adc_red,cm3323e_adc_green,cm3323e_adc_blue,cm3323e_adc_ir,cm3323e_adc_blue*10000/cm3323e_adc_red);
+			//D("[LS][CM3323E] %s ASUS_RGB_SENSOR_IOCTL_DATA_READ, r = %d,g = %d,b = %d,w = %d,B/R = 0.%d\n",__func__, cm3323e_adc_red,cm3323e_adc_green,cm3323e_adc_blue,cm3323e_adc_white,cm3323e_adc_blue*10000/cm3323e_adc_red);
 			rgb_data[0]= cm3323e_adc_red;
 			rgb_data[1]= cm3323e_adc_green;
 			rgb_data[2]= cm3323e_adc_blue;
-			rgb_data[3]= cm3323e_adc_ir;
+			rgb_data[3]= cm3323e_adc_white;
 			rgb_data[4]= 0;
 			if ( copy_to_user(argp, &rgb_data, sizeof(rgb_data) ) ) {
 	     			pr_err("%s:ASUS failed to copy RBG data to user space.\n",__func__);
@@ -689,8 +675,8 @@ static ssize_t ls_conf_store(struct device *dev,
 
 	conf_value = value;
 //wxtest
-	value = (conf_value & (BIT2+BIT3)) >> 2;
-	time = 50;
+	value = (conf_value & (BIT4+BIT5+BIT6)) >> 4;
+	time = 40;
 	for (i = 0;i < value;i++) {
 		time = time * 2;
 	}
@@ -711,29 +697,29 @@ static ssize_t ls_conf_store(struct device *dev,
 static ssize_t ls_red_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
-	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_R_DATA, &cm3323e_adc_red);
+	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_R_DATA, &cm3323e_adc_red);
 	return sprintf(buf, "%d\n", cm3323e_adc_red);
 }
 
 static ssize_t ls_green_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
-	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_G_DATA, &cm3323e_adc_green);
+	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_G_DATA, &cm3323e_adc_green);
 	return sprintf(buf, "%d\n", cm3323e_adc_green);
 }
 
 static ssize_t ls_blue_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
-	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_B_DATA, &cm3323e_adc_blue);
+	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_B_DATA, &cm3323e_adc_blue);
 	return sprintf(buf, "%d\n", cm3323e_adc_blue);
 }
 
 static ssize_t ls_white_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
-	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_IR_DATA, &cm3323e_adc_ir);
-	return sprintf(buf, "%d\n", cm3323e_adc_ir);
+	_cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_W_DATA, &cm3323e_adc_white);
+	return sprintf(buf, "%d\n", cm3323e_adc_white);
 }
 
 
@@ -787,7 +773,7 @@ static DEVICE_ATTR(rgb_conf , S_IRUGO | S_IWUSR | S_IWGRP,ls_conf_show, ls_conf_
 static DEVICE_ATTR(rgb_red, S_IRUGO | S_IRUSR | S_IRGRP,ls_red_show, NULL);
 static DEVICE_ATTR(rgb_green, S_IRUGO | S_IRUSR | S_IRGRP,ls_green_show, NULL);
 static DEVICE_ATTR(rgb_blue, S_IRUGO | S_IRUSR | S_IRGRP,ls_blue_show, NULL);
-static DEVICE_ATTR(rgb_ir, S_IRUGO | S_IRUSR | S_IRGRP,ls_white_show, NULL);
+static DEVICE_ATTR(rgb_white, S_IRUGO | S_IRUSR | S_IRGRP,ls_white_show, NULL);
 static DEVICE_ATTR(rgb_debug_enable, S_IRUGO | S_IWUSR | S_IWGRP,ls_rgb_debug_show, ls_rgb_debug_store);
 static DEVICE_ATTR(rgb_status, S_IRUGO | S_IRUSR | S_IRGRP,ls_rgb_status, NULL);
 /*
@@ -819,7 +805,7 @@ static struct attribute *rgb_sysfs_attrs[] = {
 &dev_attr_rgb_red.attr,
 &dev_attr_rgb_green.attr,
 &dev_attr_rgb_blue.attr,
-&dev_attr_rgb_ir.attr,
+&dev_attr_rgb_white.attr,
 &dev_attr_rgb_debug_enable.attr,
 &dev_attr_rgb_status.attr,
 NULL
@@ -840,13 +826,12 @@ static int rgbsensor_setup(struct cm3323e_info *lpi)
 			__func__);
 		return -ENOMEM;
 	}
-	//hhptest
 	lpi->ls_input_dev->name = "cm3323e-ls";
 	
 	input_set_capability(lpi->ls_input_dev, EV_REL, REL_RED);
 	input_set_capability(lpi->ls_input_dev, EV_REL, REL_GREEN);
 	input_set_capability(lpi->ls_input_dev, EV_REL, REL_BLUE);
-	input_set_capability(lpi->ls_input_dev, EV_REL, REL_IR);
+	input_set_capability(lpi->ls_input_dev, EV_REL, REL_WHITE);
 	
 	ret = input_register_device(lpi->ls_input_dev);
 	if (ret < 0) {
@@ -883,11 +868,11 @@ static int cm3323e_setup(struct cm3323e_info *lpi)
 	msleep(5);
 
 	// Shut down CM3323E
-	ret = _cm3323e_I2C_Write_Word(CM3323E_ADDR, CM36656_CONF, CM36656_CONF_DEFAULT | CM36656_CONF_IT_50MS | CM36656_CONF_SD);
+	ret = _cm3323e_I2C_Write_Word(CM3323E_ADDR, CM3323E_CONF, CM3323E_CONF_DEFAULT | CM3323E_CONF_IT_40MS | CM3323E_CONF_SD);
 	if(ret < 0)
 		return ret;
 	// Enable CM3323E
-	ret = _cm3323e_I2C_Write_Word(CM3323E_ADDR, CM3323E_CONF, CM36656_CONF_DEFAULT | CM36656_CONF_IT_50MS | CM36656_CONF_START);
+	ret = _cm3323e_I2C_Write_Word(CM3323E_ADDR, CM3323E_CONF, CM3323E_CONF_DEFAULT | CM3323E_CONF_IT_40MS);
 	if(ret < 0)
 		return ret;
          // Get initial RED rgb data
@@ -900,13 +885,13 @@ static int cm3323e_setup(struct cm3323e_info *lpi)
 	msleep(50);
 
 	// Get initial RED rgb data
-	ret = _cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_R_DATA, &adc_data);
+	ret = _cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_R_DATA, &adc_data);
 	if (ret < 0) {
 		pr_err("[LS][CM3323E error]%s: _cm3323e_I2C_Read_Word for RED fail\n",__func__);
 		return -EIO;
 	}
 	// Get initial GREEN rgb data
-	ret = _cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_G_DATA, &adc_data);
+	ret = _cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_G_DATA, &adc_data);
 	if (ret < 0) {
 		pr_err(
 			"[LS][CM3323E error]%s: _cm3323e_I2C_Read_Word for GREEN fail\n",
@@ -914,7 +899,7 @@ static int cm3323e_setup(struct cm3323e_info *lpi)
 		return -EIO;
 	}	
 	// Get initial BLUE rgb data
-	ret = _cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_B_DATA, &adc_data);
+	ret = _cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_B_DATA, &adc_data);
 	if (ret < 0) {
 		pr_err(
 			"[LS][CM3323E error]%s: _cm3323e_I2C_Read_Word for BLUE fail\n",
@@ -922,7 +907,7 @@ static int cm3323e_setup(struct cm3323e_info *lpi)
 		return -EIO;
 	}
 	// Get initial WHITE rgb data
-	ret = _cm3323e_I2C_Read_Word(CM3323E_ADDR, CM36656_IR_DATA, &adc_data);
+	ret = _cm3323e_I2C_Read_Word(CM3323E_ADDR, CM3323E_W_DATA, &adc_data);
 	if (ret < 0) {
 		pr_err(
 			"[LS][CM3323E error]%s: _cm3323e_I2C_Read_Word for WHITE fail\n",
@@ -939,7 +924,6 @@ static int cm3323e_probe(struct i2c_client *client,
 	struct cm3323e_info *lpi;
 
 	D("[CM3323E] %s\n", __func__);
-	printk("[CM36656] probe has come to here");
 
 	lpi = kzalloc(sizeof(struct cm3323e_info), GFP_KERNEL);
 	if (!lpi)
@@ -1013,7 +997,7 @@ static int cm3323e_probe(struct i2c_client *client,
 	ret = device_create_file(lpi->ls_dev, &dev_attr_rgb_red);
 	ret = device_create_file(lpi->ls_dev, &dev_attr_rgb_green);
 	ret = device_create_file(lpi->ls_dev, &dev_attr_rgb_blue);
-	ret = device_create_file(lpi->ls_dev, &dev_attr_rgb_ir);
+	ret = device_create_file(lpi->ls_dev, &dev_attr_rgb_white);
 	ret = device_create_file(lpi->ls_dev, &dev_attr_rgb_debug_enable);
 	ret = device_create_file(lpi->ls_dev, &dev_attr_rgb_status);
 	if (ret)
@@ -1050,7 +1034,7 @@ static const struct i2c_device_id cm3323e_i2c_id[] = {
 
 #ifdef CONFIG_OF
   static struct of_device_id cm3323e_match_table[] = {
-          { .compatible = "capella,cm36656",},
+          { .compatible = "capella,cm3323e",},
           { },
   };
 #else

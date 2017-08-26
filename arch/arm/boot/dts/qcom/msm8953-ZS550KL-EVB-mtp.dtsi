@@ -82,6 +82,7 @@
 };
 
 &i2c_6 { /* BLSP2 QUP2 */
+/*
 	ap3045@1c{ 
 		compatible = "di,ap3045";
 		reg = <0x1c>;
@@ -99,23 +100,23 @@
 		intel,als-persis-time = <0x0f>;
 		intel,int-ctrl = <0xA8>;
 		intel,ps-gain = < 0x40 >; 
-		intel,ps-led-control = <0x20>;  /* 33T */
+		intel,ps-led-control = <0x20>;  
 		intel,ps-time = <0x01>;  
-		intel,als-gain = < 0x06 >; /* 0:full */
+		intel,als-gain = < 0x06 >; 
 		pm,class-name = "ap3045_class";
 		pm,user-name = "ext_proximity_sensor";
 		pm,state-D0 = "enable";
 		pm,state-D3 = "disable";
 		
 	};
-
+*/
 	capella@60 {
 		compatible = "capella,cm36283";
 		reg = <0x60>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <43 0x2>;
-		vdd-supply = <&pm8953_l10>;
-		//vio-supply = <&pm8953_l6>;
+	    //vdd-supply = <&pm8953_l10>;
+	    vio-supply = <&pm8953_l6>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&cm36283_default>;
 		capella,use-polling;
@@ -131,7 +132,9 @@
 	cm3323e@10{
 		compatible = "capella,cm3323e";
 		reg = <0x10>;
-		vdd-supply = <&pm8953_l10>;
+		//vdd-supply = <&pm8953_l10>;
+	    vio-supply = <&pm8953_l6>;
+        
 	};
 };
 
@@ -209,7 +212,7 @@
 	goodix_gf316m {
 		compatible = "goodix,fingerprint";
 		spi-max-frequency = <4800000>;
-		reg = <0>;
+		#reg = <0>;
 		input-device-name = "gf316m";
 		interrupt-parent = <&tlmm>;
 		interrupts = <48 0>;
@@ -246,12 +249,12 @@
 
 &pmi_haptic{
 	qcom,actuator-type = "lra";
-	qcom,lra-auto-res-mode="qwd";
+	qcom,lra-auto-res-mode="none";
 	qcom,lra-high-z="opt1";
 	qcom,lra-res-cal-period = <0>;
-	qcom,wave-play-rate-us = <4165>;
+	qcom,wave-play-rate-us = <4255>;
 	qcom,vmax-mv = <1160>;
-	qcom,brake-pattern = [03 03 03 03];
+	qcom,brake-pattern = [00 00 00 00];
 };
 
 &flash_led {
@@ -392,7 +395,7 @@
 	cd-gpios = <&tlmm 133 0x1>;
 
 	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000
-								192000000>;
+								200000000>;
 	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
 
 	status = "ok";

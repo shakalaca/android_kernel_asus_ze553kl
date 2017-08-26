@@ -392,9 +392,8 @@
 /{
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		#include "batterydata-itech-3000mah.dtsi"
-		#include "batterydata-ascent-3450mAh.dtsi"
-		#include "2246606_ASUS_Libra_2900mAh_averaged_MasterSlave_Dec17th2015_PMI8952GUI20015.dtsi"
+		#include "2377156_Asus_Phoenix8953_2900mAh_averaged_MasterSlave_Apr29th2016_PMI8952GUI20015.dtsi"
+		#include "2387485_Asus_Phoenix8953lgc_2900mAh_averaged_MasterSlave_May3rd2016_PMI8952GUI20015.dtsi"
 	};
 };
 

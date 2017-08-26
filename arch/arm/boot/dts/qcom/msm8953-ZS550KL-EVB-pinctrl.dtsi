@@ -115,7 +115,7 @@
 			mux {
 				/* CLK, DATA */
 				pins = "gpio8";
-				function = "gpio";
+				function = "front_flash_en";
 			};
 
 			config {
@@ -129,7 +129,7 @@
 			mux {
 				/* CLK, DATA */
 				pins = "gpio8";
-				function = "gpio";
+				function = "front_flash_en";
 			};
 
 			config {
@@ -142,7 +142,7 @@
 			/* vcm en */
 			mux {
 				pins = "gpio35";
-				function = "gpio";
+				function = "front_flash_en";
 			};
 			config {
 				pins = "gpio35";
@@ -154,7 +154,7 @@
 			/* vcm en  */
 			mux {
 				pins = "gpio35";
-				function = "gpio";
+				function = "front_flash_en";
 			};
 			config {
 				pins = "gpio35";

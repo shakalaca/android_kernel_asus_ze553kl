@@ -112,6 +112,7 @@
  		interrupts = <65 0x2008>;
  		vdd-supply = <&pm8953_l10>;
  		vcc_i2c-supply = <&pm8953_l6>;
+		
  		pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
 		pinctrl-0 = <&ts_active>;
 		pinctrl-1 = <&ts_suspend>;
@@ -195,7 +196,7 @@
 		intel,als-persis-time = <0x0f>;
 		intel,int-ctrl = <0xA8>;
 		intel,ps-gain = < 0x40 >; 
-		intel,ps-led-control = <0x20>; 
+		intel,ps-led-control = <0x20>;  
 		intel,ps-time = <0x01>;  
 		intel,als-gain = < 0x06 >; 
 		pm,class-name = "ap3045_class";
@@ -205,6 +206,7 @@
 		
 	};
 */
+
  	capella@60 {
  		compatible = "capella,cm36283";
  		reg = <0x60>;
@@ -233,7 +235,7 @@
 };
 
 &pm8953_l10 {
-	regulator-max-microvolt = <3000000>;
+	regulator-max-microvolt = <3300000>;
 };
 
 &soc {
@@ -299,7 +301,7 @@
 	goodix {
 		compatible = "goodix,fingerprint";
 	 	spi-max-frequency = <4800000>;
-	 	reg = <0>;
+	 	#reg = <0>;
 	 	input-device-name = "goodix_fp";
 	 	interrupt-parent = <&tlmm>;
 	 	interrupts = <48 0>;
@@ -345,13 +347,17 @@
 	qcom,correct-lra-drive-freq;
 };
 
+&wled {
+	qcom,cons-sync-write-delay-us = <1000>;
+};
+
 &flash_led {
 	compatible = "qcom,qpnp-flash-led";
 	reg = <0xd300 0x100>;
 	qcom,follow-otst2-rb-disabled;
 };
 
-#include "msm8953-mdss-panels.dtsi"
+#include "msm8953-mdss-panels-ZE553KL.dtsi"
 
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
@@ -398,7 +404,6 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
 };
 /*---------ASUS ZE553KL Panel----------*/
-
 /*+++++++++ASUS ZE553KL second Panel++++++++++*/
 &dsi_rm67198_1080p_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
@@ -480,7 +485,7 @@
 	cd-gpios = <&tlmm 133 0>;
 
 	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000
-								192000000>;
+								200000000>;
 	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
 
 	status = "ok";
@@ -488,6 +493,7 @@
 
 &pm8953_typec {
 	ss-mux-supply = <&pm8953_l13>;
+	qcom,role-reversal-supported;
 	//qcom,ssmux-gpio = <&tlmm 139 GPIO_ACTIVE_HIGH>;
 	//pinctrl-names = "default";
 	//pinctrl-0 = <&typec_ssmux_config>;
