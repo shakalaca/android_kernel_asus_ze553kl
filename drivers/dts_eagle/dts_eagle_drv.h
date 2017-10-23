@@ -47,6 +47,12 @@ struct dts_eagle_param_desc {
 	uint32_t        size;
 	int32_t         offset;
 	uint32_t        device;
+	uint32_t        rate;
+} __packed;
+
+struct dts_eagle_cache_block {
+       uint32_t rate;
+       void *data;
 } __packed;
 
 #endif

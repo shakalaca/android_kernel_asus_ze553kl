@@ -733,26 +733,8 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 #endif
 
 #ifdef ASUS_FACTORY_BUILD//add by stone1_wang for factory build +++
-ssize_t printklog_write (struct file *filp, const char __user *userbuf, size_t size, loff_t *loff_p)
-{
-	char str[128];
-	if(size < 128)
-	{
-		strncpy(str,userbuf,size);
-		str[size]='\0';
-	}
-	else
-	{
-		strncpy(str,userbuf,127);
-		str[127]='\0';
-	}
-	printk(KERN_ERR"[factool log]:%s",str);
-	return size;
-}
 
-struct file_operations printklog_fops = {
-	.write=printklog_write,
-};
+
 unsigned char fac_wakeup_sign = 0;
 extern void release_wakeup_source(void);
 extern void alarm_irq_disable(void);
@@ -842,10 +824,6 @@ static int gpio_keys_probe(struct platform_device *pdev)
 		}
 	}
 #ifdef ASUS_FACTORY_BUILD//add by stone1_wang for factory build +++
-	if(proc_create("fac_printklog", 0777, NULL, &printklog_fops)==NULL)
-	{
-		printk(KERN_ERR"create printklog node is error\n");
-	}
 	if(proc_create("fac_sleep_node", 0777, NULL, &fac_sleep_node_fops)==NULL)
 	{
 		printk(KERN_ERR"create fac_sleep_node is error\n");

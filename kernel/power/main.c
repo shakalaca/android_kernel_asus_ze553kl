@@ -500,12 +500,16 @@ static ssize_t dump_wakeup_sources_timer_store(struct kobject *kobj, struct kobj
 	{
 		pr_info("[PM]dump_wakeup_sources_timer_store: timer on\n");
 		framework_display_on = false;
+		printk("[PM]request_suspend_state: (0->3)");
+		ASUSEvtlog("[PM]request_suspend_state: (0->3)");
 		mod_timer(&dump_wakeup_sources_timer, jiffies + msecs_to_jiffies(PM_DUMP_WAKEUP_TIMEOUT));
 	}
 	else if (len == 3 && !strncmp(buf, "off", len))
 	{
 		pr_info("[PM]dump_wakeup_sources_timer_store: timer off\n");
 		framework_display_on = true;
+		printk("[PM]request_suspend_state: (3->0)");
+		ASUSEvtlog("[PM]request_suspend_state: (3->0)");
 		del_timer (&dump_wakeup_sources_timer);
 	}
 

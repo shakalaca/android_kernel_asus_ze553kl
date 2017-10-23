@@ -505,10 +505,10 @@ static void pm_suspend_marker(char *annotation)
 		annotation, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 		tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
 	//[+++]add for suspend debug 	
-	if(annotation[1]=='n'){
+	/*if(annotation[1]=='n'){
 		ASUSEvtlog("[PM]request_suspend_state: (0->3)\n");}
 	else if(annotation[1]=='x'){
-		ASUSEvtlog("[PM]request_suspend_state: (3->0)\n");}	
+		ASUSEvtlog("[PM]request_suspend_state: (3->0)\n");}	*/
 	//[---]add for suspend debug 
 }
 

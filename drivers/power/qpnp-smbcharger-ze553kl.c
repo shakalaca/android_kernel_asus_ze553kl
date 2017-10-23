@@ -6283,12 +6283,7 @@ static int smbchg_system_temp_level_set(struct smbchg_chip *chip,
 		dev_err(chip->dev, "Unsupported level selected %d forcing %d\n",
 				lvl_sel, chip->thermal_levels - 1);
 		lvl_sel = chip->thermal_levels - 1;
-	}
-
-	if(!asus_is_type_should_thermal_policy(chip)){
-		printk("[CHARGE]type should not do thermal policy\n");
-		return 0;
-	}
+	}	
 
 	if (lvl_sel == chip->therm_lvl_sel){
 		printk("[BATT]same therm_lvl_sel =%d\n",lvl_sel);
@@ -6298,6 +6293,12 @@ static int smbchg_system_temp_level_set(struct smbchg_chip *chip,
 	mutex_lock(&chip->therm_lvl_lock);
 	prev_therm_lvl = chip->therm_lvl_sel;
 	chip->therm_lvl_sel = lvl_sel;
+
+	if((chip->therm_lvl_sel == 1) && (!asus_is_type_should_thermal_policy(chip))){
+		printk("[CHARGE]type should not do thermal policy\n");
+		goto LVL1;
+	}
+	
 	printk("[BATT]prev_therm_lvl = %d, now_therm_lvl =%d\n",prev_therm_lvl,chip->therm_lvl_sel);
 	if (chip->therm_lvl_sel == (chip->thermal_levels - 1)) {
 		/*
@@ -6375,7 +6376,7 @@ static int smbchg_system_temp_level_set(struct smbchg_chip *chip,
 				pr_err("Couldn't vote for USB thermal ICL rc=%d\n", rc);
 			}
 	}
-
+LVL1:
 	if (prev_therm_lvl == chip->thermal_levels - 1) {
 		/*
 		 * If previously highest value was selected charging must have
@@ -9988,7 +9989,7 @@ static void asus_handler_usb_removal(struct smbchg_chip *chip)
 
 	phy_detect_float_ok =false;
 	asus_QC3_rerun_apsd = 0;
-	chip->therm_lvl_sel=0;
+//	chip->therm_lvl_sel=0;
 	chip->read_adc_ignore = false;
 	chip->usb_connector_event = false;
 	vote(chip->usb_suspend_votable, USB_ALERT_VOTER, 0, 0);
@@ -10061,7 +10062,7 @@ static void smbchg_pre_config_ze553kl(struct smbchg_chip *chip)
 
 	//16. minimum system voltage setting
 	rc = smbchg_sec_masked_write(chip, chip->bat_if_base + 0xF4,
-			BIT(0) ,0);
+			BIT(1)|BIT(0) , 0);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set SMBCHGL_BAT_IF_CFG_SYSMIN rc=%d\n", rc);
 	}

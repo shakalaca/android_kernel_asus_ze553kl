@@ -1134,15 +1134,10 @@ void mdss_mdp_set_clk_rate(unsigned long rate)
 	min_clk_rate = max(rate, mdata->perf_tune.min_mdp_clk);
 
 	if (clk) {
-/*
- *	Set MDP clock to Max for WFD Sink Screen Flicker Issue
- *	pausebreak_cheng@asus.com
- *	2016.12.13
- */
 		mutex_lock(&mdp_clk_lock);
-//		if (min_clk_rate < mdata->max_mdp_clk_rate)
-//			clk_rate = clk_round_rate(clk, min_clk_rate);
-//		else
+		if (min_clk_rate < mdata->max_mdp_clk_rate)
+			clk_rate = clk_round_rate(clk, min_clk_rate);
+		else
 			clk_rate = mdata->max_mdp_clk_rate;
 		if (IS_ERR_VALUE(clk_rate)) {
 			pr_err("unable to round rate err=%ld\n", clk_rate);

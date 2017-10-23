@@ -3103,6 +3103,10 @@ struct afe_lpass_core_shared_clk_config_command {
 #define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_DTS_HPX		0x10015002
 #define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_AUDIOSPHERE	0x10028000
 
+//asus_bsp++
+#define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_SPK_P 0x10313
+#define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_HP 0x10314
+//asus_bsp--
 /* Memory map regions command payload used by the
  * #ASM_CMD_SHARED_MEM_MAP_REGIONS ,#ADM_CMD_SHARED_MEM_MAP_REGIONS
  * commands.

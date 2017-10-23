@@ -1991,6 +1991,31 @@ asmlinkage __visible int printk(const char *fmt, ...)
 }
 EXPORT_SYMBOL(printk);
 
+asmlinkage __visible int highlevel_printk(const char *fmt, ...)
+{
+	va_list args;
+	int r;
+
+	if (asusdebug_enable==0x11223344)
+		return 0;
+
+#ifdef CONFIG_KGDB_KDB
+	if (unlikely(kdb_trap_printk)) {
+		va_start(args, fmt);
+		r = vkdb_printf(fmt, args);
+		va_end(args);
+		return r;
+	}
+#endif
+	va_start(args, fmt);
+	r = vprintk_emit(0, -1, NULL, 0, fmt, args);
+	va_end(args);
+
+	return r;
+
+}
+EXPORT_SYMBOL(highlevel_printk);
+
 #else /* CONFIG_PRINTK */
 
 #define LOG_LINE_MAX		0
