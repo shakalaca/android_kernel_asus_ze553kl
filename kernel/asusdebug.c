@@ -26,6 +26,10 @@ extern int g_gpio_audio_debug;/* ASUS_BSP Freeman +++ */
 
 #include "locking/rtmutex_common.h"
 
+//add dump_boot_reasons ++++
+#include <soc/qcom/smem.h>
+//add dump_boot_reasons ----
+
 char evtlog_bootup_reason[100];
 char evtlog_poweroff_reason[100];
 char evtlog_warm_reset_reason[100];
@@ -797,34 +801,34 @@ static void deinitKernelEnv(void)
 }
 
 
-//ASUS_BSP+++  "[ZC550KL][TRACE][Na] add rule to trige trace"
-int asus_trace_trige_state = 0;
-struct switch_dev asus_trace_trige_switch;
-static ssize_t asus_trace_trige_name(struct switch_dev *sdev, char *buf)
+//ASUS_BSP+++  "[ZC550KL][TRACE][Na] add rule to trigger trace"
+int asus_trace_trigger_state = 0;
+struct switch_dev asus_trace_trigger_switch;
+static ssize_t asus_trace_trigger_name(struct switch_dev *sdev, char *buf)
 {
-	return sprintf(buf, "trace_trige\n");
+	return sprintf(buf, "trace_trigger\n");
 }
 
-static ssize_t asus_trace_trige_switch_state(struct switch_dev *sdev, char *buf)
+static ssize_t asus_trace_trigger_switch_state(struct switch_dev *sdev, char *buf)
 {
-	return sprintf(buf, "%d\n", asus_trace_trige_state);
+	return sprintf(buf, "%d\n", asus_trace_trigger_state);
 }
 
-static int AsusTraceTrigeInitialize(void)
+static int AsusTraceTriggerInitialize(void)
 {
 	int ret = 0;
 	printk("[TRACE] %s: register switch dev! %d\n", __FUNCTION__, ret);
-	asus_trace_trige_switch.name = "tracetrige";
-	asus_trace_trige_switch.print_state = asus_trace_trige_switch_state;
-	asus_trace_trige_switch.print_name = asus_trace_trige_name;
-	ret = switch_dev_register(&asus_trace_trige_switch);
+	asus_trace_trigger_switch.name = "tracetrigger";
+	asus_trace_trigger_switch.print_state = asus_trace_trigger_switch_state;
+	asus_trace_trigger_switch.print_name = asus_trace_trigger_name;
+	ret = switch_dev_register(&asus_trace_trigger_switch);
 	if (ret < 0) {
 	    printk("[TRACE] %s: Unable to register switch dev! %d\n", __FUNCTION__, ret);
 	    return -1;
 	}
 	return 0;
 }
-//ASUS_BSP--- "[ZC550KL][TRACE][Na] add rule to trige trace"
+//ASUS_BSP--- "[ZC550KL][TRACE][Na] add rule to trigger trace"
 char messages[256];
 void save_phone_hang_log(void)
 {
@@ -855,9 +859,9 @@ void save_phone_hang_log(void)
         g_phonehang_log[0] = 0;
         //iounmap(g_phonehang_log);
     }
-	printk("triger trace %d\n", asus_trace_trige_state);
-	asus_trace_trige_state = !asus_trace_trige_state;
-	switch_set_state(&asus_trace_trige_switch, asus_trace_trige_state);
+	printk("trigger trace %d\n", asus_trace_trigger_state);
+	asus_trace_trigger_state = !asus_trace_trigger_state;
+	switch_set_state(&asus_trace_trigger_switch, asus_trace_trigger_state);
 }
 EXPORT_SYMBOL(save_phone_hang_log);
 void save_last_shutdown_log(char* filename)
@@ -969,6 +973,34 @@ static char g_Asus_Erclog_filelist[ASUS_ERCLOG_MAX_ITEM][ASUS_ERCLOG_FILENAME_MA
 static int g_Asus_Erclog_read = 0;
 static int g_Asus_Erclog_write = 0;
 //ASUS_BSP johnchain--- add for record ASUSErclog
+//add dump_boot_reasons ++++
+extern void asus_dump_bootup_reason(char *bootup_reason);
+
+static void dump_boot_reasons(void)
+{
+	char buffer[256] = {0};
+	unsigned smem_size = 0;
+	unsigned char* pmic_boot_reasons = NULL;
+
+	pmic_boot_reasons = (unsigned char *)(smem_get_entry(SMEM_POWER_ON_STATUS_INFO, &smem_size,false,true));
+	if(NULL == pmic_boot_reasons || smem_size < 8)
+	{
+		printk(KERN_ERR "%s get boot reasons failed.", __func__);
+		return;
+	}
+
+	snprintf(buffer, 255, "PMIC Boot Reasons:%02X %02X %02X %02X %02X %02X %02X %02X\n",
+			 pmic_boot_reasons[0], pmic_boot_reasons[1], pmic_boot_reasons[2], pmic_boot_reasons[3],
+			 pmic_boot_reasons[4], pmic_boot_reasons[5], pmic_boot_reasons[6], pmic_boot_reasons[7]);
+
+	printk(KERN_NOTICE "%s", buffer);
+	sys_write(g_hfileEvtlog, buffer, strlen(buffer));
+
+	memset(buffer, 0, strlen(buffer));
+	asus_dump_bootup_reason(buffer);
+	sys_write(g_hfileEvtlog, buffer, strlen(buffer));
+}
+//add dump_boot_reasons ----
 
 static void do_write_event_worker(struct work_struct *work);
 static void do_write_erc_worker(struct work_struct *work); //ASUS_BSP johnchain+++ add for record ASUSErclog
@@ -1016,6 +1048,12 @@ static void do_write_event_worker(struct work_struct *work)
 	                evtlog_bootup_reason);
 	        }
 		sys_write(g_hfileEvtlog, buffer, strlen(buffer));
+		//add dump_boot_reasons ++++
+		if(!IS_ERR((const void*)(ulong)g_hfileEvtlog))
+		{
+			dump_boot_reasons();
+		}
+		//add dump_boot_reasons ----
 		sys_close(g_hfileEvtlog);
 	}
 	if (!IS_ERR((const void *)(ulong)g_hfileEvtlog)) {
@@ -1333,6 +1371,23 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
 	return count;
 }
 
+ssize_t printklog_write (struct file *filp, const char __user *userbuf, size_t size, loff_t *loff_p)
+{
+	char str[128];
+	if(size < 128)
+	{
+		strncpy(str,userbuf,size);
+		str[size]='\0';
+	}
+	else
+	{
+		strncpy(str,userbuf,127);
+		str[127]='\0';
+	}
+	printk(KERN_ERR"[factool log]:%s",str);
+	return size;
+}
+
 static const struct file_operations proc_evtlogswitch_operations = {
 	.write	  = evtlogswitch_write,
 };
@@ -1344,6 +1399,10 @@ static const struct file_operations proc_asusdebug_operations = {
 	.write	  = asusdebug_write,
 	.open	   = asusdebug_open,
 	.release	= asusdebug_release,
+};
+
+struct file_operations printklog_fops = {
+	.write=printklog_write,
 };
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -1456,6 +1515,10 @@ static int __init proc_asusdebug_init(void)
 	proc_create("asusevtlog", S_IRWXUGO, NULL, &proc_asusevtlog_operations);
 	proc_create("asusevtlog-switch", S_IRWXUGO, NULL, &proc_evtlogswitch_operations);
 	proc_create("asusdebug-switch", S_IRWXUGO, NULL, &turnon_asusdebug_proc_ops);
+	if(proc_create("fac_printklog", 0777, NULL, &printklog_fops)==NULL)
+	{
+		printk(KERN_ERR"create printklog node is error\n");
+	}
 	proc_create_data("asusklog", S_IRWXUGO, NULL, &klog_proc_fops, NULL);
 	PRINTK_BUFFER_VA = ioremap(PRINTK_BUFFER_PA, PRINTK_BUFFER_SIZE);
 //printk("PRINTK_BUFFER_VA=%p\n", PRINTK_BUFFER_VA);
@@ -1473,7 +1536,7 @@ static int __init proc_asusdebug_init(void)
 	register_early_suspend(&asusdebug_early_suspend_handler);
 #endif
 
-	AsusTraceTrigeInitialize();
+	AsusTraceTriggerInitialize();
 	return 0;
 }
 module_init(proc_asusdebug_init);

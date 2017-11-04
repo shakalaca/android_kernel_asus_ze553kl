@@ -25,6 +25,7 @@
 #include <linux/ioctl.h>
 #include <linux/miscdevice.h>
 #include <asm/uaccess.h>
+#include <linux/mutex.h>
 #define DO_CAL true
 #define NO_CAL false
 #define DO_MEASURE true
@@ -76,6 +77,9 @@ struct msm_laser_focus_ctrl_t *get_laura_ctrl(void){
 	LOG_Handler(LOG_FUN, "%s: Exit\n", __func__);
 	return laura_t;
 }
+
+struct mutex recovery_lock;
+
 
 bool OLI_device_invalid(void){
 	return (laura_t->device_state == MSM_LASER_FOCUS_DEVICE_OFF ||
@@ -129,11 +133,13 @@ void continuous_measure_thread_func(struct work_struct *work)
 				if(!Disable_Device && continuous_measure)
 				{
 					LOG_Handler(LOG_ERR,"%s(), power down & up again to do fix to do continuous measure....\n",__func__);
+					mutex_lock(&recovery_lock);
 					dev_deinit(laura_t);
 					power_down(laura_t);
 					power_up(laura_t);
 					dev_init(laura_t);
 					Laura_device_power_up_init_interface(laura_t, DO_CAL, &calibration_flag);
+					mutex_unlock(&recovery_lock);
 				}
 				else
 				{
@@ -250,6 +256,7 @@ int Laser_Disable(enum msm_laser_focus_atd_device_trun_on_type val){
 			measure_cached_range_updated = false;
 		}
 
+		mutex_lock(&recovery_lock);
 		rc = WaitMCPUStandby(laura_t);
 		rc = dev_deinit(laura_t);
 		power_down(laura_t);
@@ -261,6 +268,7 @@ int Laser_Disable(enum msm_laser_focus_atd_device_trun_on_type val){
 		}
 
 		laura_t->device_state = val;
+		mutex_unlock(&recovery_lock);
 		load_calibration_data=false;
 		mutex_ctrl(laura_t, MUTEX_UNLOCK);
 		LOG_Handler(LOG_ERR, "%s Deinit Device (%d) X\n", __func__, laura_t->device_state);
@@ -2048,13 +2056,15 @@ static int Laura_Init_Chip_Status_On_Boot(struct msm_laser_focus_ctrl_t *dev_t){
 			      chip_status = WaitMCPUStandby(dev_t);
 			      if (rc < 0 || chip_status < 0){
 			      LOG_Handler(LOG_ERR, "%s Device init fail !! (rc,status):(%d,%d)\n", __func__, rc, chip_status);
+			      if(chip_status<0)
+					rc=chip_status;
 			     } else {
 			    LOG_Handler(LOG_CDBG, "%s Init init success !! (rc,status):(%d,%d)\n", __func__, rc,chip_status);
 			     }
 			   
-			    rc = dev_deinit(laura_t);
-				rc = power_down(laura_t);
-			       mutex_ctrl(laura_t, MUTEX_UNLOCK);
+			    dev_deinit(laura_t);
+				power_down(laura_t);
+			    mutex_ctrl(laura_t, MUTEX_UNLOCK);
 			    
 			    LOG_Handler(LOG_CDBG, "%s: Exit Init Chip Status\n", __func__);
 			    
@@ -2094,6 +2104,7 @@ void HPTG_DataInit(void)
 static int32_t Olivia_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;
+	int i;
 	//,gp_sdio_2_clk,ret;
 	//struct device_node *np = pdev->dev.of_node;
 	LOG_Handler(LOG_CDBG, "%s: Probe Start\n", __func__);
@@ -2155,7 +2166,23 @@ static int32_t Olivia_platform_probe(struct platform_device *pdev)
     mutex_ctrl(laura_t, MUTEX_ALLOCATE);
 	mutex_ctrl(laura_t, MUTEX_INIT);
 
-	Laura_Init_Chip_Status_On_Boot(laura_t);
+	for(i=0;i<3;i++)
+	{
+		rc = Laura_Init_Chip_Status_On_Boot(laura_t);
+		if (rc < 0)
+		{
+			LOG_Handler(LOG_ERR, "%s: init chip failed, rc %d, retry later ... count %d\n",
+						__func__,rc,i);
+			usleep_range(30*1000,30*1000);
+		}
+		else
+			break;
+	}
+	if(rc<0)
+	{
+		LOG_Handler(LOG_ERR, "%s: init chip failed, probe failed!\n",__func__);
+		goto probe_failure;
+	}
 	
 	Laser_GPIO_Low(laura_t);
 
@@ -2167,6 +2194,7 @@ static int32_t Olivia_platform_probe(struct platform_device *pdev)
 	ATD_status = 1;
 
 	INIT_DELAYED_WORK(&measure_work, continuous_measure_thread_func);
+	mutex_init(&recovery_lock);
 	LOG_Handler(LOG_DBG,"Olivia_platform_probe Success");
 	LOG_Handler(LOG_CDBG, "%s: Probe Success\n", __func__);
 	return 0;

@@ -541,7 +541,12 @@ static int __init loglevel(char *str)
 early_param("loglevel", loglevel);
 
 //+++ ASUS_BSP : miniporting : Add for uart / kernel log
+#ifdef  CONFIG_USER_BUILD
 int g_user_klog_mode = 0;
+#else
+int g_user_klog_mode = 1;
+#endif
+
 EXPORT_SYMBOL(g_user_klog_mode);
 
 static int set_user_klog_mode(char *str)

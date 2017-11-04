@@ -304,6 +304,26 @@ static const char * const qpnp_poff_reason[] = {
  */
 static int warm_boot;
 module_param(warm_boot, int, 0);
+//bsp add guochang_qiu+++
+static int bootup_reason_index;
+void asus_dump_bootup_reason(char *bootup_reason)
+{
+	char buffer[255];
+
+	if(!bootup_reason){
+		pr_err("bootup_reason is NULL!\n");
+		return ;
+	}
+
+	if (bootup_reason_index >= ARRAY_SIZE(qpnp_pon_reason) || bootup_reason_index < 0) {
+		snprintf(buffer, 255, "###### Bootup Reason: Unknown ######\n");
+	}else{
+		snprintf(buffer, 255 ,"###### Bootup Reason: %s ######\n", qpnp_pon_reason[bootup_reason_index]);
+	}
+
+	strcpy(bootup_reason, buffer);
+}
+//bsp add guochang_qiu---
 
 static int
 qpnp_pon_masked_write(struct qpnp_pon *pon, u16 addr, u8 mask, u8 val)
