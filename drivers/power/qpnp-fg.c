@@ -8145,7 +8145,7 @@ static void delayed_init_work(struct work_struct *work)
 		update_temp_data(&chip->update_temp_work.work);
 
 	if (!chip->use_otp_profile)
-		schedule_delayed_work(&chip->batt_profile_init, 8*HZ);
+		schedule_delayed_work(&chip->batt_profile_init, 0);
 
 	if (chip->ima_supported && fg_reset_on_lockup)
 		schedule_delayed_work(&chip->check_sanity_work,
@@ -8214,7 +8214,7 @@ static void create_gauge_proc_file(void)
 struct switch_dev batt_dev;
 static ssize_t batt_switch_name(struct switch_dev *sdev, char *buf)
 {
-	const char* bat_model = "C11P1605-";
+	const char* bat_model = "C11P1612-";
 	const char* bat_cell = "O-";
 	const char* bat_id = "03-";
 	const char* bat_profile= "0001-";

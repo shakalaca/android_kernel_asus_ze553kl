@@ -1371,23 +1371,6 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
 	return count;
 }
 
-ssize_t printklog_write (struct file *filp, const char __user *userbuf, size_t size, loff_t *loff_p)
-{
-	char str[128];
-	if(size < 128)
-	{
-		strncpy(str,userbuf,size);
-		str[size]='\0';
-	}
-	else
-	{
-		strncpy(str,userbuf,127);
-		str[127]='\0';
-	}
-	printk(KERN_ERR"[factool log]:%s",str);
-	return size;
-}
-
 static const struct file_operations proc_evtlogswitch_operations = {
 	.write	  = evtlogswitch_write,
 };
@@ -1399,10 +1382,6 @@ static const struct file_operations proc_asusdebug_operations = {
 	.write	  = asusdebug_write,
 	.open	   = asusdebug_open,
 	.release	= asusdebug_release,
-};
-
-struct file_operations printklog_fops = {
-	.write=printklog_write,
 };
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -1515,10 +1494,6 @@ static int __init proc_asusdebug_init(void)
 	proc_create("asusevtlog", S_IRWXUGO, NULL, &proc_asusevtlog_operations);
 	proc_create("asusevtlog-switch", S_IRWXUGO, NULL, &proc_evtlogswitch_operations);
 	proc_create("asusdebug-switch", S_IRWXUGO, NULL, &turnon_asusdebug_proc_ops);
-	if(proc_create("fac_printklog", 0777, NULL, &printklog_fops)==NULL)
-	{
-		printk(KERN_ERR"create printklog node is error\n");
-	}
 	proc_create_data("asusklog", S_IRWXUGO, NULL, &klog_proc_fops, NULL);
 	PRINTK_BUFFER_VA = ioremap(PRINTK_BUFFER_PA, PRINTK_BUFFER_SIZE);
 //printk("PRINTK_BUFFER_VA=%p\n", PRINTK_BUFFER_VA);
