@@ -808,9 +808,9 @@ endif
 ifeq ($(TARGET_PRODUCT), Z018)
 KBUILD_CPPFLAGS += -DZS550KL=1
 endif
-ifeq ($(TARGET_PRODUCT), Z01H)
+#ifeq ($(TARGET_PRODUCT), Z01H)
 KBUILD_CPPFLAGS += -DZE553KL=1
-endif
+#endif
 # jackson : add ASUS_SHIP_BUILD define for user build +++
 ifeq ($(TARGET_BUILD_VARIANT), user)
 KBUILD_CPPFLAGS += -DASUS_SHIP_BUILD=1
