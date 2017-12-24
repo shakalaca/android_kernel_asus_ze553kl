@@ -175,3 +175,12 @@ obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 # DTS_EAGLE START
 obj-y                           += dts_eagle/
 # DTS_EAGLE END
+
+#Texura
+ifdef CONFIG_TEXURA_ARM64
+	ifdef CONFIG_TEXURA_USERDEBUG
+		obj-y				+= exfat/userdebug/64/objects/
+	else
+		obj-y				+= exfat/user/64/objects/
+	endif
+endif
