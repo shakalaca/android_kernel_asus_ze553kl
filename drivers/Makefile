@@ -172,8 +172,6 @@ obj-$(CONFIG_BIF)		+= bif/
 
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 
-# <t-base drivers
-obj-$(CONFIG_MOBICORE_DRIVER)	+= gud/
 # DTS_EAGLE START
 obj-y                           += dts_eagle/
 # DTS_EAGLE END
