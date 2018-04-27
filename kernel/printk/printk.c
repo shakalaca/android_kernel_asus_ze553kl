@@ -2230,7 +2230,7 @@ void resume_console(void)
 			gic_irq_cnt = gic_irq_cnt>7?7:gic_irq_cnt;
 			for (i=0;i<gic_irq_cnt;i++)
 			{
-				//log_wakeup_reason(gic_resume_irq[i]);
+				log_wakeup_reason(gic_resume_irq[i]);
 				ASUSEvtlog("[PM] IRQs triggered: %d\n", gic_resume_irq[i]);
 			}
 			gic_irq_cnt=0;	//clear log count

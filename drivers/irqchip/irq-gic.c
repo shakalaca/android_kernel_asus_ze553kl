@@ -297,7 +297,7 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 			name = desc->action->name;
 
 		//[+++][Power] jeff_gu Add for wakeup debug
-		if (irq==msm_gpio_chip_irq)
+		if (!strcmp(name,"null") && (i + gic->irq_offset)==msm_gpio_chip_irq)
 		{
 			name = "msm_gpio";
 			gpio_wakeup_device = true;

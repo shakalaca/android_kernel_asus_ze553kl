@@ -65,7 +65,7 @@ static struct proc_dir_entry *panel_hbm_mode_proc_file;//asus hbm mode
 static DEFINE_SPINLOCK(bklt_lock);
 static bool g_timer = false;
 void set_tcon_cmd(char *cmd, short len);
-
+static const char *panel_init_code;
 extern char lcd_unique_id[64];
 extern int asus_lcd_id;
 extern int dclick_mode;
@@ -301,6 +301,37 @@ static void create_lcd_uniqueID_proc_file(void)
     }
 }
 //<ASUS-Hank2_Liu-2016/04/27> Read Unique ID Information ------
+
+//ASUS_BSP: johnchain_li +++ add proc node to read panel initial code
+static struct proc_dir_entry *panel_initial_code_proc_file;
+static int panel_initial_code_proc_read(struct seq_file *buf, void *v){
+    if(panel_init_code != NULL)
+        seq_printf(buf, "%d_%s_%s", asus_lcd_id, lcd_unique_id, panel_init_code);
+    else
+        seq_printf(buf, "%d_%s", asus_lcd_id, lcd_unique_id);
+    return 0;
+}
+
+static int panel_initial_code_proc_open(struct inode *inode, struct file *file){
+    return single_open(file,panel_initial_code_proc_read,NULL);
+}
+
+static struct file_operations panel_initial_code_proc_ops = {
+    .open = panel_initial_code_proc_open,
+    .read = seq_read,
+    .release = single_release,
+};
+
+static void create_panel_initial_code_proc_file(void){
+    panel_initial_code_proc_file = proc_create("panel_init_code", 0444,NULL, &panel_initial_code_proc_ops);
+    if(panel_initial_code_proc_file){
+        printk("create panel_initial_code_proc_file sucessed!\n");
+    }else{
+        printk("create panel_initial_code_proc_file failed!\n");
+    }
+}
+//ASUS_BSP: johnchain_li --- add proc node to read panel initial code
+
 
 #ifdef ZE553KL
 
@@ -3503,6 +3534,11 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-stream", &tmp);
 	pinfo->mipi.stream = (!rc ? tmp : 0);
 
+	rc = of_property_read_string(np, "asus_panel_init_code", &panel_init_code);
+	if(rc != 0){
+		printk("%s: Cannot find property asus_panel_init_code [%d]",__func__, rc);
+	}
+
 	data = of_get_property(np, "qcom,mdss-dsi-panel-mode-gpio-state", NULL);
 	if (data) {
 		if (!strcmp(data, "high"))
@@ -3610,6 +3646,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 	create_lcd_ID_proc_file();
 	create_lcd_uniqueID_proc_file();
 //<ASUS BSP Robert_He 20170419>add hbm mode In kernel++++++
+	create_panel_initial_code_proc_file();  //ASUS_BSP: johnchain_li +++ add proc node to read panel initial code
 #ifdef ZD552KL_PHOENIX
 	create_panel_hbm_mode_phoenix_proc_file();
 	create_panel_alpm_mode_phoenix_proc_file();
