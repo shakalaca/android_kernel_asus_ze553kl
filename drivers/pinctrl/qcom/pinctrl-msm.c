@@ -39,12 +39,11 @@
 #define PS_HOLD_OFFSET 0x820
 #define TLMM_EBI2_EMMC_GPIO_CFG 0x111000
 
-
 //[+++][Power]jeff_gu Add for wakeup debug
-int gpio_irq_cnt, gpio_resume_irq[8];
+int gpio_irq_cnt = 0;
+int gpio_resume_irq[8];
 extern bool gpio_wakeup_device;
 //[---][Power]jeff_gu Add for wakeup debug
-
 
 /**
  * struct msm_pinctrl - state for a pinctrl-msm device
@@ -643,10 +642,6 @@ static void msm_gpio_irq_unmask(struct irq_data *d)
 
 	spin_lock_irqsave(&pctrl->lock, flags);
 
-	val = readl(pctrl->regs + g->intr_status_reg);
-	val &= ~BIT(g->intr_status_bit);
-	writel(val, pctrl->regs + g->intr_status_reg);
-
 	val = readl(pctrl->regs + g->intr_cfg_reg);
 	val |= BIT(g->intr_enable_bit);
 	writel(val, pctrl->regs + g->intr_cfg_reg);
@@ -805,7 +800,7 @@ static struct irq_chip msm_gpio_irq_chip = {
 	.irq_set_wake   = msm_gpio_irq_set_wake,
 };
 
-static void msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
+bool msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 {
 	struct gpio_chip *gc = irq_desc_get_handler_data(desc);
 	const struct msm_pingroup *g;
@@ -815,10 +810,9 @@ static void msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 	int handled = 0;
 	u32 val;
 	int i;
+	bool ret;
 
 	chained_irq_enter(chip, desc);
-
-	gpio_irq_cnt = 0; //[---]Add GPIO wakeup information
 
 	/*
 	 * Each pin has it's own IRQ status register, so use
@@ -829,27 +823,25 @@ static void msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 		val = readl(pctrl->regs + g->intr_status_reg);
 		if (val & BIT(g->intr_status_bit)) {
 			irq_pin = irq_find_mapping(gc->irqdomain, i);
-
 			//[+++]Add GPIO wakeup information
 			if (gpio_wakeup_device && gpio_irq_cnt<8) {
 				gpio_resume_irq[gpio_irq_cnt] = i;
-				gpio_irq_cnt ++;
+				gpio_irq_cnt++;
 				printk(KERN_INFO "[PM]GPIO: %d resume triggered\n", i);
 			}
 			//[---]Add GPIO wakeup information
-
-			generic_handle_irq(irq_pin);
-			handled++;
+			handled += generic_handle_irq(irq_pin);
 		}
 	}
-
 	gpio_wakeup_device = false; //[---]Add GPIO wakeup information
 
+	ret = (handled != 0);
 	/* No interrupts were flagged */
 	if (handled == 0)
-		handle_bad_irq(irq, desc);
+		ret = handle_bad_irq(irq, desc);
 
 	chained_irq_exit(chip, desc);
+	return ret;
 }
 
 /*
@@ -998,7 +990,6 @@ static struct syscore_ops msm_pinctrl_pm_ops = {
 	.resume = msm_pinctrl_resume,
 };
 
-extern int msm_gpio_chip_irq; //ASUS_BSP [Power] jeff_gu Add for wakeup debug
 int msm_pinctrl_probe(struct platform_device *pdev,
 		      const struct msm_pinctrl_soc_data *soc_data)
 {
@@ -1036,8 +1027,6 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 		dev_err(&pdev->dev, "No interrupt defined for msmgpio\n");
 		return pctrl->irq;
 	}
-
-	msm_gpio_chip_irq = pctrl->irq;//ASUS_BSP [Power] jeff_gu Add for wakeup debug
 
 	msm_pinctrl_desc.name = dev_name(&pdev->dev);
 	msm_pinctrl_desc.pins = pctrl->soc->pins;

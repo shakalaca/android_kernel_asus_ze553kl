@@ -403,13 +403,23 @@ static int ncp6335d_set_voltage(struct regulator_dev *rdev,
 		ncp633d_slew_delay(dd, dd->curr_voltage, new_uV);
 		dd->curr_voltage = new_uV;
 		dd->is_voltage_configured = 1;
+		dev_info(dd->dev,"set voltage to %d uV from range[%d,%d], setval %d",
+					dd->curr_voltage,
+					min_uV,max_uV,
+					set_val
+				);
 	}
 
 	//dump_registers(dd, dd->vsel_reg, "PROGVSEL0", __func__);
 
 	return rc;
 }
-
+int ncp6335d_set_voltage_for_preisp(int voltage)
+{
+	if(!the_ncp6335d_info)
+	    return -1;
+	return ncp6335d_set_voltage(the_ncp6335d_info->regulator,voltage,the_ncp6335d_info->init_data->constraints.max_uV,NULL);
+}
 static int ncp6335d_list_voltage(struct regulator_dev *rdev,
 					unsigned selector)
 {
@@ -925,6 +935,7 @@ static int set_reg(void *data, u64 val)
 }
 DEFINE_SIMPLE_ATTRIBUTE(poke_poke_debug_ops, get_reg, set_reg, "0x%02llx\n");
 
+static uint16_t address_table[]={0x1c,0x18,0x14,0x10};
 static int ncp6335d_regulator_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)
 {
@@ -934,7 +945,8 @@ static int ncp6335d_regulator_probe(struct i2c_client *client,
 	struct ncp6335d_info *dd;
 	const struct ncp6335d_platform_data *pdata;
 	struct regulator_config config = { };
-
+	int i,j;
+	int is_find;
 	//dev_info(&client->dev, "NCP6335D Probe start!\n");
 	if (client->dev.of_node)
 		pdata = ncp6335d_get_of_platform_data(client);
@@ -973,21 +985,52 @@ static int ncp6335d_regulator_probe(struct i2c_client *client,
 	}
 	i2c_set_clientdata(client, dd);
 
-	rc = ncp6335x_read(dd, REG_NCP6335D_PID, &val);
-	if (rc) {
-		dev_err(&client->dev, "Unable to identify NCP6335D, rc(%d)\n",
-									rc);
-		return rc;
-	}
-	else
+	is_find = 0;
+	for(i=0;i<sizeof(address_table)/sizeof(uint16_t);i++)
 	{
-		//dev_info(&client->dev, "Detected Regulator NCP6335D PID = 0x%x\n", val);
-		if(val != 0x15)
+		client->addr = address_table[i];
+		dev_info(&client->dev,"i2c detect address is 0x%x\n",client->addr);
+
+		for(j=0;j<3;j++)
 		{
-			dev_err(&client->dev,"Read PID 0x%x is not 0x15!\n",val);
-			return rc;
+			rc = ncp6335x_read(dd, REG_NCP6335D_PID, &val);
+			if (rc) {
+				dev_err(&client->dev, "Address 0x%x, Unable to identify NCP6335D, rc(%d), retry later...count %d\n",
+											client->addr,rc,j);
+				usleep_range(30*1000,30*1000);
+			}
+			else
+			{
+				//dev_info(&client->dev, "Detected Regulator NCP6335D PID = 0x%x\n", val);
+				if(val != 0x15)
+				{
+					dev_err(&client->dev,"Address 0x%x, Read PID 0x%x is not 0x15!\n",client->addr,val);
+					return rc;
+				}
+				else
+				{
+					is_find=1;
+					break;
+				}
+			}
+		}
+		if(is_find)
+		{
+			dev_info(&client->dev,"Address 0x%x, detect NCP6335D!\n",client->addr);
+			break;
+		}
+		else
+		{
+			dev_info(&client->dev,"Address 0x%x, not detect NCP6335D!\n",client->addr);
 		}
 	}
+	if(!is_find)
+	{
+		dev_err(&client->dev, "Unable to identify NCP6335D, rc(%d)\n",
+							rc);
+		return rc;
+	}
+
 	//dev_info(dd->dev, "NCP6335D dump registers befor init\n");
 	//dump_all_registers(dd);
 	rc = ncp6335d_init(client, dd, pdata);

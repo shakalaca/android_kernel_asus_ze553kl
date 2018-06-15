@@ -13,7 +13,6 @@ obj-$(CONFIG_NFC_MRVL)		+= nfcmrvl/
 obj-$(CONFIG_NFC_TRF7970A)	+= trf7970a.o
 obj-$(CONFIG_NFC_ST21NFCA)  	+= st21nfca/
 obj-$(CONFIG_NFC_ST21NFCB)	+= st21nfcb/
-ifneq ($(TARGET_SKU),CN)
 obj-$(CONFIG_NFC_NQ)		+= nq-nci.o
-endif
+
 ccflags-$(CONFIG_NFC_DEBUG) := -DDEBUG

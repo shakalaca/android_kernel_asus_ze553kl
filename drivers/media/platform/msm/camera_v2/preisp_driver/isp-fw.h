@@ -79,5 +79,7 @@ struct rkl_boot_request {
  * It returns zero on success, else a negative error code.
  **/
 int spi_download_fw(struct spi_device *spi, const char *fw_name,uint32_t fw_speed,uint32_t normal_speed);
-
+#ifdef ZD552KL_PHOENIX
+void set_fw_revision(const char *version_string);
+#endif
 #endif

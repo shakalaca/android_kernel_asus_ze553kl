@@ -3587,19 +3587,23 @@ else {
         input_sync(lpi->ps_input_dev);
 		proximity_state = val; //<asus-wx20150506+>
 //<anna-cheng>for proximity near close touch in call
-	if(proximity_state == 0){
-		if (2 == get_audiomode()) {
-			asus_psensor_disable_touch(true);
+	//if(proximity_state == 0){
+		//if (2 == get_audiomode()) {
+			//asus_psensor_disable_touch(true);
 			//pr_err("[PS][CM36283] proximity --anna close  in call \n");
-		}else{
-			asus_psensor_disable_touch(false);
+		//}else{
+			//asus_psensor_disable_touch(false);
 			//pr_err("[PS][CM36283] proximity --anna close not  in call \n");
-		}	
-	}else{
-		asus_psensor_disable_touch(false);
+		//}
+	//}else{
+		//asus_psensor_disable_touch(false);
 		//pr_err("[PS][CM36283] proximity --anna far far awayl \n");
-	}
-//<anna-cheng>for proximity near close touch in call		
+	//}
+//<anna-cheng>for proximity near close touch in call
+        if(proximity_state == 0)
+            asus_psensor_disable_touch(true);
+        else
+            asus_psensor_disable_touch(false);
    }
  }
 

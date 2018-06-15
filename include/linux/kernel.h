@@ -14,7 +14,9 @@
 #include <linux/dynamic_debug.h>
 #include <asm/byteorder.h>
 #include <uapi/linux/kernel.h>
+//ASUS_BSP: +++
 #include <linux/asusdebug.h>
+
 extern int g_user_dbg_mode;
 extern int g_user_klog_mode;
 
@@ -570,13 +572,14 @@ enum project_stage {
 };
 #elif defined ZD552KL_PHOENIX
 enum project_stage {
-	ASUS_EVB = 0,
 	ASUS_SR1 = 1,
 	ASUS_ER1 = 2,
 	ASUS_SR2 = 4,
 	ASUS_ER2 = 5,
 	ASUS_PR  = 6,
-	ASUS_MP  = 7,
+	ASUS_MP = 7,
+	ASUS_MP2 = 0,
+	ASUS_RSRVD = 3,
 };
 #else
 enum project_stage {
@@ -915,8 +918,4 @@ static inline void ftrace_dump(enum ftrace_dump_mode oops_dump_mode) { }
 	 /* Other writable?  Generally considered a bad idea. */	\
 	 BUILD_BUG_ON_ZERO((perms) & 2) +				\
 	 (perms))
-
-/* To identify board information in panic logs, set this */
-extern char *mach_panic_string;
-
 #endif

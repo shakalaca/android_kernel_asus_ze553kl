@@ -145,7 +145,6 @@ config USER_BUILD
 	depends on POWER_RESET
 	help
 	  ASUS User build config
-
 config POWER_RESET_XGENE
 	bool "APM SoC X-Gene reset driver"
 	depends on ARM64

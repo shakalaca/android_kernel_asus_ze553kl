@@ -53,8 +53,10 @@ else
 	LINUX_COMPILE_HOST=$KBUILD_BUILD_HOST
 fi
 
-if [ -e include/generated/buildversion.txt ];then
-	ASUS_BUILD_KERNEL_VERSION=`cat include/generated/buildversion.txt`
+if [ -e ../../../buildversion.txt ];then
+	ASUS_BUILD_KERNEL_VERSION=`cat ../../../buildversion.txt`
+else
+	echo "buildversion.txt not exist"
 fi
 
 UTS_VERSION="#$VERSION"

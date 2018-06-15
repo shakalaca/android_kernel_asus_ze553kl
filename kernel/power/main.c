@@ -20,19 +20,6 @@
 
 DEFINE_MUTEX(pm_mutex);
 
-//ASUS_BSP +++ jeff_gu add timer to dump wakeup_sources
-#include<linux/timer.h>
-
-#define PM_DUMP_WAKEUP_TIMEOUT   1000*60*10		//10min
-void dump_wakeup_sources_timer_expired(unsigned long data);
-extern void asus_dump_active_wakeup_sources(bool caller_allow_sleep);
-
-DEFINE_TIMER(dump_wakeup_sources_timer, dump_wakeup_sources_timer_expired, 0, 0);
-
-bool framework_display_on = true;
-//ASUS_BSP --- jeff_gu add timer to dump wakeup_sources
-
-
 #ifdef CONFIG_PM_SLEEP
 
 /* Routines for PM-transition notifications */
@@ -51,11 +38,18 @@ int unregister_pm_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL_GPL(unregister_pm_notifier);
 
-int pm_notifier_call_chain(unsigned long val)
+int __pm_notifier_call_chain(unsigned long val, int nr_to_call, int *nr_calls)
 {
-	int ret = blocking_notifier_call_chain(&pm_chain_head, val, NULL);
+	int ret;
+
+	ret = __blocking_notifier_call_chain(&pm_chain_head, val, NULL,
+						nr_to_call, nr_calls);
 
 	return notifier_to_errno(ret);
+}
+int pm_notifier_call_chain(unsigned long val)
+{
+	return __pm_notifier_call_chain(val, -1, NULL);
 }
 
 /* If set, devices may be suspended and resumed asynchronously. */
@@ -364,23 +358,8 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 	}
 
 	state = decode_state(buf, n);
-	if (state < PM_SUSPEND_MAX)	{
-		//ASUS_BSP +++ jeff_gu add timer to dump wakeup_sources
-		if (state==PM_SUSPEND_MEM && !framework_display_on) {
-			pr_info("[PM] Enter pm_suspend(mem),turn off dump_wakeup_sources_timer\n");
-			del_timer (&dump_wakeup_sources_timer);
-		}
-		//ASUS_BSP --- jeff_gu add timer to dump wakeup_sources
-
+	if (state < PM_SUSPEND_MAX)
 		error = pm_suspend(state);
-
-		//ASUS_BSP +++ jeff_gu add timer to dump wakeup_sources
-		if (state==PM_SUSPEND_MEM && !framework_display_on) {
-			pr_info("[PM] Exit pm_suspend(mem),turn on dump_wakeup_sources_timer\n");
-			mod_timer(&dump_wakeup_sources_timer, jiffies + msecs_to_jiffies(PM_DUMP_WAKEUP_TIMEOUT));
-		}
-		//ASUS_BSP --- jeff_gu add timer to dump wakeup_sources
-	}
 	else if (state == PM_SUSPEND_MAX)
 		error = hibernate();
 	else
@@ -462,63 +441,6 @@ static ssize_t wakeup_count_store(struct kobject *kobj,
 }
 
 power_attr(wakeup_count);
-
-
-//ASUS_BSP +++ jeff_gu add timer to dump wakeup_sources
-void dump_wakeup_sources_timer_expired(unsigned long data)
-{
-	pr_info("[PM]dump_wakeup_sources_timer_expired\n");
-    ASUSEvtlog("[PM]unattended_timer_expired\n");
-    asus_dump_active_wakeup_sources(true);
-	mod_timer(&dump_wakeup_sources_timer, jiffies + msecs_to_jiffies(PM_DUMP_WAKEUP_TIMEOUT));
-}
-
-static ssize_t dump_wakeup_sources_timer_show(struct kobject *kobj, struct kobj_attribute *attr,
-			  char *buf)
-{
-	unsigned int val = 0;
-	pr_info("[PM]dump_wakeup_sources_timer_show : show wakeup_sources raw count \n");
-
-	if (!pm_get_wakeup_count(&val, false))
-	{
-		asus_dump_active_wakeup_sources(false);
-	}
-
-	return sprintf(buf, "%u\n", val);
-}
-
-static ssize_t dump_wakeup_sources_timer_store(struct kobject *kobj, struct kobj_attribute *attr,
-			   const char *buf, size_t n)
-{
-	char *p;
-	int len;
-
-	p = memchr(buf, '\n', n);
-	len = p ? p - buf : n;
-
-	if (len == 2 && !strncmp(buf, "on", len))
-	{
-		pr_info("[PM]dump_wakeup_sources_timer_store: timer on\n");
-		framework_display_on = false;
-		printk("[PM]request_suspend_state: (0->3)");
-		ASUSEvtlog("[PM]request_suspend_state: (0->3)");
-		mod_timer(&dump_wakeup_sources_timer, jiffies + msecs_to_jiffies(PM_DUMP_WAKEUP_TIMEOUT));
-	}
-	else if (len == 3 && !strncmp(buf, "off", len))
-	{
-		pr_info("[PM]dump_wakeup_sources_timer_store: timer off\n");
-		framework_display_on = true;
-		printk("[PM]request_suspend_state: (3->0)");
-		ASUSEvtlog("[PM]request_suspend_state: (3->0)");
-		del_timer (&dump_wakeup_sources_timer);
-	}
-
-	return n;
-}
-
-power_attr(dump_wakeup_sources_timer);
-//ASUS_BSP --- jeff_gu add timer to dump wakeup_sources
-
 
 #ifdef CONFIG_PM_AUTOSLEEP
 static ssize_t autosleep_show(struct kobject *kobj,
@@ -670,7 +592,6 @@ power_attr(pm_freeze_timeout);
 
 static struct attribute * g[] = {
 	&state_attr.attr,
-	&dump_wakeup_sources_timer_attr.attr,	//ASUS_BSP  jeff_gu add timer to dump wakeup_sources
 #ifdef CONFIG_PM_TRACE
 	&pm_trace_attr.attr,
 	&pm_trace_dev_match_attr.attr,

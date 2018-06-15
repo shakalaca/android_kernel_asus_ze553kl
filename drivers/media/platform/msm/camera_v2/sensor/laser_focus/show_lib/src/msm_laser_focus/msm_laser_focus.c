@@ -120,10 +120,12 @@ int32_t vreg_control(struct msm_laser_focus_ctrl_t *dev_t, int config)
 }
 
 //asus bsp ralf:for optimize hades ER power consumption>>
+#ifdef CONFIG_RK_PREISP
 extern int rkpreisp_power_on_dsp(int is_download_fw);
 extern int rkpreisp_power_off_dsp(void);
 extern int asus_hw_id;
 extern int asus_project_id;
+#endif
 //asus bsp ralf:for optimize hades ER power consumption<<
 
 /** @brief Power on component
@@ -140,7 +142,10 @@ int32_t power_up(struct msm_laser_focus_ctrl_t *dev_t)
 	if (dev_t->laser_focus_state != LASER_FOCUS_POWER_UP) {
 		/* Enable voltage */
 		LOG_Handler(LOG_DBG, "POWER UP\n");
+#ifdef CONFIG_RK_PREISP
+		if(asus_project_id==ASUS_ZE553KL  &&  asus_hw_id > ASUS_SR2)
 			rkpreisp_power_on_dsp(0);
+#endif
 		rc = vreg_control(dev_t, ENABLE_VREG);
 		if (rc < 0) {
 			LOG_Handler(LOG_ERR, "%s: failed %d\n", __func__, __LINE__);
@@ -173,7 +178,10 @@ int32_t power_down(struct msm_laser_focus_ctrl_t *dev_t)
 		/* Disable voltage */
 		LOG_Handler(LOG_DBG, "POWER DOWN\n");
 		rc = vreg_control(dev_t, DISABLE_VREG);
+#ifdef CONFIG_RK_PREISP
+		if(asus_project_id==ASUS_ZE553KL  &&  asus_hw_id > ASUS_SR2)
 			rkpreisp_power_off_dsp();
+#endif
 		if (rc < 0) {
 			LOG_Handler(LOG_ERR, "%s failed %d\n", __func__, __LINE__);
 			return rc;

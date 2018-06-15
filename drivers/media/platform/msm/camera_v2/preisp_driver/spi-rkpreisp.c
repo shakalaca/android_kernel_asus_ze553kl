@@ -40,6 +40,14 @@
 #include "../common/msm_camera_io_util.h"
 #include "spi2apb.h"
 #include <linux/wakelock.h>//ASUS_BSP Zhengwei "prevent enter suspend when resuming"
+//ASUS_BSP +++ Zhengwei "late resume preisp"
+#ifdef ZD552KL_PHOENIX
+#include <linux/notifier.h>
+#include <linux/fb.h>
+static int fb_notifier_callback(struct notifier_block *self,
+				 unsigned long event, void *data);
+#endif
+//ASUS_BSP --- Zhengwei "late resume preisp"
 extern int msm_camera_pinctrl_init(
 	struct msm_pinctrl_info *sensor_pctrl, struct device *dev);
 extern int msm_camera_clk_enable(struct device *dev,
@@ -74,8 +82,11 @@ extern int asus_hw_id;
 #define PREISP_REQUEST_SLEEP_TIMEOUT_MS 100
 
 #ifdef ZD552KL_PHOENIX
-#define PREISP_MAX_CORE_VOLTAGE 1300000
-uint32_t g_cur_core_voltage=1100000;
+#define PREISP_MAX_CORE_VOLTAGE    1200000
+#define PREISP_ZZHDR_CORE_VOLTAGE  1150000
+#define PREISP_NORMAL_CORE_VOLTAGE 1100000
+uint32_t g_cur_core_voltage=PREISP_NORMAL_CORE_VOLTAGE;
+extern int ncp6335d_set_voltage_for_preisp(int voltage);
 #endif
 
 typedef struct {
@@ -103,6 +114,9 @@ struct spi_rk_preisp_data {
     int irq;
 	//asus bsp ralf>>
 	bool do_force_sleep;
+#ifdef ZD552KL_PHOENIX
+	bool do_force_wakeup;
+#endif
 	int vio_en_gpio;
 	int snapshot_gpio;
 	int snapshot_active;
@@ -119,7 +133,10 @@ struct spi_rk_preisp_data {
 	bool is_ddr_supply_enabled;
 #ifdef ZD552KL_PHOENIX
 	bool is_ext_buck_supply_enabled;
-	bool is_sleep_requested;
+	bool is_standby_sleep_mode;
+	bool is_bypass_sleep_mode;
+	bool is_suspended;
+	char fw_version[32];
 #endif
 	int dsp_rt_status;
 	bool is_suspend_sleep;
@@ -138,10 +155,16 @@ struct spi_rk_preisp_data {
     struct mutex send_msg_lock;
     struct mutex power_lock;
     struct mutex wake_sleep_lock;
+#ifdef ZD552KL_PHOENIX
+    struct mutex resume_lock;//ASUS_BSP Zhengwei "synchronize resume/power up"
+#endif
     //ASUS_BSP +++ Zhengwei "prevent enter suspend when resuming"
     struct wake_lock resume_wake_lock;
     bool is_resume_processing;
     //ASUS_BSP --- Zhengwei "prevent enter suspend when resuming"
+#ifdef ZD552KL_PHOENIX
+    struct notifier_block fb_notif;//ASUS_BSP Zhengwei "late resume preisp"
+#endif
     uint32_t max_speed_hz;
     uint32_t min_speed_hz;
     uint32_t fw_speed_hz;
@@ -362,7 +385,7 @@ static int rkpreisp_download_fw_late(struct spi_rk_preisp_data *pdata)
     spi2apb_switch_to_msb(pdata->spi);
 	rkpreisp_hw_init(pdata->spi);
     preisp_set_spi_speed(pdata, pdata->max_speed_hz);
-	ret = spi_download_fw(pdata->spi, NULL,pdata->fw_speed_hz,pdata->max_speed_hz);
+    ret = spi_download_fw(pdata->spi, NULL,pdata->fw_speed_hz,pdata->max_speed_hz);
     if (ret) {
         dev_err(pdata->dev, "download firmware failed!");
     } else {
@@ -460,7 +483,7 @@ static int asus_ext_buck_power_supply_control(struct spi_rk_preisp_data *data,in
 	else{
 		if((!data->is_ext_buck_supply_enabled  &&  value)  ||  (data->is_ext_buck_supply_enabled  &&  !value)){
 			data->is_ext_buck_supply_enabled=(value>0);
-			ret=preisp_config_single_vreg(data->dev,"ext_buck",&g_ext_buck_vreg,g_cur_core_voltage,g_cur_core_voltage,80000,(value>0));
+			ret=preisp_config_single_vreg(data->dev,"ext_buck",&g_ext_buck_vreg,PREISP_NORMAL_CORE_VOLTAGE,PREISP_MAX_CORE_VOLTAGE,80000,(value>0));
 			if(ret<0)
 				dev_err(data->dev,"%s:%d set ext_buck failed\n",__func__,__LINE__);
 		}
@@ -547,6 +570,10 @@ static int asus_clk_control(struct spi_rk_preisp_data *data,int value)
 				printk("%s clk info is null\n",__func__);
 			mdelay(5);
 		}
+		else
+		{
+			dev_info(data->dev, "clk state %d, value %d!\n",data->power_state&1,value);
+		}
 	}
 	else
 	{
@@ -561,6 +588,10 @@ static int asus_clk_control(struct spi_rk_preisp_data *data,int value)
 				printk("%s:%d pinctrl is null\n",__func__,__LINE__);
 			else
 				err = pinctrl_select_state(data->pinctrl_info.pinctrl,data->pinctrl_info.gpio_state_suspend);
+		}
+		else
+		{
+			dev_info(data->dev, "clk state %d, value %d!\n",data->power_state&1,value);
 		}
 	}
 	if (err)
@@ -635,14 +666,13 @@ static void sleep_operation(struct work_struct *work)
 
 	mutex_lock(&pdata->wake_sleep_lock);
 
-	if(pdata->is_sleep_requested == 0)
+	if(pdata->is_standby_sleep_mode == 1)
 	{
-		dev_info(pdata->dev,"sleep interrupt not come from request, ignore\n");
+		asus_sleep_power_operation(pdata);
 	}
 	else
 	{
-		asus_sleep_power_operation(pdata);
-		pdata->is_sleep_requested = 0;
+		dev_info(pdata->dev, "not power off ncp, sleep flag in sleep_operation, bypass %d, standby %d\n",pdata->is_bypass_sleep_mode,pdata->is_standby_sleep_mode);
 	}
 
 	mutex_unlock(&pdata->wake_sleep_lock);
@@ -787,6 +817,19 @@ void rkpreisp_hw_init(struct spi_device *spi)
 int preisp_send_msg_to_dsp(struct spi_rk_preisp_data *pdata, const struct msg *m)
 {
     int ret = 0;
+#ifdef ZD552KL_PHOENIX
+    dev_dbg(pdata->dev, "send msg type is 0x%x, camera id %d\n",m->type,m->camera_id);
+    if(m->type == id_msg_set_rt_zzhdr_on_t)
+    {
+	    g_cur_core_voltage = PREISP_ZZHDR_CORE_VOLTAGE;
+	    ncp6335d_set_voltage_for_preisp(g_cur_core_voltage);
+    }
+    else if(m->type == id_msg_set_rt_zzhdr_off_t)
+    {
+	    g_cur_core_voltage = PREISP_NORMAL_CORE_VOLTAGE;
+	    ncp6335d_set_voltage_for_preisp(g_cur_core_voltage);
+    }
+#endif
     mutex_lock(&pdata->send_msg_lock);
     ret = dsp_msq_send_msg(pdata->spi, m);
     mutex_unlock(&pdata->send_msg_lock);
@@ -833,7 +876,9 @@ int rkpreisp_request_sleep(struct spi_rk_preisp_data *pdata, int32_t mode)
         ret = preisp_send_msg_to_dsp(pdata, (struct msg*)&m);
 #ifdef ZD552KL_PHOENIX
 		if(mode == PREISP_SLEEP_MODE_STANDBY)
-			pdata->is_sleep_requested = 1;
+			pdata->is_standby_sleep_mode = 1;
+		else
+			pdata->is_bypass_sleep_mode = 1;
 #endif
 
         do {
@@ -915,15 +960,32 @@ int rkpreisp_wakeup(struct spi_rk_preisp_data *pdata)
 {
     int32_t reg = 0;
     int try = 0, ret = 0;
-
     mutex_lock(&pdata->wake_sleep_lock);
+#ifdef ZD552KL_PHOENIX
+    if (atomic_inc_return(&pdata->wake_sleep_cnt) == 1   ||  pdata->do_force_wakeup) {
+	if(pdata->do_force_wakeup){
+               atomic_dec_return(&pdata->wake_sleep_cnt);
+               pdata->do_force_wakeup=false;
+       }
+#else
     if (atomic_inc_return(&pdata->wake_sleep_cnt) == 1   ||  pdata->do_force_sleep) {
 	if(pdata->do_force_sleep){
                atomic_dec_return(&pdata->wake_sleep_cnt);
                pdata->do_force_sleep=false;
        }
+#endif
+
 #ifdef ZD552KL_PHOENIX
-		asus_wakeup_power_operation(pdata);
+		if(pdata->is_standby_sleep_mode == 1)
+		{
+			asus_wakeup_power_operation(pdata);
+			pdata->is_standby_sleep_mode = 0;
+		}
+		else if(pdata->is_bypass_sleep_mode == 1)
+		{
+			pdata->is_bypass_sleep_mode = 0;
+		}
+		//dev_info(pdata->dev, "sleep flag after wakeup, bypass %d, standby %d\n",pdata->is_bypass_sleep_mode,pdata->is_standby_sleep_mode);
 #endif
         if (pdata->powerdown_gpio > 0) {
             gpio_set_value(pdata->powerdown_gpio, pdata->powerdown_active);
@@ -1011,7 +1073,9 @@ static int rkpreisp_power_on(struct spi_rk_preisp_data *pdata,int is_download_fw
             enable_irq(pdata->sleepst_irq);
         }
         rkpreisp_set_log_level(pdata, pdata->log_level);
-
+#ifdef ZD552KL_PHOENIX
+        pdata->is_suspended = false;
+#endif
         pdata->sleep_state_flag = 0;
         atomic_set(&pdata->wake_sleep_cnt, 1);
     } else {
@@ -1056,6 +1120,11 @@ static int rkpreisp_power_off(struct spi_rk_preisp_data *pdata)
         }
         atomic_set(&pdata->wake_sleep_cnt, 0);
         pdata->is_fw_loaded = false;
+#ifdef ZD552KL_PHOENIX
+        set_fw_revision("NotLoad");
+        pdata->is_standby_sleep_mode = 0;
+        pdata->is_bypass_sleep_mode = 0;
+#endif
     } else if (atomic_read(&pdata->power_on_cnt) < 0) {
         atomic_set(&pdata->power_on_cnt, 0);
     } else {
@@ -1086,6 +1155,9 @@ static void fw_nowait_power_on(const struct firmware *fw, void *context)
     if(pdata->is_resume_processing == true)
     {
 		dev_info(pdata->dev,"resume done!\n");
+#ifdef ZD552KL_PHOENIX
+		mutex_unlock(&pdata->resume_lock);
+#endif
 		wake_unlock(&pdata->resume_wake_lock);
 		pdata->is_resume_processing = false;
     }
@@ -1530,9 +1602,32 @@ static int rkpreisp_open(struct inode *inode, struct file *file)
         container_of(file->private_data, struct spi_rk_preisp_data, misc);
 
     preisp_client *client = preisp_client_new();
+#ifdef ZD552KL_PHOENIX
+    bool do_resume = false;
+#endif
     client->private_data = pdata;
     file->private_data = client;
+	
+#ifdef ZD552KL_PHOENIX
+    mutex_lock(&pdata->resume_lock);
+    //ASUS_BSP +++ Zhengwei "enter standby sleep if open preisp before resume"
+    if(atomic_read(&pdata->power_on_cnt) == 0 && pdata->is_suspended)
+    {
+        do_resume = true;
+    }
+#endif
     rkpreisp_power_on(pdata,1);
+#ifdef ZD552KL_PHOENIX
+    if(do_resume)
+    {
+        mdelay(10); /*delay for dsp boot*/
+        dev_info(pdata->dev, "open preisp before resume, sleep first, then wakeup\n");
+        rkpreisp_request_sleep(pdata, PREISP_SLEEP_MODE_STANDBY);
+        rkpreisp_power_on(pdata,1);
+    }
+    //ASUS_BSP --- Zhengwei "enter standby sleep if open preisp before resume"
+    mutex_unlock(&pdata->resume_lock);
+#endif
     return 0;
 }
 
@@ -1546,7 +1641,35 @@ static int rkpreisp_release(struct inode *inode, struct file *file)
     rkpreisp_power_off(pdata);
     return 0;
 }
+#ifdef ZD552KL_PHOENIX
+void set_fw_revision(const char *version_string)
+{
+	memset(g_preisp_data->fw_version,0,sizeof(g_preisp_data->fw_version));
+	strcpy(g_preisp_data->fw_version,version_string);
+	dev_info(g_preisp_data->dev,"fw version now is %s\n",g_preisp_data->fw_version);
+}
+static ssize_t rkpreisp_read(struct file *file,char __user *user_buf, size_t count, loff_t *ppos)
+{
+	int n;
+	char kbuf[64];
 
+	if(*ppos == 0)
+	{
+		if(atomic_read(&g_preisp_data->power_on_cnt)>0)
+			n = snprintf(kbuf, sizeof(kbuf),"%s\n%c",g_preisp_data->fw_version,'\0');
+		else
+			n = snprintf(kbuf, sizeof(kbuf),"%s\n%c","Power Off",'\0');
+		if(copy_to_user(user_buf,kbuf,n))
+		{
+			dev_err(g_preisp_data->dev,"%s(): copy_to_user fail!\n",__func__);
+			return -EFAULT;
+		}
+		*ppos += n;
+		return n;
+	}
+	return 0;
+}
+#endif
 static ssize_t rkpreisp_write(struct file *file,
         const char __user *user_buf, size_t count, loff_t *ppos)
 {
@@ -1632,7 +1755,11 @@ static long rkpreisp_ioctl(struct file *file,
         break;
     }
     case PREISP_WAKEUP:
+#ifdef ZD552KL_PHOENIX
+	pdata->do_force_wakeup=true;
+#else
 	pdata->do_force_sleep=true;
+#endif
         ret = rkpreisp_wakeup(pdata);
         break;
     case PREISP_DOWNLOAD_FW: {
@@ -1782,6 +1909,9 @@ static const struct file_operations rkpreisp_fops = {
     .open = rkpreisp_open,
     .release = rkpreisp_release,
     .write = rkpreisp_write,
+#ifdef ZD552KL_PHOENIX
+    .read = rkpreisp_read,
+#endif
     .poll = rkpreisp_poll,
     .unlocked_ioctl = rkpreisp_ioctl,
     .compat_ioctl = rkpreisp_ioctl,
@@ -1812,6 +1942,7 @@ static irqreturn_t rkpreisp_sleep_isr(int irq, void *dev_id)
         gpio_set_value(pdata->powerdown_gpio, !pdata->powerdown_active);
     }
 #ifdef ZD552KL_PHOENIX
+	if(pdata->is_standby_sleep_mode == 1)
 		queue_work(sleep_wq,&(sleep_work.work));
 #endif
 
@@ -2061,9 +2192,21 @@ static int spi_rk_preisp_probe(struct spi_device *spi)
     mutex_init(&data->send_msg_lock);
     mutex_init(&data->power_lock);
     mutex_init(&data->wake_sleep_lock);
+#ifdef ZD552KL_PHOENIX
+    mutex_init(&data->resume_lock);
+#endif
     wake_lock_init(&data->resume_wake_lock, WAKE_LOCK_SUSPEND, "Preisp_Wake_Lock");
     data->spi = spi;
     data->dev = &spi->dev;
+
+#ifdef ZD552KL_PHOENIX
+    g_preisp_data = data;
+    sleep_wq = create_workqueue("sleep wq");
+    sleep_work.pdata = data;
+    INIT_WORK(&(sleep_work.work), sleep_operation);
+    set_fw_revision("NotLoad");
+#endif
+
     rkpreisp_parse_dt_property(data->dev, data);
 
     spi_set_drvdata(spi, data);
@@ -2073,8 +2216,13 @@ static int spi_rk_preisp_probe(struct spi_device *spi)
     data->misc.name = "rk_preisp";
     data->misc.fops = &rkpreisp_fops;
 
+#ifdef ZD552KL_PHOENIX
+    data->do_force_wakeup=false;
+#else
     g_preisp_data = data;
+#endif
     data->do_force_sleep=false;
+
     err = misc_register(&data->misc);
     if (err < 0) {
         dev_err(data->dev, "Error: misc_register returned %d", err);
@@ -2101,10 +2249,16 @@ static int spi_rk_preisp_probe(struct spi_device *spi)
         printk("%s:%d mclk is NULL !!!!!!!!!!!! \n",__func__,__LINE__);
     }
 #ifdef ZD552KL_PHOENIX
-	sleep_wq = create_workqueue("sleep wq");
-	sleep_work.pdata = data;
-	INIT_WORK(&(sleep_work.work), sleep_operation);
+	//ASUS_BSP Zhengwei +++ "late resume preisp"
+	data->fb_notif.notifier_call = fb_notifier_callback;
+	err = fb_register_client(&data->fb_notif);
+	if (err) {
+		dev_err(data->dev, "Unable to register fb_notifier: %d\n",
+			err);
+	}
+	//ASUS_BSP Zhengwei --- "late resume preisp"
 #endif
+
 	if (!data->fw_nowait_mode) {
         return 0;
     }
@@ -2121,6 +2275,9 @@ static int spi_rk_preisp_remove(struct spi_device *spi)
 {
     struct spi_rk_preisp_data *data = spi_get_drvdata(spi);
     spi_set_drvdata(spi, NULL);
+#ifdef ZD552KL_PHOENIX
+    fb_unregister_client(&data->fb_notif);//ASUS_BSP Zhengwei "late resume preisp"
+#endif
     misc_deregister(&data->misc);
     return 0;
 }
@@ -2132,6 +2289,9 @@ static int spi_rk_preisp_suspend(struct spi_device *spi, pm_message_t mesg)
     if (!pdata->fw_nowait_mode) {
         return 0;
     }
+#ifdef ZD552KL_PHOENIX
+    pdata->is_suspended = true;
+#endif
     rkpreisp_power_off(pdata);
     return 0;
 }
@@ -2154,6 +2314,9 @@ static int spi_rk_preisp_resume(struct spi_device *spi)
         return 0;
 
     wake_lock(&pdata->resume_wake_lock);
+#ifdef ZD552KL_PHOENIX
+    mutex_lock(&pdata->resume_lock);
+#endif
     dev_info(pdata->dev,"resume, going to do power up\n");
     pdata->is_resume_processing = true;
     ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
@@ -2161,10 +2324,55 @@ static int spi_rk_preisp_resume(struct spi_device *spi)
     if (ret) {
         dev_err(pdata->dev, "request firmware nowait failed!");
         wake_unlock(&pdata->resume_wake_lock);
+#ifdef ZD552KL_PHOENIX
+        mutex_unlock(&pdata->resume_lock);
+#endif
     }
 
     return ret;
 }
+
+#ifdef ZD552KL_PHOENIX
+//ASUS_BSP +++ Zhengwei "late resume preisp"
+static int fb_notifier_callback(struct notifier_block *self,
+				 unsigned long event, void *data)
+{
+	struct fb_event *evdata = (struct fb_event *)data;
+	int *blank;
+	struct spi_rk_preisp_data *pdata = container_of(self, struct spi_rk_preisp_data, fb_notif);
+
+	blank = evdata->data;
+	dev_dbg(pdata->dev, "fb event is %lu, evdata data %d",event,*blank);
+	if (evdata && evdata->data && pdata==g_preisp_data)
+	{
+		if(event == FB_EVENT_SUSPEND)
+		{
+			//spi_rk_preisp_suspend(pdata->spi,PMSG_SUSPEND);
+		}
+		else if(event == FB_EARLY_EVENT_BLANK)
+		{
+			if(*blank == FB_BLANK_UNBLANK)
+			{
+				if(atomic_read(&pdata->power_on_cnt) == 0)
+				{
+					spi_rk_preisp_resume(pdata->spi);
+				}
+				else
+				{
+					dev_info(pdata->dev, "preisp not power off, not resume it\n");
+				}
+			}
+		}
+	}
+	else
+	{
+		printk("preisp, error! pdata %p, g_preisp_data %p\n", pdata, g_preisp_data);
+	}
+
+	return 0;
+}
+//ASUS_BSP --- Zhengwei "late resume preisp"
+#endif
 
 /*
 dts:
@@ -2200,7 +2408,11 @@ static struct spi_driver spi_rk_preisp_driver = {
     .probe      = spi_rk_preisp_probe,
     .remove     = spi_rk_preisp_remove,
     .suspend    = spi_rk_preisp_suspend,
+#ifdef ZD552KL_PHOENIX
+    //.resume     = spi_rk_preisp_resume, //ASUS_BSP Zhengwei "late resume preisp"
+#else
     .resume     = spi_rk_preisp_resume,
+#endif
 };
 module_spi_driver(spi_rk_preisp_driver);
 

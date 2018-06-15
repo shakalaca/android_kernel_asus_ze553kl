@@ -116,6 +116,13 @@
 #ifdef ZD552KL_PHOENIX
 #define PROC_SENSOR_I2C_RW "driver/sensor_i2c_rw"
 #define PROC_PDAF_I2C_R "driver/pdaf_i2c_r"
+//ASUS_BSP++, LLHDR
+#define PROC_PREISP_VHDR_MODE "driver/preisp_vhdr_mode"
+#define PROC_PREISP_CFRAME_ID "driver/preisp_cframe_id"
+#define PROC_PREISP_PFRAME_ID "driver/preisp_pframe_id"
+#define PROC_PREISP_SFRAME_ID "driver/preisp_sframe_id"
+//ASUS_BSP--, LLHDR
+#define PROC_IFACE_PROCESS_FRAME_ID "driver/iface_process_frame_id"
 #endif
 
 void remove_sensor_proc_files(struct msm_sensor_ctrl_t *s_ctrl);

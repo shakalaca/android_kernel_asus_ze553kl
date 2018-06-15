@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,10 +14,42 @@
 /dts-v1/;
 
 #include "msm8953-ZE553KL-MP.dtsi"
+#include "msm-ZE553KL-pmi8950.dtsi"
 #include "msm8953-ZE553KL-MP-mtp.dtsi"
+#include "msm8953-pmi8950-ZE553KL.dtsi"
+//#include "msm8953-camera-sensor-mtp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM8953 MTP";
+	model = "Qualcomm Technologies, Inc. MSM8953 + PMI8950 MTP";
 	compatible = "qcom,msm8953-mtp", "qcom,msm8953", "qcom,mtp";
 	qcom,board-id= <26 0>;
+	qcom,pmic-id = <0x010016 0x010011 0x0 0x0>;
+};
+
+/{
+	mtp_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "2575458_Asus_Hades_4850mAh_averaged_MasterSlave_Sept9th2016_PMI8952.dtsi"
+		#include "2623087_Asus_Hades_4850mAh_averaged_MasterSlave_Oct5th2016_PMI8952GUI20016.dtsi"
+	};
+};
+
+&pmi8950_fg {
+	qcom,battery-data = <&mtp_batterydata>;
+};
+
+&pmi8950_charger {
+	qcom,battery-data = <&mtp_batterydata>;
+	adp-power-supply = <&pm8953_l8>;
+	usb-alert-power-supply = <&pm8953_l10>;
+	qcom,dcp-chg-gpio=<&tlmm 129 0x0>;
+	qcom,adc-sw-gpio=<&tlmm 134 0x0>;
+	qcom,adc-power-gpio=<&pmi8950_gpios 1 0x0>;
+	//qcom,chg-led-sw-controls;
+	//qcom,chg-led-support;
+	qcom,external-typec;
+	qcom,typec-psy-name = "typec";
+  	usb-thermal-irq = <&tlmm 41 0x2008>;
+  	pinctrl-names = "default";
+  	pinctrl-0 = <&usb_thermal_irq_default>;
 };

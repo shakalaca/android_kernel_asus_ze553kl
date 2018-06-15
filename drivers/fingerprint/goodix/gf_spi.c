@@ -114,6 +114,50 @@ static LIST_HEAD(device_list);
 static DEFINE_MUTEX(device_list_lock);
 static struct gf_dev gf;
 
+char *  cmd_to_string( unsigned int cmd)
+{
+	char *cmd_string = NULL;
+	switch (cmd) {
+	case GF_IOC_DISABLE_IRQ:
+		cmd_string = "GF_IOC_DISABLE_IRQ";
+		break;
+	case GF_IOC_ENABLE_IRQ:
+		cmd_string = "GF_IOC_ENABLE_IRQ";
+		break;
+	case GF_IOC_SETSPEED:
+		cmd_string = "GF_IOC_SETSPEED";
+		break;
+	case GF_IOC_RESET:
+		cmd_string = "GF_IOC_RESET";
+		break;
+	case GF_IOC_COOLBOOT:
+		cmd_string = "GF_IOC_COOLBOOT";
+		break;
+	case GF_IOC_SENDKEY:
+		cmd_string = "GF_IOC_SENDKEY";
+		break;
+	case GF_IOC_CLK_READY:
+		cmd_string = "GF_IOC_CLK_READY";
+		break;
+	case GF_IOC_CLK_UNREADY:
+		cmd_string = "GF_IOC_CLK_UNREADY";
+		break;
+	case GF_IOC_PM_FBCABCK:
+		cmd_string = "GF_IOC_PM_FBCABCK";
+		break;
+    case GF_IOC_POWER_ON:
+		cmd_string = "GF_IOC_POWER_ON";
+        break;
+    case GF_IOC_POWER_OFF:
+		cmd_string = "GF_IOC_POWER_OFF";
+        break;
+	default:
+		cmd_string = "default";
+		break;
+	}
+	return cmd_string;
+}
+
 static void gf_enable_irq(struct gf_dev *gf_dev)
 {
 	if (gf_dev->irq_enabled) {
@@ -276,10 +320,11 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	struct gf_key gf_key = { 0 };
 	int retval = 0;
         int i;
+    char * cmd_string=NULL;
 #ifdef AP_CONTROL_CLK
 	unsigned int speed = 0;
 #endif
-	FUNC_ENTRY();
+	//FUNC_ENTRY();
 	if (_IOC_TYPE(cmd) != GF_IOC_MAGIC)
 		return -ENODEV;
 
@@ -292,8 +337,8 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		    !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
 	if (retval)
 		return -EFAULT;
-    
-    if(gf_dev->device_available == 0) 
+
+    if(gf_dev->device_available == 0)
     {
         if((cmd == GF_IOC_POWER_ON) || (cmd == GF_IOC_POWER_OFF))
         {
@@ -398,8 +443,9 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		gf_dbg("Unsupport cmd:0x%x\n", cmd);
 		break;
 	}
-
-	FUNC_EXIT();
+    cmd_string = cmd_to_string(cmd);
+	pr_warn("gf:%s, exit. cmd:%s\n", __func__,cmd_string);
+	//FUNC_EXIT();
 	return retval;
 }
 
@@ -413,16 +459,16 @@ gf_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 static irqreturn_t gf_irq(int irq, void *handle)
 {
-  
+
     struct gf_dev *gf_dev = &gf;
     char temp = GF_NET_EVENT_IRQ;
 
     wake_lock_timeout(&gf_dev->wake_lock,msecs_to_jiffies(1000));
-
+    pr_info("gf: gf_irq\n");
 #if defined(GF_NETLINK_ENABLE)
     sendnlmsg(&temp);
 #elif defined (GF_FASYNC)
-    
+
     if (gf_dev->async)
         kill_fasync(&gf_dev->async, SIGIO, POLL_IN);
 #endif
@@ -609,7 +655,6 @@ static int gf_probe(struct platform_device *pdev)
 	unsigned long minor;
 	int ret;
 	FUNC_ENTRY();
-
 	/* Initialize the driver data */
 	INIT_LIST_HEAD(&gf_dev->device_entry);
 #if defined(USE_SPI_BUS)
@@ -681,7 +726,7 @@ static int gf_probe(struct platform_device *pdev)
 		gf_dev->notifier = goodix_noti_block;
 		fb_register_client(&gf_dev->notifier);
 		gf_reg_key_kernel(gf_dev);
-		
+
         gf_dev->irq = gf_irq_num(gf_dev);
 #if 1
 		ret = request_threaded_irq(gf_dev->irq, NULL, gf_irq,
@@ -752,7 +797,7 @@ static int gf_remove(struct platform_device *pdev)
         gf_cleanup(gf_dev);
 
 
-    fb_unregister_client(&gf_dev->notifier); 
+    fb_unregister_client(&gf_dev->notifier);
     mutex_unlock(&device_list_lock);
 
 	FUNC_EXIT();
@@ -825,6 +870,7 @@ static struct platform_driver gf_driver = {
 	.resume = gf_resume,
 };
 
+
 static int __init gf_init(void)
 {
 	int status;
@@ -834,7 +880,7 @@ static int __init gf_init(void)
 	 * that will key udev/mdev to add/remove /dev nodes.  Last, register
 	 * the driver which manages those device numbers.
 	 */
- 	 
+
 #ifdef CONFIG_BBK_FP_ID
     if (get_fp_id() != 2)
     {
@@ -872,7 +918,6 @@ static int __init gf_init(void)
         netlink_init();
 #endif
 	pr_info(" status = 0x%x\n", status);
-
 	FUNC_EXIT();
 	return 0;		//status;
 }

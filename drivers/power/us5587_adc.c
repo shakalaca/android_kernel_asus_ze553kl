@@ -366,7 +366,7 @@ static ssize_t thermal_temp_proc_write(struct file *filp, const char __user *buf
 	}
 
 	if(us5587_chip){
-		sscanf(buff,"%d %d %d %d", &on,&t1,&t2,&t3);
+		sscanf(messages,"%d %d %d %d", &on,&t1,&t2,&t3);
 
 		if(on){
 			us5587_chip->thermal_temp[3] =t1;

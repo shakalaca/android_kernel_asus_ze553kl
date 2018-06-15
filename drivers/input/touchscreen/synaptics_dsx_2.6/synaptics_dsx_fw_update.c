@@ -39,7 +39,7 @@
 #include <linux/input.h>
 #include <linux/firmware.h>
 #include <linux/platform_device.h>
-#include <linux/input/synaptics_dsx.h>
+#include <linux/input/synaptics_dsx_ze553kl.h>
 #include <linux/gpio.h>
 #include "synaptics_dsx_core.h"
 
@@ -52,6 +52,7 @@
 //#define FW_IMAGE_NAME_ZE553KL "synaptics/PR2474684-s3508r_hybrid_cdm10_asus_101816.img"
 //#define FW_IMAGE_NAME_ZE553KL "synaptics/PR2474684_45440004_S3508R_102616.img"
 //#define FW_IMAGE_NAME_ZE553KL_EDO "synaptics/PR2507195-45440006-S3508R_111616.img"
+//#define FW_IMAGE_NAME_ZE553KL_EDO "synaptics/PR2555971_45440009_s3508r_EDO_20170302.img"
 #define FW_IMAGE_NAME_ZE553KL_EDO "synaptics/PR2555971_45440010_s3508r_EDO_20170713.img"
 
 
@@ -60,6 +61,7 @@
 //#define FW_IMAGE_NAME_ZE553KL_TM "synaptics/PR2547188_544D0001_s3508r_TM_20170223.img"
 //#define FW_IMAGE_NAME_ZE553KL_TM "synaptics/PR2555971_544D0002_s3508r_TM_20170306.img"
 //#define FW_IMAGE_NAME_ZE553KL_TM "synaptics/PR2555971_544D0004_s3508r_TM_20170313.img"
+//#define FW_IMAGE_NAME_ZE553KL_TM "synaptics/PR2555971_544D0005_s3508r_TM_20170313.img"
 #define FW_IMAGE_NAME_ZE553KL_TM "synaptics/PR2555971_544D0006_s3508r_TM_20170713.img"
 //<ASUS+>/*
 #define DO_STARTUP_FW_UPDATE

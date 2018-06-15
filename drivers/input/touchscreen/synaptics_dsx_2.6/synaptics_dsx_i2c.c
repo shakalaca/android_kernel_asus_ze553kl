@@ -40,7 +40,7 @@
 #include <linux/types.h>
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
-#include <linux/input/synaptics_dsx.h>
+#include <linux/input/synaptics_dsx_ze553kl.h>
 #include "synaptics_dsx_core.h"
 #include <linux/of_irq.h>
 
@@ -56,11 +56,13 @@
 
 //EDP
 //#define FW_NAME_ZE553KL_EDO "PR2507195-45440006-S3508R_111616.img"
+//#define FW_NAME_ZE553KL_EDO "PR2555971_45440009_s3508r_EDO_20170302.img"
 #define FW_NAME_ZE553KL_EDO "PR2555971_45440010_s3508r_EDO_20170713.img"
 //TM
 //#define FW_NAME_ZE553KL_TM "PR2547188_544D0001_s3508r_TM_20170223.img"
 //#define FW_NAME_ZE553KL_TM  "PR2555971_544D0002_s3508r_TM_20170306.img"
 //#define FW_NAME_ZE553KL_TM  "PR2555971_544D0004_s3508r_TM_20170313.img"
+//#define FW_NAME_ZE553KL_TM  "PR2555971_544D0005_s3508r_TM_20170313.img"
 #define FW_NAME_ZE553KL_TM  "PR2555971_544D0006_s3508r_TM_20170713.img"
 extern int asus_lcd_id;
 

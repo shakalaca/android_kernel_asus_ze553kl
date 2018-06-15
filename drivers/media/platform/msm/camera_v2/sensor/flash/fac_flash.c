@@ -225,7 +225,6 @@ int sky81296_init(struct msm_flash_ctrl_t * fctrl)
 	CDBG(" E\n");
 	do
 	{
-		//if(asus_project_id!=ASUS_ZD552KL)
 		{
 			printk("%s:%d invalid asus_project_id=%d \n",__func__,__LINE__,asus_project_id);
 			rc=-EFAULT;break;
@@ -541,7 +540,6 @@ void asus_flash_config(struct FAC_FLASH_INFO *facflash, uint32_t val0, uint32_t 
 		*/
 		if(mode==FAC_FLASH_MODE_TORCH)
 		{
-			//imax=asus_project_id==ASUS_ZD552KL?g_front_torch_max_current:g_rear_torch_max_current;
 			#ifdef ZD552KL_PHOENIX
 				imax = g_front_torch_max_current;
 				imax2 = g_rear_torch_max_current;
@@ -577,7 +575,6 @@ void asus_flash_config(struct FAC_FLASH_INFO *facflash, uint32_t val0, uint32_t 
 		}
 		else if(mode==FAC_FLASH_MODE_FLASH)
 		{
-			//imax=asus_project_id==ASUS_ZD552KL?g_front_flash_max_current:g_rear_flash_max_current;
 			#ifdef ZD552KL_PHOENIX
 				imax = g_front_flash_max_current;
 				imax2 = g_rear_flash_max_current;
@@ -618,9 +615,17 @@ void asus_flash_config(struct FAC_FLASH_INFO *facflash, uint32_t val0, uint32_t 
 static ssize_t asus_flash_store(struct file *dev, const char *buf, size_t count, loff_t *loff)
 {
 	uint32_t mode = 0,val[2]={0},argc=0;
+	int rc = 0;
 	struct FAC_FLASH_INFO * facflash=(struct FAC_FLASH_INFO *)PDE_DATA(file_inode(dev));
+	char temp[20] = {0};
 	CDBG(" E\n");
-	argc=sscanf(buf, "%d %d %d",&mode, &val[0],&val[1]);
+
+	rc  = copy_from_user(temp, buf,sizeof(temp));
+	if(rc){
+		printk("%s:%d  copy from user space  success\n",__func__,__LINE__);
+		}
+
+	argc=sscanf(temp, "%d %d %d",&mode, &val[0],&val[1]);
 	if(argc<2)
 	{
 		printk("%s:%d invalid parameter\n",__func__,__LINE__);
@@ -664,13 +669,6 @@ void adjust_max_flash_current(bool is_otg_mode)
 	
 	switch(asus_project_id)
 	{
-		/*case ASUS_ZD552KL:
-			g_rear_flash_max_current=g_is_otg_mode?MAX_FLASH_CURRENT_PISCES_REAR_OTG_1:MAX_FLASH_CURRENT_PISCES_REAR_OTG_0;
-			g_front_flash_max_current=g_is_otg_mode?MAX_FLASH_CURRENT_PISCES_FRONT_OTG_1:MAX_FLASH_CURRENT_PISCES_FRONT_OTG_0;
-			g_rear_torch_max_current=g_is_otg_mode?MAX_TORCH_CURRENT_PISCES_REAR_OTG_1:MAX_TORCH_CURRENT_PISCES_REAR_OTG_0;
-			g_front_torch_max_current=g_is_otg_mode?MAX_TORCH_CURRENT_PISCES_FRONT_OTG_1:MAX_TORCH_CURRENT_PISCES_FRONT_OTG_0;
-			break;
-			*/ 
 		case ASUS_ZS550KL:
 			//g_front_flash_max_current=g_is_otg_mode?MAX_FLASH_CURRENT_FRONT_OTG_1:MAX_FLASH_CURRENT_FRONT_OTG_0;
 			//g_front_torch_max_current=g_is_otg_mode?MAX_TORCH_CURRENT_FRONT_OTG_1:MAX_TORCH_CURRENT_FRONT_OTG_0;
@@ -746,14 +744,6 @@ void create_flash_proc_file(void* ctrl)
 		g_facflash[1].proc_file_flash = proc_create_data(pro_file_name, 0666, NULL, &asus_flash_proc_fops, &g_facflash[1]);
 		if(!g_facflash[1].proc_file_flash)
 			printk("%s proc_create_data %s failed\n",__func__,pro_file_name);
-		//create brightness proc file
-		/*if(asus_project_id==ASUS_ZD552KL)
-		{
-			g_facflash[0].target_index=1;//for pisces hw connection
-			g_facflash[1].target_index=0;
-			create_brightness_proc_file(&g_facflash[0]);  //create proc fille for setting  brightness
-			create_asus_flash_trigger_time_proc_file(&g_facflash[0]); 
-		}*/
 	}
 	else //if(((struct msm_flash_ctrl_t *)ctrl)->flash_driver_type == FLASH_DRIVER_PMIC)    //change for CS codebase update 
 	{
@@ -762,13 +752,6 @@ void create_flash_proc_file(void* ctrl)
 		g_facflash[2].target_index=0;
 		g_facflash[2].is_firsttime=1;
 		//create flash proc file
-		/*if(asus_project_id==ASUS_ZD552KL)
-		{
-			g_facflash[2].torch_op_current=g_front_torch_max_current;
-			g_facflash[2].flash_op_current=g_front_flash_max_current;
-			snprintf(pro_file_name,ARRAY_SIZE(pro_file_name),"%s",PROC_FILE_ASUS_FLASH_3);
-		}
-		else*/
 		{
 			g_facflash[2].torch_op_current=g_rear_torch_max_current;
 			g_facflash[2].flash_op_current=g_rear_flash_max_current;
@@ -784,12 +767,6 @@ void create_flash_proc_file(void* ctrl)
 		g_facflash[3].index=3;
 		g_facflash[3].target_index=1;
 		g_facflash[3].is_firsttime=1;
-		/*if(asus_project_id==ASUS_ZD552KL)
-		{
-			g_facflash[3].torch_op_current=g_front_torch_max_current;
-			snprintf(pro_file_name,ARRAY_SIZE(pro_file_name),"%s",PROC_FILE_ASUS_FLASH_4);
-		}
-		else*/
 		{
 			if(asus_project_id==ASUS_ZD552KL_PHOENIX)
 			{
@@ -906,8 +883,16 @@ static int asus_flash_trigger_time_proc_open(struct inode *inode, struct  file *
 static ssize_t asus_flash_trigger_time_proc_write(struct file *dev, const char *buf, size_t count, loff_t *loff)
 {
 	uint32_t timeout = 0,flash_current = ZENFLASH_DEFAULT_CURRENT,argc=0;
+	int rc = 0;
 	struct FAC_FLASH_INFO * facflash=(struct FAC_FLASH_INFO *)PDE_DATA(file_inode(dev));
-	argc=sscanf(buf, "%d %d", &timeout,&flash_current);
+	char temp[20] = {0};
+
+	rc  = copy_from_user(temp, buf,sizeof(temp));
+	if(rc){
+		printk("%s:%d  copy from user space  success\n",__func__,__LINE__);
+		}
+
+	argc=sscanf(temp, "%d %d", &timeout,&flash_current);
 	if(argc<1)
 	{
 		printk("%s invalid parameter\n",__func__);

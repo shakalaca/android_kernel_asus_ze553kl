@@ -99,7 +99,6 @@ obj-$(CONFIG_USB_GADGET)	+= usb/
 obj-$(CONFIG_SERIO)		+= input/serio/
 obj-$(CONFIG_GAMEPORT)		+= input/gameport/
 obj-$(CONFIG_INPUT)		+= input/
-obj-y				+= fingerprint/
 obj-$(CONFIG_I2O)		+= message/
 obj-$(CONFIG_RTC_LIB)		+= rtc/
 obj-y				+= i2c/ media/
@@ -170,17 +169,19 @@ obj-$(CONFIG_ESOC)		+= esoc/
 
 obj-$(CONFIG_BIF)		+= bif/
 
+obj-$(CONFIG_SENSORS)		+= sensors/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 
+obj-y		+= fingerprint/
 # DTS_EAGLE START
 obj-y                           += dts_eagle/
 # DTS_EAGLE END
 
 #Texura
 ifdef CONFIG_TEXURA_ARM64
-	ifdef CONFIG_TEXURA_USERDEBUG
-		obj-y				+= exfat/userdebug/64/objects/
-	else
-		obj-y				+= exfat/user/64/objects/
-	endif
+       ifdef CONFIG_TEXURA_USERDEBUG
+               obj-y                           += exfat/userdebug/64/objects/
+       else
+               obj-y                           += exfat/user/64/objects/
+       endif
 endif

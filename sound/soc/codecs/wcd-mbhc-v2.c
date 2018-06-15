@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,10 +30,6 @@
 #include <sound/jack.h>
 #include "wcd-mbhc-v2.h"
 #include "wcdcal-hwdep.h"
-#include "wcd9xxx-mbhc.h"
-#include "msm8x16_wcd_registers.h"
-#include "msm8916-wcd-irq.h"
-#include "msm8x16-wcd.h"
 //ASUS_BSP tyree_liu +++ for factory test headset insert check
 #include <linux/debugfs.h>
 #if 0
@@ -64,11 +60,13 @@ int g_jack_det_invert = 0;
 
 #define WCD_MBHC_BTN_PRESS_COMPL_TIMEOUT_MS  50
 #define ANC_DETECT_RETRY_CNT 7
-#define WCD_MBHC_SPL_HS_CNT  1
+#define WCD_MBHC_SPL_HS_CNT  2
+
 /* ASUS_BSP +++*/
 uint32_t g_ZL = 0;
 uint32_t g_ZR = 0;
 /* ASUS_BSP ---*/
+
 static int det_extn_cable_en;
 module_param(det_extn_cable_en, int,
 		S_IRUGO | S_IWUSR | S_IWGRP);
@@ -1428,24 +1426,24 @@ static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
 
 	if (mbhc->mbhc_cb->hph_pull_down_ctrl){
 		pr_debug("%s: hph_pull_down_ctrl", __func__);
-		mbhc->mbhc_cb->hph_pull_down_ctrl(codec, false);
+ 		mbhc->mbhc_cb->hph_pull_down_ctrl(codec, false);
 	}
 
 	if (mbhc->mbhc_cb->micbias_enable_status){
 		pr_debug("%s: micbias_enable_status", __func__);
-		micbias1 = mbhc->mbhc_cb->micbias_enable_status(mbhc,
-								MIC_BIAS_1);
+ 		micbias1 = mbhc->mbhc_cb->micbias_enable_status(mbhc,
+ 								MIC_BIAS_1);
 	}
 
 	if (mbhc->mbhc_cb->set_cap_mode){
 		pr_debug("%s: set_cap_mode", __func__);
-		mbhc->mbhc_cb->set_cap_mode(codec, micbias1, true);
+ 		mbhc->mbhc_cb->set_cap_mode(codec, micbias1, true);
 	}
 
 	if (mbhc->mbhc_cb->mbhc_micbias_control){
 		pr_debug("%s: mbhc_micbias_control", __func__);
-		mbhc->mbhc_cb->mbhc_micbias_control(codec, MIC_BIAS_2,
-						    MICB_ENABLE);
+ 		mbhc->mbhc_cb->mbhc_micbias_control(codec, MIC_BIAS_2,
+ 						    MICB_ENABLE);
 	}
 	else
 		wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
@@ -1577,12 +1575,8 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 			WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 0);
 			wcd_mbhc_report_plug(mbhc, 0, SND_JACK_LINEOUT);
 		} else if (mbhc->current_plug == MBHC_PLUG_TYPE_ANC_HEADPHONE) {
-			mbhc->mbhc_cb->irq_control(codec,
-					mbhc->intr_ids->mbhc_hs_rem_intr,
-					false);
-			mbhc->mbhc_cb->irq_control(codec,
-					mbhc->intr_ids->mbhc_hs_ins_intr,
-					false);
+			wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM, false);
+			wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_INS, false);
 			WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_DETECTION_TYPE,
 						 0);
 			WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 0);
@@ -1595,6 +1589,9 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 		/* Disable HW FSM */
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0);
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_ISRC_CTL, 0);
+		wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_INS, false);
+		wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM, false);
+
 	}
 #if 0
 exit: /* ASUS_BSP tyree_liu +++ */

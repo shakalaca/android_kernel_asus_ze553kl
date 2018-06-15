@@ -30,7 +30,6 @@ struct completion {
 
 #define COMPLETION_INITIALIZER(work) \
 	{ 0, __WAIT_QUEUE_HEAD_INITIALIZER((work).wait) }
-
 #else
 struct completion {
 	unsigned int done;

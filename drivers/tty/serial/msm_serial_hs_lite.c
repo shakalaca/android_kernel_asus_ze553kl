@@ -2,7 +2,7 @@
  * drivers/serial/msm_serial.c - driver for msm7k serial device and console
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -52,7 +52,7 @@
 #include <linux/msm-bus.h>
 #include "msm_serial_hs_hwreg.h"
 
-extern int g_user_dbg_mode;  //ASUSDEBUG jeffery_hu@asus.com  avoid log to uart console in user version
+extern int g_user_dbg_mode;  //ASUSDEBUG jojo_zhou@asus.com  avoid log to uart console in user version
 /*
  * There are 3 different kind of UART Core available on MSM.
  * High Speed UART (i.e. Legacy HSUART), GSBI based HSUART
@@ -555,6 +555,7 @@ static void handle_rx(struct uart_port *port, unsigned int misr)
 	unsigned int vid;
 	unsigned int sr;
 	int count = 0;
+	int copied = 0;
 	struct msm_hsl_port *msm_hsl_port = UART_TO_MSM(port);
 
 	vid = msm_hsl_port->ver_id;
@@ -610,9 +611,9 @@ static void handle_rx(struct uart_port *port, unsigned int misr)
 
 		/* TODO: handle sysrq */
 		/* if (!uart_handle_sysrq_char(port, c)) */
-		tty_insert_flip_string(tty->port, (char *) &c,
+		copied = tty_insert_flip_string(tty->port, (char *) &c,
 				       (count > 4) ? 4 : count);
-		count -= 4;
+		count -= copied;
 	}
 
 	tty_flip_buffer_push(tty->port);
@@ -1446,8 +1447,7 @@ static void msm_hsl_console_write(struct console *co, const char *s,
 	struct msm_hsl_port *msm_hsl_port;
 	unsigned int vid;
 	int locked;
-
-//ASUSDEBUG+ jeffery_hu@asus.com  avoid log to uart console in user version
+//ASUSDEBUG+ jojo_hu@asus.com  avoid log to uart console in user version
 	if (!g_user_dbg_mode)
 		return;
 //ASUSDEBUG -

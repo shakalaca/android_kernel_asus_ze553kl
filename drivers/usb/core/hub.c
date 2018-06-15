@@ -36,8 +36,6 @@
 #define USB_VENDOR_GENESYS_LOGIC		0x05e3
 #define HUB_QUIRK_CHECK_PORT_AUTOSUSPEND	0x01
 
-extern int otgoc_count;
-
 /* Protect struct usb_device->state and ->children members
  * Note: Both are also protected by ->dev.sem, except that ->state can
  * change to USB_STATE_NOTATTACHED even when the semaphore isn't held. */
@@ -1307,8 +1305,6 @@ static void hub_quiesce(struct usb_hub *hub, enum hub_quiescing_type type)
 	struct usb_device *hdev = hub->hdev;
 	int i;
 
-	cancel_delayed_work_sync(&hub->init_work);
-
 	/* hub_wq and related activity won't re-trigger */
 	hub->quiescing = 1;
 
@@ -2162,13 +2158,6 @@ void usb_disconnect(struct usb_device **pdev)
 	usb_set_device_state(udev, USB_STATE_NOTATTACHED);
 	dev_info(&udev->dev, "USB disconnect, device number %d\n",
 			udev->devnum);
-
-	/*<ASUS-Lotta_Lu-20170515>
-		Reset the variable otgoc_count in usb disconnect function because otgoc_count will
-		++ after over current. But charger can not detect the oc device remove without otg.
-		So reset the variable otgoc_count here.
-	*/
-	otgoc_count=0;
 
 	usb_lock_device(udev);
 

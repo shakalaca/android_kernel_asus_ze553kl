@@ -53,7 +53,10 @@ enum {
     id_msg_set_sys_mode_standby_t,
 
     id_msg_set_log_level_t = 0x0250,
-
+#ifdef ZD552KL_PHOENIX
+    id_msg_set_rt_zzhdr_on_t = 0x0031,
+    id_msg_set_rt_zzhdr_off_t,
+#endif
     //dsp -> ap
     id_msg_do_i2c_t = 0x0390,
     //ap -> dsp

@@ -29,6 +29,7 @@
 #include <linux/of.h>
 #include <trace/events/power.h>
 
+#define MAX_FREQ 2016000
 static DEFINE_MUTEX(l2bw_lock);
 
 static struct clk *cpu_clk[NR_CPUS];
@@ -232,17 +233,26 @@ static int msm_cpufreq_cpu_callback(struct notifier_block *nfb,
 static struct notifier_block __refdata msm_cpufreq_cpu_notifier = {
 	.notifier_call = msm_cpufreq_cpu_callback,
 };
-
+int flag_suspend=0;
+EXPORT_SYMBOL(flag_suspend);
 static int msm_cpufreq_suspend(void)
 {
 	int cpu;
+
+	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
+	//unsigned int target_freq;
+	//unsigned int relation = CPUFREQ_RELATION_H;
+	policy->max = MAX_FREQ;
+	flag_suspend=1;
+    __cpufreq_driver_target(policy,
+				MAX_FREQ, CPUFREQ_RELATION_H);
 
 	for_each_possible_cpu(cpu) {
 		mutex_lock(&per_cpu(suspend_data, cpu).suspend_mutex);
 		per_cpu(suspend_data, cpu).device_suspended = 1;
 		mutex_unlock(&per_cpu(suspend_data, cpu).suspend_mutex);
 	}
-
+	flag_suspend=0;
 	return NOTIFY_DONE;
 }
 

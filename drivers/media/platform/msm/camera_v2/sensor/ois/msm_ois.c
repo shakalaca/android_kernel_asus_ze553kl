@@ -1,4 +1,4 @@
-/* Copyright (c) 2014 - 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -94,8 +94,6 @@ char ois_subdev_string[32] = "";
 static unsigned char g_ois_device_created = 0;
 static void create_ois_device_proc_file(void);
 /*ASUS_BSP --- bill_chen "Implement camera ois"*/
-
-extern int asus_project_id;
 
 static int32_t msm_ois_download(struct msm_ois_ctrl_t *o_ctrl)
 {
@@ -524,30 +522,10 @@ static int32_t msm_ois_write_settings(struct msm_ois_ctrl_t *o_ctrl,
 			case MSM_CAMERA_I2C_READ_FW_DATA:
 				//pr_err("%s: MSM_CAMERA_I2C_READ_FW_DATA +++\n", __func__);
 				if(settings[i].reg_data == 0x0001) {
-					switch(asus_project_id){
-					case ASUS_ZD552KL_PHOENIX:
-						PROGRAM_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZD552KL_PHOENIX/ois_fw/OIS_programFW.bin", PROGRAM_DOWNLOAD_OIS_FW, ARRAY_SIZE(PROGRAM_DOWNLOAD_OIS_FW));
-						break;
-					case ASUS_ZE553KL:
-						PROGRAM_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZE553KL_HADES/ois_fw/OIS_programFW.bin", PROGRAM_DOWNLOAD_OIS_FW, ARRAY_SIZE(PROGRAM_DOWNLOAD_OIS_FW));
-						break;
-					case ASUS_ZS550KL:
-						PROGRAM_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZS550KL/ois_fw/OIS_programFW.bin", PROGRAM_DOWNLOAD_OIS_FW, ARRAY_SIZE(PROGRAM_DOWNLOAD_OIS_FW));
-						break;
-					}
+					PROGRAM_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZS550KL/ois_fw/OIS_programFW.bin", PROGRAM_DOWNLOAD_OIS_FW, ARRAY_SIZE(PROGRAM_DOWNLOAD_OIS_FW));
 					pr_err("%s: PROGRAM_DOWNLOAD_OIS_FW_LENGTH = 0x%d\n", __func__, PROGRAM_DOWNLOAD_OIS_FW_LENGTH);
 				} else if(settings[i].reg_data == 0x0002) {
-					switch(asus_project_id){
-					case ASUS_ZD552KL_PHOENIX:
-						COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZD552KL_PHOENIX/ois_fw/OIS_coefficientFW.mem", COEFFICIENT_DOWNLOAD_OIS_FW, ARRAY_SIZE(COEFFICIENT_DOWNLOAD_OIS_FW));
-						break;
-					case ASUS_ZE553KL:
-						COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZE553KL_HADES/ois_fw/OIS_coefficientFW.mem", COEFFICIENT_DOWNLOAD_OIS_FW, ARRAY_SIZE(COEFFICIENT_DOWNLOAD_OIS_FW));
-						break;
-					case ASUS_ZS550KL:
-						COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZS550KL/ois_fw/OIS_coefficientFW.mem", COEFFICIENT_DOWNLOAD_OIS_FW, ARRAY_SIZE(COEFFICIENT_DOWNLOAD_OIS_FW));
-						break;
-					}
+					COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = Sysfs_read_byte_seq("/system/etc/firmware/ZS550KL/ois_fw/OIS_coefficientFW.mem", COEFFICIENT_DOWNLOAD_OIS_FW, ARRAY_SIZE(COEFFICIENT_DOWNLOAD_OIS_FW));
 					pr_err("%s: COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH = 0x%d\n", __func__, COEFFICIENT_DOWNLOAD_OIS_FW_LENGTH);
 				}
 				//pr_err("%s: MSM_CAMERA_I2C_READ_FW_DATA ---\n", __func__);
@@ -903,7 +881,8 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 			break;
 		}
 
-		if (!conf_array.size) {
+		if (!conf_array.size ||
+			conf_array.size > I2C_SEQ_REG_DATA_MAX) {
 			pr_err("%s:%d failed\n", __func__, __LINE__);
 			rc = -EFAULT;
 			break;
@@ -1123,11 +1102,13 @@ static long msm_ois_subdev_ioctl(struct v4l2_subdev *sd,
 			pr_err("o_ctrl->i2c_client.i2c_func_tbl NULL\n");
 			return -EINVAL;
 		}
+		mutex_lock(o_ctrl->ois_mutex);
 		rc = msm_ois_power_down(o_ctrl);
 		if (rc < 0) {
 			pr_err("%s:%d OIS Power down failed\n",
 				__func__, __LINE__);
 		}
+		mutex_unlock(o_ctrl->ois_mutex);
 		return msm_ois_close(sd, NULL);
 	default:
 		return -ENOIOCTLCMD;
@@ -1286,11 +1267,10 @@ static long msm_ois_subdev_do_ioctl(
 	u32 = (struct msm_ois_cfg_data32 *)arg;
 	parg = arg;
 
-	ois_data.cfgtype = u32->cfgtype;
-
 	switch (cmd) {
 	case VIDIOC_MSM_OIS_CFG32:
 		cmd = VIDIOC_MSM_OIS_CFG;
+		ois_data.cfgtype = u32->cfgtype;
 
 		switch (u32->cfgtype) {
 		case CFG_OIS_CONTROL:
@@ -1324,7 +1304,6 @@ static long msm_ois_subdev_do_ioctl(
 			settings.reg_setting =
 				compat_ptr(settings32.reg_setting);
 
-			ois_data.cfgtype = u32->cfgtype;
 			ois_data.cfg.settings = &settings;
 			parg = &ois_data;
 			break;
@@ -1353,6 +1332,10 @@ static long msm_ois_subdev_do_ioctl(
 			parg = &ois_data;
 			break;
 		}
+		break;
+	case VIDIOC_MSM_OIS_CFG:
+		pr_err("%s: invalid cmd 0x%x received\n", __func__, cmd);
+		return -EINVAL;
 	}
 	rc = msm_ois_subdev_ioctl(sd, cmd, parg);
 
@@ -1429,15 +1412,16 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 
 	rc = msm_sensor_driver_get_gpio_data(&(msm_ois_t->gconf),
 		(&pdev->dev)->of_node);
-	if (rc < 0) {
-		pr_err("%s: No/Error OIS GPIO\n", __func__);
+	if (-ENODEV == rc) {
+		pr_notice("No valid OIS GPIOs data\n");
+	} else if (rc < 0) {
+		pr_err("Error OIS GPIO\n");
 	} else {
 		msm_ois_t->cam_pinctrl_status = 1;
 		rc = msm_camera_pinctrl_init(
 			&(msm_ois_t->pinctrl_info), &(pdev->dev));
 		if (rc < 0) {
-			pr_err("ERR:%s: Error in reading OIS pinctrl\n",
-				__func__);
+			pr_err("ERR: Error in reading OIS pinctrl\n");
 			msm_ois_t->cam_pinctrl_status = 0;
 		}
 	}
@@ -2112,6 +2096,7 @@ static bool Sysfs_write_debug_seq(char *filename, uint16_t *value, uint32_t size
 
 /*ASUS_BSP --- bill_chen "Implement ois"*/
 
+extern int asus_project_id;
 
 /*ASUS_BSP +++ bill_chen "Implement camera ois"*/
 #define	STATUS_OIS_DAC_PROC_FILE	"driver/vcm"

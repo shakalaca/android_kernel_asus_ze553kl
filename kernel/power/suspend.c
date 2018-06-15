@@ -39,9 +39,10 @@ const char *pm_states[PM_SUSPEND_MAX];
 static const struct platform_suspend_ops *suspend_ops;
 static const struct platform_freeze_ops *freeze_ops;
 static DECLARE_WAIT_QUEUE_HEAD(suspend_freeze_wait_head);
-static bool suspend_freeze_wake;
-
 unsigned int pm_pwrcs_ret=0;//ASUS_BSP jeff_gu Add for wakeup debug
+
+enum freeze_state __read_mostly suspend_freeze_state;
+static DEFINE_SPINLOCK(suspend_freeze_lock);
 
 void freeze_set_ops(const struct platform_freeze_ops *ops)
 {
@@ -52,22 +53,49 @@ void freeze_set_ops(const struct platform_freeze_ops *ops)
 
 static void freeze_begin(void)
 {
-	suspend_freeze_wake = false;
+	suspend_freeze_state = FREEZE_STATE_NONE;
 }
 
 static void freeze_enter(void)
 {
-	cpuidle_use_deepest_state(true);
+	spin_lock_irq(&suspend_freeze_lock);
+	if (pm_wakeup_pending())
+		goto out;
+
+	suspend_freeze_state = FREEZE_STATE_ENTER;
+	spin_unlock_irq(&suspend_freeze_lock);
+
+	get_online_cpus();
 	cpuidle_resume();
-	wait_event(suspend_freeze_wait_head, suspend_freeze_wake);
+
+	/* Push all the CPUs into the idle loop. */
+	wake_up_all_idle_cpus();
+	pr_debug("PM: suspend-to-idle\n");
+	/* Make the current CPU wait so it can enter the idle loop too. */
+	wait_event(suspend_freeze_wait_head,
+		   suspend_freeze_state == FREEZE_STATE_WAKE);
+	pr_debug("PM: resume from suspend-to-idle\n");
+
 	cpuidle_pause();
-	cpuidle_use_deepest_state(false);
+	put_online_cpus();
+
+	spin_lock_irq(&suspend_freeze_lock);
+
+ out:
+	suspend_freeze_state = FREEZE_STATE_NONE;
+	spin_unlock_irq(&suspend_freeze_lock);
 }
 
 void freeze_wake(void)
 {
-	suspend_freeze_wake = true;
-	wake_up(&suspend_freeze_wait_head);
+	unsigned long flags;
+
+	spin_lock_irqsave(&suspend_freeze_lock, flags);
+	if (suspend_freeze_state > FREEZE_STATE_NONE) {
+		suspend_freeze_state = FREEZE_STATE_WAKE;
+		wake_up(&suspend_freeze_wait_head);
+	}
+	spin_unlock_irqrestore(&suspend_freeze_lock, flags);
 }
 EXPORT_SYMBOL_GPL(freeze_wake);
 
@@ -229,16 +257,18 @@ static int suspend_test(int level)
  */
 static int suspend_prepare(suspend_state_t state)
 {
-	int error;
+	int error, nr_calls = 0;
 
 	if (!sleep_state_supported(state))
 		return -EPERM;
 
 	pm_prepare_console();
 
-	error = pm_notifier_call_chain(PM_SUSPEND_PREPARE);
-	if (error)
+	error = __pm_notifier_call_chain(PM_SUSPEND_PREPARE, -1, &nr_calls);
+	if (error) {
+		nr_calls--;
 		goto Finish;
+	}
 
 	trace_suspend_resume(TPS("freeze_processes"), 0, true);
 	error = suspend_freeze_processes();
@@ -249,7 +279,7 @@ static int suspend_prepare(suspend_state_t state)
 	suspend_stats.failed_freeze++;
 	dpm_save_failed_step(SUSPEND_FREEZE);
  Finish:
-	pm_notifier_call_chain(PM_POST_SUSPEND);
+	__pm_notifier_call_chain(PM_POST_SUSPEND, nr_calls, NULL);
 	pm_restore_console();
 	return error;
 }
@@ -350,6 +380,8 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 			log_suspend_abort_reason(suspend_abort);
 			error = -EBUSY;
 		}
+
+		start_logging_wakeup_reasons();
 		syscore_resume();
 	}
 
@@ -497,19 +529,13 @@ static int enter_state(suspend_state_t state)
 static void pm_suspend_marker(char *annotation)
 {
 	struct timespec ts;
-	struct rtc_time tm;
+	struct tm tm;
 
 	getnstimeofday(&ts);
-	rtc_time_to_tm(ts.tv_sec, &tm);
-	pr_info("PM: suspend %s %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
+	time_to_tm(ts.tv_sec, 0, &tm);
+	pr_info("PM: suspend %s %ld-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
 		annotation, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 		tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
-	//[+++]add for suspend debug 	
-	/*if(annotation[1]=='n'){
-		ASUSEvtlog("[PM]request_suspend_state: (0->3)\n");}
-	else if(annotation[1]=='x'){
-		ASUSEvtlog("[PM]request_suspend_state: (3->0)\n");}	*/
-	//[---]add for suspend debug 
 }
 
 /**

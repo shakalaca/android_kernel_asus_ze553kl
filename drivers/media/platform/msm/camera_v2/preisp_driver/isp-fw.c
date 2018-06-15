@@ -93,14 +93,12 @@ static int spi_download_section(struct spi_device *spi,
             sec->offset, sec->size, sec->load_addr, sec->wait_time,
             sec->timeout, sec->crc_16, sec->flag, sec->type);
     if (sec->size > 0) {
-
         ret = spi2apb_safe_write(spi, sec->load_addr,
                 (int32_t*)(data + sec->offset), sec->size);
         if (ret)
-        {
             return ret;
-		}
     }
+
     if (sec->flag & BOOT_FLAG_BOOT_REQUEST) {
         ret = spi_boot_request(spi, sec);
     } else if (sec->flag & BOOT_FLAG_READ_WAIT) {
@@ -133,21 +131,29 @@ int spi_download_fw(struct spi_device *spi, const char *fw_name,uint32_t fw_spee
     ret = request_firmware(&fw, fw_name, &spi->dev);
     if (ret) {
         dev_err(&spi->dev, "request firmware %s failed!", fw_name);
+    #ifdef ZD552KL_PHOENIX
+        set_fw_revision("NotLoad");
+    #endif
         return ret;
     }
 
     head = (const struct rkl_header *) fw->data;
-
     dev_info(&spi->dev, "request firmware %s (version:%s) success!", fw_name, head->version);
-	spi->max_speed_hz = fw_speed;
-	dev_info(&spi->dev, "spi speed set to %d!", fw_speed);
+    spi->max_speed_hz = fw_speed;
+    dev_info(&spi->dev, "spi speed set to %d!", fw_speed);
     for (i = 0; i < head->section_count; i++) {
         ret = spi_download_section(spi, fw->data, &head->sections[i]);
         if (ret)
             break;
     }
+    spi->max_speed_hz = normal_speed;
     dev_info(&spi->dev, "spi speed restore to %d!", normal_speed);
-	spi->max_speed_hz = normal_speed;
+#ifdef ZD552KL_PHOENIX
+    if(ret == 0)
+        set_fw_revision(head->version);
+    else
+        set_fw_revision("LoadFailed");
+#endif
     release_firmware(fw);
     return ret;
 }

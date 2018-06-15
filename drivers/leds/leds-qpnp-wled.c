@@ -683,9 +683,9 @@ static ssize_t qpnp_wled_dim_mode_store(struct device *dev,
 	if (snprintf(str, QPNP_WLED_STR_SIZE, "%s", buf) > QPNP_WLED_STR_SIZE)
 		return -EINVAL;
 
-	if (strcmp(str, "analog") == 0)
+	if (strcmp(str, "analog\n") == 0)
 		temp = QPNP_WLED_DIM_ANALOG;
-	else if (strcmp(str, "digital") == 0)
+	else if (strcmp(str, "digital\n") == 0)
 		temp = QPNP_WLED_DIM_DIGITAL;
 	else
 		temp = QPNP_WLED_DIM_HYBRID;
@@ -1812,6 +1812,7 @@ static int __init qpnp_wled_init(void)
 		return spmi_driver_register(&qpnp_wled_driver);
 	}else
 		return 0;
+
 }
 module_init(qpnp_wled_init);
 
@@ -1821,6 +1822,7 @@ static void __exit qpnp_wled_exit(void)
 		spmi_driver_unregister(&qpnp_wled_driver);
 	}else
 		return ;
+
 }
 module_exit(qpnp_wled_exit);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,10 +39,12 @@
 
 #define MAX_VDD_MSS_UV		1150000
 #define PROXY_TIMEOUT_MS	10000
-#define MAX_SSR_REASON_LEN	81U
+#define MAX_SSR_REASON_LEN	130U
 #define STOP_ACK_TIMEOUT_MS	1000
 
 #define subsys_to_drv(d) container_of(d, struct modem_data, subsys_desc)
+
+int special_reason = 0;
 
 static void log_modem_sfr(void)
 {
@@ -62,7 +64,13 @@ static void log_modem_sfr(void)
 
 	strlcpy(reason, smem_reason, min(size, MAX_SSR_REASON_LEN));
 	pr_err("modem subsystem failure reason: %s.\n", reason);
-	ASUSEvtlog("[SSR]:modem [%s]", reason);	//ASUS_BSP+ "Evtlog for modem crash reason"
+    ASUSEvtlog("[SSR]:modem [%s]", reason); //ASUS_BSP+ "Evtlog for modem crash reason"
+
+    if (strstr(reason, "PSD_DEBUG: Modem get") != NULL) {
+        special_reason = 1;
+    } else {
+        special_reason = 0;
+    }
 	smem_reason[0] = '\0';
 	wmb();
 }
@@ -71,7 +79,8 @@ static void restart_modem(struct modem_data *drv)
 {
 	log_modem_sfr();
 	drv->ignore_errors = true;
-	subsystem_restart_dev(drv->subsys);
+	subsystem_restart_dev_asus(drv->subsys, !special_reason);
+	special_reason = 0;
 }
 
 static irqreturn_t modem_err_fatal_intr_handler(int irq, void *dev_id)
@@ -222,6 +231,7 @@ static int pil_subsys_init(struct modem_data *drv,
 		goto err_subsys;
 	}
 
+	drv->q6->desc.subsys_dev = drv->subsys;
 	drv->ramdump_dev = create_ramdump_device("modem", &pdev->dev);
 	if (!drv->ramdump_dev) {
 		pr_err("%s: Unable to create a modem ramdump device.\n",

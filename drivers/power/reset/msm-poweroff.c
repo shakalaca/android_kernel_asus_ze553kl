@@ -48,7 +48,7 @@
 
 
 static int restart_mode;
-static void *restart_reason;
+static void *restart_reason, *dload_type_addr;
 static bool scm_pmic_arbiter_disable_supported;
 static bool scm_deassert_ps_hold_supported;
 /* Download mode master kill-switch */
@@ -83,7 +83,6 @@ static void *emergency_dload_mode_addr;
 static bool scm_dload_supported;
 static struct kobject dload_kobj;
 static void *dload_type_addr;
-extern int g_origin_qpst_flag;
 
 static int dload_set(const char *val, struct kernel_param *kp);
 /* interface for exporting attributes */
@@ -102,6 +101,7 @@ struct reset_attribute {
 
 module_param_call(download_mode, dload_set, param_get_int,
 			&download_mode, 0644);
+
 extern struct _asus_global asus_global;
 static int panic_prep_restart(struct notifier_block *this,
 			      unsigned long event, void *ptr)
@@ -443,20 +443,19 @@ void do_msm_poweroff(void)
 	ulong *printk_buffer_slot2_addr;
 #endif
 	pr_notice("Powering off the SoC\n");
-	
-#ifdef CONFIG_MSM_DLOAD_MODE
-		// Normal power off. Clean the printk buffer magic
-		printk_buffer_slot2_addr = (ulong *)PRINTK_BUFFER_SLOT2;
-		*printk_buffer_slot2_addr = 0;
-	
-		printk(KERN_CRIT "Clean asus_global...\n");
-		memset(&asus_global,0,sizeof(asus_global));
-		printk(KERN_CRIT "&asus_global = %p\n", &asus_global);
-		printk(KERN_CRIT "asus_global.asus_global_magic = 0x%x\n",asus_global.asus_global_magic);
-		printk(KERN_CRIT "asus_global.ramdump_enable_magic = 0x%x\n",asus_global.ramdump_enable_magic);
-		flush_cache_all();
-#endif
 
+#ifdef CONFIG_MSM_DLOAD_MODE
+	// Normal power off. Clean the printk buffer magic
+	printk_buffer_slot2_addr = (ulong *)PRINTK_BUFFER_SLOT2;
+	*printk_buffer_slot2_addr = 0;
+
+	printk(KERN_CRIT "Clean asus_global...\n");
+	memset(&asus_global,0,sizeof(asus_global));
+	printk(KERN_CRIT "&asus_global = %p\n", &asus_global);
+	printk(KERN_CRIT "asus_global.asus_global_magic = 0x%x\n",asus_global.asus_global_magic);
+	printk(KERN_CRIT "asus_global.ramdump_enable_magic = 0x%x\n",asus_global.ramdump_enable_magic);
+	flush_cache_all();
+#endif
 	set_dload_mode(0);
 	scm_disable_sdi();
 	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN);
@@ -468,8 +467,9 @@ void do_msm_poweroff(void)
 	pr_err("Powering off has failed\n");
 	return;
 }
+EXPORT_SYMBOL(do_msm_poweroff);
 
-#ifdef CONFIG_MSM_DLOAD_MODE
+
 static ssize_t attr_show(struct kobject *kobj, struct attribute *attr,
 				char *buf)
 {
@@ -547,7 +547,7 @@ static struct attribute *reset_attrs[] = {
 static struct attribute_group reset_attr_group = {
 	.attrs = reset_attrs,
 };
-#endif
+
 
 static int msm_restart_probe(struct platform_device *pdev)
 {
@@ -638,13 +638,8 @@ skip_sysfs_create:
 
 	if (scm_is_call_available(SCM_SVC_PWR, SCM_IO_DEASSERT_PS_HOLD) > 0)
 		scm_deassert_ps_hold_supported = true;
-//ASUS_BSP Freeman block disable qpst if qpst=y exists in cmdline when bootup +++
-	if(g_origin_qpst_flag == 1){
-		download_mode = 1;
-	}else{
-		set_dload_mode(download_mode);
-	}
-//ASUS_BSP Freeman block disable qpst if qpst=y exists in cmdline when bootup ---
+
+	set_dload_mode(download_mode);
 	if (!download_mode)
 		scm_disable_sdi();
 

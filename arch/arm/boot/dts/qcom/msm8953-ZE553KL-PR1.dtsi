@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,10 +26,42 @@
 		bootargs = "sched_enable_hmp=1 sched_enable_power_aware=1";
 	};
 
+	firmware: firmware {
+		android {
+			compatible = "android,firmware";
+			fstab {
+				compatible = "android,fstab";
+				vendor {
+					compatible = "android,vendor";
+					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/vendor";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1,discard";
+					fsmgr_flags = "wait";
+					status = "disabled";
+				};
+				system {
+					compatible = "android,system";
+					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/system";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1,discard";
+					fsmgr_flags = "wait,verify";
+					status = "okay";
+				};
+
+			};
+		};
+	};
+
 	reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
+
+		tzapp_mem: tzapp_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0x0 0x85000000 0x0 0xb00000>;
+		};
 
 		other_ext_mem: other_ext_region@0 {
 			compatible = "removed-dma-pool";
@@ -53,12 +85,6 @@
 			compatible = "removed-dma-pool";
 			no-map;
 			reg = <0x0 0x8e700000 0x0 0x700000>;
-		};
-
-		tzapp_mem: tzapp_region@0 {
-			compatible = "removed-dma-pool";
-			no-map;
-			reg = <0x0 0x85000000 0x0 0xB00000>;
 		};
 
 		venus_mem: venus_region@0 {
@@ -439,7 +465,6 @@
 			qcom,sensor-type =  "adc";
 			qcom,sensor-name = "chg_therm";
 		};
-
 		sensor_information22: qcom,sensor-information-22 {
 			qcom,sensor-type =  "adc";
 			qcom,sensor-name = "quiet_therm";
@@ -459,14 +484,6 @@
                         qcom,sensor-name = "battery";
                         qcom,scaling-factor = <1000>;
                 };
-		sensor_information26: qcom,sensor-information-26 {
-			qcom,sensor-type =  "adc";
-			qcom,sensor-name = "rear_camera";
-		};
-		sensor_information27: qcom,sensor-information-27 {
-			qcom,sensor-type =  "adc";
-			qcom,sensor-name = "front_camera";
-		};
 	};
 
 	mitigation_profile0: qcom,limit_info-0 {
@@ -597,8 +614,8 @@
 	qcom,msm-core@a0000 {
 		compatible = "qcom,apss-core-ea";
 		reg = <0xa0000 0x1000>;
-		qcom,low-hyst-temp = <10>;
-		qcom,high-hyst-temp = <5>;
+		qcom,low-hyst-temp = <100>;
+		qcom,high-hyst-temp = <100>;
 
 		ea0: ea0 {
 			sensor = <&sensor_information9>;
@@ -694,6 +711,7 @@
 		interrupts = <0 239 0>;
 		qcom,summing-threshold = <10>;
 	};
+
 	//bsp jenny+++
        spi_0: spi@78b5000 { // BLSP1 QUP0 
                compatible = "qcom,spi-qup-v2";
@@ -723,7 +741,7 @@
 			spi-max-frequency = <19200000>; 
 			spi-fw-frequency  = <50000000>;
 			//spi-fw-frequency  = <19200000>;
-			firmware-nowait-mode = <0>;
+			firmware-nowait-mode = <0>; 
 			vio-en-gpio = <&tlmm 40 1>;
 			irq-gpio = <&tlmm 17 0>;
 			reset-gpio=<&tlmm 141 0>;
@@ -749,6 +767,7 @@
 		};
        };
      //bsp jenny---
+
 	i2c_2: i2c@78b6000 { /* BLSP1 QUP2 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
@@ -773,6 +792,27 @@
 			<&dma_blsp1 7 32 0x20000020 0x20>;
 		dma-names = "tx", "rx";
 
+		/* DSI_TO_HDMI I2C configuration */
+		adv7533@39 {
+			compatible = "adv7533";
+			reg = <0x39>;
+			instance_id = <0>;
+			adi,video-mode = <3>; /* 3 = 1080p */
+			adi,main-addr = <0x39>;
+			adi,cec-dsi-addr = <0x3C>;
+			adi,enable-audio;
+			pinctrl-names = "pmx_adv7533_active",
+						"pmx_adv7533_suspend";
+			pinctrl-0 = <&adv7533_int_active>;
+			pinctrl-1 = <&adv7533_int_suspend>;
+			adi,irq-gpio = <&tlmm 90 0x2002>;
+			hpd-5v-en-supply = <&adv_vreg>;
+			qcom,supply-names = "hpd-5v-en";
+			qcom,min-voltage-level = <0>;
+			qcom,max-voltage-level = <0>;
+			qcom,enable-load = <0>;
+			qcom,disable-load = <0>;
+		};
 	};
 
 	i2c_3: i2c@78b7000 { /* BLSP1 QUP3 */
@@ -798,7 +838,7 @@
 		dmas = <&dma_blsp1 8 64 0x20000020 0x20>,
 			<&dma_blsp1 9 32 0x20000020 0x20>;
 		dma-names = "tx", "rx";
-		/*status = "disabled";*/
+		//status = "disabled";
 	};
 
 	i2c_5: i2c@7af5000 { /* BLSP2 QUP1 */
@@ -877,8 +917,9 @@
 
 	clock_gcc: qcom,gcc@1800000 {
 		compatible = "qcom,gcc-8953";
-		reg = <0x1800000 0x80000>;
-		reg-names = "cc_base";
+		reg = <0x1800000 0x80000>,
+			<0x00a4124 0x08>;
+		reg-names = "cc_base", "efuse";
 		vdd_dig-supply = <&pm8953_s2_level>;
 		#clock-cells = <1>;
 	};
@@ -945,7 +986,7 @@
 			< 1036800000 2>,
 			< 1401600000 3>,
 			< 1689600000 4>,
-			< 1843200000 5>,
+			< 1804800000 5>,
 			< 1958400000 6>,
 			< 2016000000 7>;
 		qcom,speed0-bin-v0-cci =
@@ -954,7 +995,7 @@
 			<  414720000 2>,
 			<  560640000 3>,
 			<  675840000 4>,
-			<  737280000 5>,
+			<  721920000 5>,
 			<  783360000 6>,
 			<  806400000 7>;
 		qcom,speed2-bin-v0-cl =
@@ -963,7 +1004,7 @@
 			< 1036800000 2>,
 			< 1401600000 3>,
 			< 1689600000 4>,
-			< 1843200000 5>,
+			< 1804800000 5>,
 			< 1958400000 6>,
 			< 2016000000 7>;
 		qcom,speed2-bin-v0-cci =
@@ -972,7 +1013,7 @@
 			<  414720000 2>,
 			<  560640000 3>,
 			<  675840000 4>,
-			<  737280000 5>,
+			<  721920000 5>,
 			<  783360000 6>,
 			<  806400000 7>;
 		qcom,speed7-bin-v0-cl =
@@ -981,7 +1022,7 @@
 			< 1036800000 2>,
 			< 1401600000 3>,
 			< 1689600000 4>,
-			< 1843200000 5>,
+			< 1804800000 5>,
 			< 1958400000 6>,
 			< 2016000000 7>,
 			< 2150400000 8>,
@@ -992,11 +1033,25 @@
 			<  414720000 2>,
 			<  560640000 3>,
 			<  675840000 4>,
-			<  737280000 5>,
+			<  721920000 5>,
 			<  783360000 6>,
 			<  806400000 7>,
 			<  860160000 8>,
 			<  883200000 9>;
+		qcom,speed6-bin-v0-cl =
+			<          0 0>,
+			<  652800000 1>,
+			< 1036800000 2>,
+			< 1401600000 3>,
+			< 1689600000 4>,
+			< 1804800000 5>;
+		qcom,speed6-bin-v0-cci =
+			<          0 0>,
+			<  261120000 1>,
+			<  414720000 2>,
+			<  560640000 3>,
+			<  675840000 4>,
+			<  721920000 5>;
 		#clock-cells = <1>;
 	};
 
@@ -1020,7 +1075,7 @@
 			 < 1036800 >,
 			 < 1401600 >,
 			 < 1689600 >,
-			 < 1843200 >,
+			 < 1804800 >,
 			 < 1958400 >,
 			 < 2016000 >,
 			 < 2150400 >,
@@ -1082,7 +1137,7 @@
 			 < 1036800  3221>,
 			 < 1401600  5859>,
 			 < 1689600  6445>,
-			 < 1843200  7104>,
+			 < 1804800  7104>,
 			 < 1958400  7104>,
 			 < 2208000  7104>;
 		};
@@ -1187,7 +1242,7 @@
 		reg = <0xb017000 0x1000>;
 		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
-		qcom,bark-time = <15000>;
+		qcom,bark-time = <11000>;
 		qcom,pet-time = <10000>;
 		qcom,ipi-ping;
 		qcom,wakeup-enable;
@@ -1385,6 +1440,8 @@
 		interrupt-names = "ipa-irq", "bam-irq";
 		qcom,ipa-hw-ver = <6>; /* IPA core version = IPAv2.6L */
 		qcom,ipa-hw-mode = <0>; /* IPA hw type = Normal */
+		qcom,wan-rx-ring-size = <192>; /* IPA WAN-rx-ring-size*/
+		qcom,lan-rx-ring-size = <192>; /* IPA LAN-rx-ring-size*/
 		clock-names = "core_clk";
 		clocks = <&clock_gcc clk_ipa_clk>;
 		qcom,ee = <0>;
@@ -1677,7 +1734,6 @@
 		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,support-bus-scaling;
-		qcom,appsbl-qseecom-support;
 		qcom,msm-bus,vectors-KBps =
 			<55 512 0 0>,
 			<55 512 0 0>,
@@ -1923,7 +1979,7 @@
 		clock-names = "xo", "iface_clk", "bus_clk", "mem_clk";
 		qcom,proxy-clock-names = "xo";
 		qcom,active-clock-names = "iface_clk", "bus_clk", "mem_clk";
-		
+
 		qcom,pas-id = <5>;
 		qcom,pil-mss-memsetup;
 		qcom,firmware-name = "modem";
@@ -2354,7 +2410,7 @@
 					0x974 0x8d8 0x8dc 0x804 0x800
 					0x808>;
 		vdd-supply = <&pm8953_l3>;
-		vdda18-supply = <&pm8953_l7>;
+		core-supply = <&pm8953_l7>;
 		qcom,vdd-voltage-level = <0 925000 925000>;
 		qcom,vbus-valid-override;
 
@@ -2386,14 +2442,12 @@
 
 #include "msm-pm8953-rpm-regulator.dtsi"
 #include "msm-ZE553KL-pm8953.dtsi"
-#include "msm8953-regulator.dtsi"
-#include "msm-ZE553KL-pmi8950.dtsi"
+#include "msm8953-ZE553KL-regulator.dtsi"
 #include "msm-audio.dtsi"
 #include "msm8953-ZE553KL-audio.dtsi"
-#include "msm8953-ZE553KL-audio-mtp.dtsi"
 #include "msm-gdsc-8916.dtsi"
 #include "msm8953-ZE553KL-camera.dtsi"
-#include "msm8953-mdss-ZE553KL.dtsi"
+#include "msm8953-mdss.dtsi"
 #include "msm8953-mdss-pll.dtsi"
 
 &gdsc_venus {
@@ -2473,7 +2527,7 @@
 
 &pm8953_mpps {
 	mpp@a100 {
-		/* MPP2 - PA_THERM1 config */
+		/* MPP2 - PA_THERM config */
 		qcom,mode = <4>; /* AIN input */
 		qcom,invert = <1>; /* Enable MPP */
 		qcom,ain-route = <1>; /* AMUX 6 */
@@ -2482,7 +2536,7 @@
 	};
 
 	mpp@a300 {
-		/* MPP4 - QUIET_THERM config */
+		/* MPP4 - CASE_THERM config */
 		qcom,mode = <4>; /* AIN input */
 		qcom,invert = <1>; /* Enable MPP */
 		qcom,ain-route = <3>; /* AMUX 8 */
@@ -2562,7 +2616,7 @@
 	};
 
 	chan@13 {
-		label = "quiet_therm";
+		label = "case_therm";
 		reg = <0x13>;
 		qcom,decimation = <0>;
 		qcom,pre-div-channel-scaling = <0>;

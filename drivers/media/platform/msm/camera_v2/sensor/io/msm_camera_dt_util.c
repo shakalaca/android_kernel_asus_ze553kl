@@ -222,7 +222,10 @@ int msm_sensor_get_sub_module_index(struct device_node *of_node,
 			pr_err("%s failed %d\n", __func__, __LINE__);
 			goto ERROR;
 		}
-		sensor_info->subdev_id[SUB_MODULE_ACTUATOR] = val;
+		if (of_device_is_available(src_node))
+			sensor_info->subdev_id[SUB_MODULE_ACTUATOR] = val;
+		else
+			CDBG("%s:%d actuator disabled!\n", __func__, __LINE__);
 		of_node_put(src_node);
 		src_node = NULL;
 	}
@@ -283,6 +286,38 @@ int msm_sensor_get_sub_module_index(struct device_node *of_node,
 			goto ERROR;
 		}
 		sensor_info->subdev_id[SUB_MODULE_LED_FLASH] = val;
+		of_node_put(src_node);
+		src_node = NULL;
+	}
+
+	src_node = of_parse_phandle(of_node, "qcom,ir-led-src", 0);
+	if (!src_node) {
+		CDBG("%s:%d src_node NULL\n", __func__, __LINE__);
+	} else {
+		rc = of_property_read_u32(src_node, "cell-index", &val);
+		CDBG("%s qcom,ir led cell index %d, rc %d\n", __func__,
+			val, rc);
+		if (rc < 0) {
+			pr_err("%s:%d failed %d\n", __func__, __LINE__, rc);
+			goto ERROR;
+		}
+		sensor_info->subdev_id[SUB_MODULE_IR_LED] = val;
+		of_node_put(src_node);
+		src_node = NULL;
+	}
+
+	src_node = of_parse_phandle(of_node, "qcom,ir-cut-src", 0);
+	if (!src_node) {
+		CDBG("%s:%d src_node NULL\n", __func__, __LINE__);
+	} else {
+		rc = of_property_read_u32(src_node, "cell-index", &val);
+		CDBG("%s qcom,ir cut cell index %d, rc %d\n", __func__,
+			val, rc);
+		if (rc < 0) {
+			pr_err("%s:%d failed %d\n", __func__, __LINE__, rc);
+			goto ERROR;
+		}
+		sensor_info->subdev_id[SUB_MODULE_IR_CUT] = val;
 		of_node_put(src_node);
 		src_node = NULL;
 	}
@@ -774,6 +809,54 @@ int msm_camera_init_gpio_pin_tbl(struct device_node *of_node,
 		rc = -ENOMEM;
 		return rc;
 	}
+
+	rc = of_property_read_u32(of_node, "qcom,gpio-ir-p", &val);
+	if (rc != -EINVAL) {
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-ir-p failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-ir-p invalid %d\n",
+				__func__, __LINE__, val);
+			rc = -EINVAL;
+			goto ERROR;
+		}
+
+		gconf->gpio_num_info->gpio_num[IR_CUT_FILTER_GPIO_P] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[IR_CUT_FILTER_GPIO_P] = 1;
+
+		CDBG("%s qcom,gpio-ir-p %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[IR_CUT_FILTER_GPIO_P]);
+	} else {
+		rc = 0;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,gpio-ir-m", &val);
+	if (rc != -EINVAL) {
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-ir-m failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-ir-m invalid %d\n",
+				__func__, __LINE__, val);
+			rc = -EINVAL;
+			goto ERROR;
+		}
+
+		gconf->gpio_num_info->gpio_num[IR_CUT_FILTER_GPIO_M] =
+			gpio_array[val];
+
+		gconf->gpio_num_info->valid[IR_CUT_FILTER_GPIO_M] = 1;
+
+		CDBG("%s qcom,gpio-ir-m %d\n", __func__,
+			gconf->gpio_num_info->gpio_num[IR_CUT_FILTER_GPIO_M]);
+	} else {
+		rc = 0;
+	}
+
 	rc = of_property_read_u32(of_node, "qcom,gpio-vana", &val);
 	if (rc != -EINVAL) {
 		if (rc < 0) {
@@ -1303,7 +1386,7 @@ int32_t msm_sensor_driver_get_gpio_data(
 	gpio_array_size = of_gpio_count(of_node);
 	CDBG("gpio count %d\n", gpio_array_size);
 	if (gpio_array_size <= 0)
-		return 0;
+		return -ENODEV;
 
 	gconf = kzalloc(sizeof(struct msm_camera_gpio_conf),
 		GFP_KERNEL);
@@ -1346,10 +1429,12 @@ FREE_GPIO_CONF:
 }
 
 //asus bsp ralf:for optimize hades ER power consumption>>
+#ifdef CONFIG_RK_PREISP
 extern int rkpreisp_power_on_dsp(int is_download_fw);
 extern int rkpreisp_power_off_dsp(void);
 extern int asus_hw_id;
 extern int asus_project_id;
+#endif
 //asus bsp ralf:for optimize hades ER power consumption<<
 
 int msm_camera_power_up(struct msm_camera_power_ctrl_t *ctrl,
@@ -1365,22 +1450,20 @@ int msm_camera_power_up(struct msm_camera_power_ctrl_t *ctrl,
 			sensor_i2c_client);
 		return -EINVAL;
 	}
-#ifdef ZD552KL_PHOENIX
-	if(asus_hw_id == ASUS_SR1)
-	{
-#endif
 	//asus bsp ralf:for optimize hades ER power consumption>>
-	if(sensor_i2c_client->cci_client 
+#ifdef CONFIG_RK_PREISP
+	if ((asus_project_id == ASUS_ZE553KL && asus_hw_id > ASUS_SR2)
+		|| (asus_project_id == ASUS_ZD552KL_PHOENIX && asus_hw_id == ASUS_SR1)) {
+		if(sensor_i2c_client->cci_client
 			&& (sensor_i2c_client->cci_client->sid==(0x34>>1)
 			|| sensor_i2c_client->cci_client->sid==(0x20>>1)
 			|| sensor_i2c_client->cci_client->sid==(0x5a>>1) )
 			)
 			rkpreisp_power_on_dsp(1);
 		else rkpreisp_power_on_dsp(0);
-	//asus bsp ralf:for optimize hades ER power consumption<<
-#ifdef ZD552KL_PHOENIX
 	}
 #endif
+	//asus bsp ralf:for optimize hades ER power consumption<<
 	pr_err("gpio_conf=%p\n",ctrl->gpio_conf);
 	if (ctrl->gpio_conf->cam_gpiomux_conf_tbl != NULL)
 		pr_err("%s:%d mux install\n", __func__, __LINE__);
@@ -1601,12 +1684,10 @@ power_up_failed:
 	msm_camera_request_gpio_table(
 		ctrl->gpio_conf->cam_gpio_req_tbl,
 		ctrl->gpio_conf->cam_gpio_req_tbl_size, 0);
-#ifdef ZD552KL_PHOENIX
-	if(asus_hw_id == ASUS_SR1)
-	{
-#endif
-	rkpreisp_power_off_dsp();//ASUS_BSP Zhengwei "power off rk if power up failed"
-#ifdef ZD552KL_PHOENIX
+#ifdef CONFIG_RK_PREISP
+	if ((asus_project_id == ASUS_ZE553KL && asus_hw_id > ASUS_SR2)
+		|| (asus_project_id == ASUS_ZD552KL_PHOENIX && asus_hw_id == ASUS_SR1)) {
+			rkpreisp_power_off_dsp();//ASUS_BSP Zhengwei "power off rk if power up failed"
 	}
 #endif
 	return rc;
@@ -1760,16 +1841,14 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 	msm_camera_request_gpio_table(
 		ctrl->gpio_conf->cam_gpio_req_tbl,
 		ctrl->gpio_conf->cam_gpio_req_tbl_size, 0);
-#ifdef ZD552KL_PHOENIX
-	if(asus_hw_id == ASUS_SR1)
-	{
-#endif
 	//asus bsp ralf:for optimize hades ER power consumption>>
-			rkpreisp_power_off_dsp();
-	//asus bsp ralf:for optimize hades ER power consumption<<
-#ifdef ZD552KL_PHOENIX
+#ifdef CONFIG_RK_PREISP
+	if ((asus_project_id == ASUS_ZE553KL && asus_hw_id > ASUS_SR2)
+		|| (asus_project_id == ASUS_ZD552KL_PHOENIX && asus_hw_id == ASUS_SR1)) {
+		rkpreisp_power_off_dsp();
 	}
 #endif
+	//asus bsp ralf:for optimize hades ER power consumption<<
 	CDBG("%s exit\n", __func__);
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -445,8 +445,7 @@ static int cpu_power_select(struct cpuidle_device *dev,
 	int best_level = -1;
 	uint32_t latency_us = pm_qos_request_for_cpu(PM_QOS_CPU_DMA_LATENCY,
 							dev->cpu);
-	uint32_t sleep_us =
-		(uint32_t)(ktime_to_us(tick_nohz_get_sleep_length()));
+	s64 sleep_us = ktime_to_us(tick_nohz_get_sleep_length());
 	uint32_t modified_time_us = 0;
 	uint32_t next_event_us = 0;
 	int i;
@@ -456,7 +455,7 @@ static int cpu_power_select(struct cpuidle_device *dev,
 	if (!cpu)
 		return -EINVAL;
 
-	if (sleep_disabled)
+	if (sleep_disabled || sleep_us  < 0)
 		return 0;
 
 	next_event_us = (uint32_t)(ktime_to_us(get_next_event_time(dev->cpu)));
@@ -464,7 +463,7 @@ static int cpu_power_select(struct cpuidle_device *dev,
 	for (i = 0; i < cpu->nlevels; i++) {
 		struct lpm_cpu_level *level = &cpu->levels[i];
 		struct power_params *pwr_params = &level->pwr;
-		uint32_t next_wakeup_us = sleep_us;
+		uint32_t next_wakeup_us = (uint32_t)sleep_us;
 		enum msm_pm_sleep_mode mode = level->mode;
 		bool allow;
 
@@ -653,6 +652,8 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 	if (level->notify_rpm) {
 		struct cpumask nextcpu, *cpumask;
 		uint64_t us;
+		uint64_t sec;
+		uint64_t nsec;
 
 		us = get_cluster_sleep_time(cluster, &nextcpu, from_idle);
 		cpumask = level->disable_dynamic_routing ? NULL : &nextcpu;
@@ -663,9 +664,17 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 			goto failed_set_mode;
 		}
 
-		us = (us + 1) * 1000;
-		do_div(us, NSEC_PER_SEC/SCLK_HZ);
+		us = us + 1;
+		sec = us;
+		do_div(sec, USEC_PER_SEC);
+		nsec = us - sec * USEC_PER_SEC;
 
+		sec = sec * SCLK_HZ;
+		if (nsec > 0) {
+			nsec = nsec * NSEC_PER_USEC;
+			do_div(nsec, NSEC_PER_SEC/SCLK_HZ);
+		}
+		us = sec + nsec;
 		msm_mpm_enter_sleep(us, from_idle, cpumask);
 
 		if (cluster->no_saw_devices && !use_psci)
@@ -1270,7 +1279,6 @@ static int lpm_suspend_enter(suspend_state_t state)
 	struct lpm_cpu *lpm_cpu = cluster->cpu;
 	const struct cpumask *cpumask = get_cpu_mask(cpu);
 	int idx;
-	int64_t time = ktime_to_ns(ktime_get_raw());
 
 	for (idx = lpm_cpu->nlevels - 1; idx >= 0; idx--) {
 
@@ -1282,7 +1290,7 @@ static int lpm_suspend_enter(suspend_state_t state)
 		return 0;
 	}
 	cpu_prepare(cluster, idx, false);
-	cluster_prepare(cluster, cpumask, idx, false, time);
+	cluster_prepare(cluster, cpumask, idx, false, 0);
 	if (idx > 0)
 		update_debug_pc_event(CPU_ENTER, idx, 0xdeaffeed,
 					0xdeaffeed, false);

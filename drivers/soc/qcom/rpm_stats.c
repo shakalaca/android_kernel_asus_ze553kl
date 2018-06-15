@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +30,8 @@
 
 #define GET_PDATA_OF_ATTR(attr) \
 	(container_of(attr, struct msm_rpmstats_kobj_attr, ka)->pd)
+
+static DEFINE_MUTEX(rpm_stats_mutex);
 
 enum {
 	ID_COUNTER,
@@ -67,11 +69,7 @@ struct msm_rpm_stats_data_v2 {
 	u64 last_exited_at;
 	u64 accumulated;
 	u32 client_votes;
-	//[CR] Support to trace Subsystem voting status
-	u32 subsystem_votes;
-	u32 debug0;
-	u32 debug1;
-	//u32 reserved[3];
+	u32 reserved[3];
 };
 
 struct msm_rpmstats_kobj_attr {
@@ -111,14 +109,13 @@ static inline int msm_rpmstats_append_data_to_buf(char *buf,
 	time_since_last_mode = get_time_in_sec(time_since_last_mode);
 	actual_last_sleep = get_time_in_msec(data->accumulated);
 
-	//[CR] Support to trace Subsystem voting status
 	return  snprintf(buf , buflength,
 		"RPM Mode:%s\n\t count:%d\ntime in last mode(msec):%llu\n"
 		"time since last mode(sec):%llu\nactual last sleep(msec):%llu\n"
-		"Client votes: %#010x, Subsystem votes: 0x%x\n\n",
+		"client votes: %#010x\n\n",
 		stat_type, data->count, time_in_last_mode,
 		time_since_last_mode, actual_last_sleep,
-		data->client_votes, data->subsystem_votes);
+		data->client_votes);
 }
 
 static inline u32 msm_rpmstats_read_long_register_v2(void __iomem *regbase,
@@ -167,19 +164,6 @@ static inline int msm_rpmstats_copy_stats_v2(
 		data.client_votes = msm_rpmstats_read_long_register_v2(reg,
 				i, offsetof(struct msm_rpm_stats_data_v2,
 					client_votes));
-		//[CR] Support to trace Subsystem voting status
-		data.subsystem_votes = msm_rpmstats_read_quad_register_v2(reg,
-				i, offsetof(struct msm_rpm_stats_data_v2,
-					subsystem_votes));
-		/*
-		data.debug0 = msm_rpmstats_read_quad_register_v2(reg,
-				i, offsetof(struct msm_rpm_stats_data_v2,
-					debug0));
-
-		data.debug1 = msm_rpmstats_read_quad_register_v2(reg,
-				i, offsetof(struct msm_rpm_stats_data_v2,
-					debug1));
-		*/
 		length += msm_rpmstats_append_data_to_buf(prvdata->buf + length,
 				&data, sizeof(prvdata->buf) - length);
 		prvdata->read_idx++;
@@ -236,6 +220,12 @@ static int msm_rpmstats_copy_stats(struct msm_rpmstats_private_data *pdata)
 
 	record.id = msm_rpmstats_read_register(pdata->reg_base,
 						pdata->read_idx, 1);
+	if (record.id >= ID_MAX) {
+		pr_err("%s: array out of bound error found.\n",
+			__func__);
+		return -EINVAL;
+	}
+
 	record.val = msm_rpmstats_read_register(pdata->reg_base,
 						pdata->read_idx, 2);
 
@@ -258,13 +248,20 @@ static ssize_t msm_rpmstats_file_read(struct file *file, char __user *bufu,
 				  size_t count, loff_t *ppos)
 {
 	struct msm_rpmstats_private_data *prvdata;
+	ssize_t ret;
+
+	mutex_lock(&rpm_stats_mutex);
 	prvdata = file->private_data;
 
-	if (!prvdata)
-		return -EINVAL;
+	if (!prvdata) {
+		ret = -EINVAL;
+		goto exit;
+	}
 
-	if (!bufu || count == 0)
-		return -EINVAL;
+	if (!bufu || count == 0) {
+		ret = -EINVAL;
+		goto exit;
+	}
 
 	if (prvdata->platform_data->version == 1) {
 		if (!prvdata->num_records)
@@ -281,22 +278,30 @@ static ssize_t msm_rpmstats_file_read(struct file *file, char __user *bufu,
 			*ppos = 0;
 	}
 
-	return simple_read_from_buffer(bufu, count, ppos,
+	ret = simple_read_from_buffer(bufu, count, ppos,
 			prvdata->buf, prvdata->len);
+exit:
+	mutex_unlock(&rpm_stats_mutex);
+	return ret;
 }
 
 static int msm_rpmstats_file_open(struct inode *inode, struct file *file)
 {
 	struct msm_rpmstats_private_data *prvdata;
 	struct msm_rpmstats_platform_data *pdata;
+	int ret = 0;
 
+	mutex_lock(&rpm_stats_mutex);
 	pdata = inode->i_private;
 
 	file->private_data =
 		kmalloc(sizeof(struct msm_rpmstats_private_data), GFP_KERNEL);
 
-	if (!file->private_data)
-		return -ENOMEM;
+	if (!file->private_data) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+
 	prvdata = file->private_data;
 
 	prvdata->reg_base = ioremap_nocache(pdata->phys_addr_base,
@@ -307,24 +312,28 @@ static int msm_rpmstats_file_open(struct inode *inode, struct file *file)
 		pr_err("%s: ERROR could not ioremap start=%pa, len=%u\n",
 			__func__, &pdata->phys_addr_base,
 			pdata->phys_size);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto exit;
 	}
 
 	prvdata->read_idx = prvdata->num_records =  prvdata->len = 0;
 	prvdata->platform_data = pdata;
 	if (pdata->version == 2)
 		prvdata->num_records = 2;
-
-	return 0;
+exit:
+	mutex_unlock(&rpm_stats_mutex);
+	return ret;
 }
 
 static int msm_rpmstats_file_close(struct inode *inode, struct file *file)
 {
 	struct msm_rpmstats_private_data *private = file->private_data;
 
+	mutex_lock(&rpm_stats_mutex);
 	if (private->reg_base)
 		iounmap(private->reg_base);
 	kfree(file->private_data);
+	mutex_unlock(&rpm_stats_mutex);
 
 	return 0;
 }
@@ -375,31 +384,31 @@ static const struct file_operations msm_rpmheap_fops = {
 	.llseek   = no_llseek,
 };
 
-//[CR] Support to trace Subsystem voting status
-phys_addr_t g_phys_addr_base = 0;
-u32 g_phys_size = 0;
-
 static ssize_t rpmstats_show(struct kobject *kobj,
 			struct kobj_attribute *attr, char *buf)
 {
 	struct msm_rpmstats_private_data *prvdata = NULL;
 	struct msm_rpmstats_platform_data *pdata = NULL;
+	ssize_t ret;
 
+	mutex_lock(&rpm_stats_mutex);
 	pdata = GET_PDATA_OF_ATTR(attr);
 
 	prvdata =
 		kmalloc(sizeof(*prvdata), GFP_KERNEL);
-	if (!prvdata)
-		return -ENOMEM;
+	if (!prvdata) {
+		ret = -ENOMEM;
+		goto kmalloc_fail;
+	}
 
 	prvdata->reg_base = ioremap_nocache(pdata->phys_addr_base,
 					pdata->phys_size);
 	if (!prvdata->reg_base) {
-		kfree(prvdata);
 		pr_err("%s: ERROR could not ioremap start=%pa, len=%u\n",
 			__func__, &pdata->phys_addr_base,
 			pdata->phys_size);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto ioremap_fail;
 	}
 
 	prvdata->read_idx = prvdata->num_records =  prvdata->len = 0;
@@ -421,23 +430,22 @@ static ssize_t rpmstats_show(struct kobject *kobj,
 					prvdata);
 	}
 
-	return snprintf(buf, prvdata->len, prvdata->buf);
+	ret = snprintf(buf, prvdata->len, prvdata->buf);
+	iounmap(prvdata->reg_base);
+ioremap_fail:
+	kfree(prvdata);
+kmalloc_fail:
+	mutex_unlock(&rpm_stats_mutex);
+	return ret;
 }
 
 static int msm_rpmstats_create_sysfs(struct msm_rpmstats_platform_data *pd)
 {
-	struct kobject *module_kobj = NULL;
 	struct kobject *rpmstats_kobj = NULL;
 	struct msm_rpmstats_kobj_attr *rpms_ka = NULL;
 	int ret = 0;
 
-	module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
-	if (!module_kobj) {
-		pr_err("%s: Cannot find module_kset\n", __func__);
-		return -ENODEV;
-	}
-
-	rpmstats_kobj = kobject_create_and_add("rpmstats", module_kobj);
+	rpmstats_kobj = kobject_create_and_add("system_sleep", power_kobj);
 	if (!rpmstats_kobj) {
 		pr_err("%s: Cannot create rpmstats kobject\n", __func__);
 		ret = -ENOMEM;
@@ -486,8 +494,10 @@ static int msm_rpmstats_probe(struct platform_device *pdev)
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 							"phys_addr_base");
-	if (!res)
+	if (!res) {
+		kfree(pdata);
 		return -EINVAL;
+	}
 
 	offset = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 							"offset_addr");
@@ -495,17 +505,18 @@ static int msm_rpmstats_probe(struct platform_device *pdev)
 		/* Remap the rpm-stats pointer */
 		phys_ptr = ioremap_nocache(offset->start, SZ_4);
 		if (!phys_ptr) {
-			pr_err("%s: Failed to ioremap address: %x\n",
-					__func__, offset_addr);
+			pr_err("%s: Failed to ioremap address: %pa\n",
+					__func__, &offset->start);
+			kfree(pdata);
 			return -ENODEV;
 		}
 		offset_addr = readl_relaxed(phys_ptr);
 		iounmap(phys_ptr);
 	}
 
-	g_phys_addr_base = pdata->phys_addr_base  = res->start + offset_addr;
+	pdata->phys_addr_base  = res->start + offset_addr;
 
-	g_phys_size = pdata->phys_size = resource_size(res);
+	pdata->phys_size = resource_size(res);
 	node = pdev->dev.of_node;
 	if (pdev->dev.platform_data) {
 		pd = pdev->dev.platform_data;
@@ -564,103 +575,9 @@ static int msm_rpmstats_remove(struct platform_device *pdev)
 	return 0;
 }
 
-//[CR] ++Support to trace Subsystem voting status
-#ifdef CONFIG_PM_SLEEP
-
-static int rpm_stats_suspend(struct device *dev)
-{
-	void __iomem *reg =0;
-	struct msm_rpm_stats_data_v2 data;
-
-	reg = ioremap_nocache(g_phys_addr_base, g_phys_size);
-	if(!reg) {
-		return 0;
-	}
-
-	data.client_votes = msm_rpmstats_read_quad_register_v2(reg, 0,
-				offsetof(struct msm_rpm_stats_data_v2, client_votes));
-	data.subsystem_votes = msm_rpmstats_read_quad_register_v2(reg, 0,
-				offsetof(struct msm_rpm_stats_data_v2, subsystem_votes));
-
-	printk("[RPM] Suspend: Voting status: Client: 0x%x, Subsystem: 0x%0x\n",
-			data.client_votes, data.subsystem_votes);
-
-	iounmap(reg);
-	return 0;
-}
-
-static int rpm_stats_resume(struct device *dev)
-{
-	void __iomem *reg =0;
-	struct msm_rpm_stats_data_v2 data;
-	int i, length;
-	char stat_type[5];
-	u64 time_in_last_mode;
-	u64 time_since_last_mode;
-	u64 actual_last_sleep;
-
-	reg = ioremap_nocache(g_phys_addr_base, g_phys_size);
-	if(!reg) {
-		return 0;
-	}
-
-	for (i = 0, length = 0; i < 2; i++) {
-		data.stat_type = msm_rpmstats_read_long_register_v2(reg, i,
-				offsetof(struct msm_rpm_stats_data_v2, stat_type));
-		data.count = msm_rpmstats_read_long_register_v2(reg, i,
-				offsetof(struct msm_rpm_stats_data_v2, count));
-		data.last_entered_at = msm_rpmstats_read_quad_register_v2(reg, i,
-				offsetof(struct msm_rpm_stats_data_v2, last_entered_at));
-		data.last_exited_at = msm_rpmstats_read_quad_register_v2(reg, i,
-				offsetof(struct msm_rpm_stats_data_v2, last_exited_at));
-		data.accumulated = msm_rpmstats_read_quad_register_v2(reg, i,
-				offsetof(struct msm_rpm_stats_data_v2, accumulated));
-		if(0 == i) {
-			data.client_votes = msm_rpmstats_read_quad_register_v2(reg,	i,
-					offsetof(struct msm_rpm_stats_data_v2, client_votes));
-			data.subsystem_votes = msm_rpmstats_read_quad_register_v2(reg, i,
-					offsetof(struct msm_rpm_stats_data_v2, subsystem_votes));
-		}
-
-		stat_type[4] = 0;
-		memcpy(stat_type, &data.stat_type, sizeof(u32));
-
-		time_in_last_mode = data.last_exited_at - data.last_entered_at;
-		time_in_last_mode = get_time_in_msec(time_in_last_mode);
-		time_since_last_mode = arch_counter_get_cntpct() - data.last_exited_at;
-		time_since_last_mode = get_time_in_sec(time_since_last_mode);
-		actual_last_sleep = get_time_in_msec(data.accumulated);
-
-		if(0 == i) {
-			printk("[RPM] Resume: Client votes: 0x%x, Subsystem votes: 0x%x\n",
-				data.client_votes, data.subsystem_votes);
-
-			printk("[RPM] Resume: Mode:%s, Count:%d, In last mode(ms):%llu, Since last mode(s):%llu, Actual last sleep(ms):%llu\n",
-				stat_type, data.count, time_in_last_mode,
-				time_since_last_mode, actual_last_sleep);
-		}
-		else {
-			printk("[RPM] Resume: Mode:%s, Count:%d, In last mode(ms):%llu, Since last mode(s):%llu, Actual last sleep(ms):%llu\n",
-				stat_type, data.count, time_in_last_mode,
-				time_since_last_mode, actual_last_sleep);
-		}
-	}
-
-	iounmap(reg);
-	return 0;
-}
-#endif
-//[CR] --Support to trace Subsystem voting status
-
 static struct of_device_id rpm_stats_table[] = {
 	       {.compatible = "qcom,rpm-stats"},
 	       {},
-};
-
-//[CR] Support to trace Subsystem voting status
-static const struct dev_pm_ops rpm_stats_pm_ops = {
-	.suspend	= rpm_stats_suspend,
-	.resume		= rpm_stats_resume,
 };
 
 static struct platform_driver msm_rpmstats_driver = {
@@ -670,8 +587,6 @@ static struct platform_driver msm_rpmstats_driver = {
 		.name = "msm_rpm_stat",
 		.owner = THIS_MODULE,
 		.of_match_table = rpm_stats_table,
-		//[CR] Support to trace Subsystem voting status
-		.pm	= &rpm_stats_pm_ops,
 	},
 };
 static int __init msm_rpmstats_init(void)

@@ -239,6 +239,13 @@ static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf);
 
+static ssize_t synaptics_audio_devices_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t synaptics_audio_devices_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count);
+
+
 struct synaptics_rmi4_f01_device_status {
 	union {
 		struct {
@@ -690,6 +697,9 @@ static struct device_attribute attrs[] = {
 	__ATTR(wake_gesture, (S_IRUGO | 0220),
 			synaptics_rmi4_wake_gesture_show,
 			synaptics_rmi4_wake_gesture_store),
+	__ATTR(audio_devices, (S_IRUGO | 0220),
+			synaptics_audio_devices_show,
+			synaptics_audio_devices_store),
 };
 
 static ssize_t asus_tm_enable_glove(struct synaptics_rmi4_data *rmi4_data)
@@ -1898,6 +1908,41 @@ static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 	return count;
 }
 
+//disable touch in earphone mode---
+static ssize_t synaptics_audio_devices_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
+	return sprintf(buf, "%d \n", rmi4_data->audio_devices_enable);
+}
+
+static ssize_t synaptics_audio_devices_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
+	int tmp = 0;
+
+	tmp = buf[0] - 48;
+
+	if (tmp == 0) {
+
+		rmi4_data->audio_devices_enable = 0;
+
+		printk("[Touch] audio_devices_disable,enable touch ! \n");
+
+	} else if (tmp == 1) {
+
+		rmi4_data->audio_devices_enable = 1;
+
+		printk("[Touch] audio_devices_enable,disable touch ! \n");
+	}
+
+	return count;
+
+}
+//disable touch in earphone mode---
+
+
 static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 		struct synaptics_rmi4_fn *fhandler)
 {
@@ -2545,8 +2590,7 @@ static void synaptics_rmi4_f1a_report(struct synaptics_rmi4_data *rmi4_data,
 			if(0 == report_hall_status())
 			{
 				input_report_key(rmi4_data->input_dev,
-					f1a->button_map[button],
-					0);
+					f1a->button_map[button],0);
 			}
 			else
 			{
@@ -2724,7 +2768,7 @@ static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
 	if (gpio_get_value(bdata->irq_gpio) != bdata->irq_on_state)
 		goto exit;
 
-	if (SYNAPTICS_TOUCH_DISABLE)
+	if (SYNAPTICS_TOUCH_DISABLE && rmi4_data->audio_devices_enable)
 		synaptics_rmi4_sensor_report(rmi4_data, false);
 	else
 		synaptics_rmi4_sensor_report(rmi4_data, true);
@@ -5615,7 +5659,7 @@ exit:
 	
 	printk("[Touch] : clear finger start\n");
 	synaptics_rmi4_free_fingers(asus_rmi4_data);
-	msleep(20);
+	//msleep(20);
 	printk("[Touch] : end finger start\n");
 
 	retval = synaptics_rmi4_reg_write(asus_rmi4_data,0x000d,nosleep,1);
@@ -5661,7 +5705,7 @@ static struct platform_driver synaptics_rmi4_driver = {
 static int __init synaptics_rmi4_init(void)
 {
 	int retval;
-
+	
 	printk("[SYNAP][TOUCH] USE IN-CELL !\n");
 	
 	retval = synaptics_rmi4_bus_init();

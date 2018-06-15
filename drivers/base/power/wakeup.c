@@ -16,21 +16,8 @@
 #include <linux/debugfs.h>
 #include <linux/types.h>
 #include <trace/events/power.h>
-#include <linux/wakelock.h>
 
 #include "power.h"
-
-//ASUS_BSP +++ jeff_gu add timer to dump wakeup_sources
-#include <linux/switch.h>
-#include <linux/workqueue.h>
-#include <linux/module.h>
-static struct switch_dev pms_print_dev;
-static struct work_struct pms_printer_work;
-static int pms_switch_counter = 0;
-
-//ASUS_BSP --- jeff_gu add timer to dump wakeup_sources
-
-
 
 /*
  * If set, the suspend/hibernate code will abort transitions to a sleep state
@@ -473,18 +460,9 @@ static void wakeup_source_report_event(struct wakeup_source *ws)
  *
  * It is safe to call this function from interrupt context.
  */
-
-#ifdef ASUS_FACTORY_BUILD
- extern unsigned char fac_wakeup_sign;
-#endif
 void __pm_stay_awake(struct wakeup_source *ws)
 {
 	unsigned long flags;
-
-#ifdef ASUS_FACTORY_BUILD
-	if(fac_wakeup_sign && ws && strcmp(ws->name,"UsbCable_Lock_Wake") != 0)
-		return;
-#endif
 
 	if (!ws)
 		return;
@@ -770,77 +748,12 @@ void pm_print_active_wakeup_sources(void)
 		}
 	}
 
-	if (!active && last_activity_ws){
-		pr_info("last active wakeup source: %s\n",
-			last_activity_ws->name);
-	}
-	rcu_read_unlock();
-}
-EXPORT_SYMBOL_GPL(pm_print_active_wakeup_sources);
-
-//ASUS_BSP +++ jeff_gu add timer to dump wakeup_sources
-
-void pms_printer_work_func(struct work_struct *work)
-{
-	printk("%s:send uevent to framework\n",__func__);
-	switch_set_state(&pms_print_dev, pms_switch_counter%2);
-	pms_switch_counter++;
-}
-
-void asus_create_pms_print_switch_dev(void)
-{
-	int ret;
-	pms_print_dev.name = "wakelock_printer";
-	pms_print_dev.index = 0;
-	ret = switch_dev_register(&pms_print_dev);
-	INIT_WORK(&pms_printer_work, pms_printer_work_func);
-	if (ret < 0) {
-        printk("%s:fail to register wakelock_printer switch \n",__func__);
-	}
-}
-
-void asus_dump_framework_wakelocks(void)
-{
-	schedule_work(&pms_printer_work);
-}
-
-void asus_dump_active_wakeup_sources(bool caller_allow_sleep)
-{
-	struct wakeup_source *ws;
-	int active = 0;
-	struct wakeup_source *last_activity_ws = NULL;
-
-	rcu_read_lock();
-	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
-		if (ws->active) {
-			pr_info("[PM] active wakeup source: %s\n", ws->name);
-
-			if(caller_allow_sleep) {
-				ASUSEvtlog("[PM] active wake lock: %s\n", ws->name);
-			}
-
-			if(!strncmp(ws->name, "PowerManagerService", strlen("PowerManagerService")))
-			{
-				asus_dump_framework_wakelocks();
-			}
-			active = 1;
-
-		} else if (!active &&
-			   (!last_activity_ws ||
-			    ktime_to_ns(ws->last_time) >
-			    ktime_to_ns(last_activity_ws->last_time))) {
-			last_activity_ws = ws;
-		}
-	}
-
 	if (!active && last_activity_ws)
 		pr_info("last active wakeup source: %s\n",
 			last_activity_ws->name);
 	rcu_read_unlock();
 }
-EXPORT_SYMBOL_GPL(asus_dump_active_wakeup_sources);
-//ASUS_BSP --- jeff_gu add timer to dump wakeup_sources
-
+EXPORT_SYMBOL_GPL(pm_print_active_wakeup_sources);
 
 /**
  * pm_wakeup_pending - Check if power transition in progress should be aborted.
@@ -1013,7 +926,7 @@ static int print_wakeup_source_stats(struct seq_file *m,
 		active_time = ktime_set(0, 0);
 	}
 
-	ret = seq_printf(m, "%-12s\t%lu\t\t%lu\t\t%lu\t\t%lu\t\t"
+	ret = seq_printf(m, "%-32s\t%lu\t\t%lu\t\t%lu\t\t%lu\t\t"
 			"%lld\t\t%lld\t\t%lld\t\t%lld\t\t%lld\n",
 			ws->name, active_count, ws->event_count,
 			ws->wakeup_count, ws->expire_count,
@@ -1034,7 +947,7 @@ static int wakeup_sources_stats_show(struct seq_file *m, void *unused)
 {
 	struct wakeup_source *ws;
 
-	seq_puts(m, "name\t\tactive_count\tevent_count\twakeup_count\t"
+	seq_puts(m, "name\t\t\t\t\tactive_count\tevent_count\twakeup_count\t"
 		"expire_count\tactive_since\ttotal_time\tmax_time\t"
 		"last_change\tprevent_suspend_time\n");
 
@@ -1045,22 +958,6 @@ static int wakeup_sources_stats_show(struct seq_file *m, void *unused)
 
 	return 0;
 }
-
-#ifdef ASUS_FACTORY_BUILD
-void release_wakeup_source(void)
-{
-	struct wakeup_source *ws;
-
-	rcu_read_lock();
-	list_for_each_entry_rcu(ws, &wakeup_sources, entry)
-		if (ws->active && strcmp(ws->name,"UsbCable_Lock_Wake") != 0) {
-			printk(KERN_ERR"[factool log]release wakeup source:%s\n",ws->name);
-			wake_unlock((struct wake_lock*)ws);
-		}
-	rcu_read_unlock();
-}
-EXPORT_SYMBOL_GPL(release_wakeup_source);
-#endif
 
 static int wakeup_sources_stats_open(struct inode *inode, struct file *file)
 {
@@ -1077,10 +974,6 @@ static const struct file_operations wakeup_sources_stats_fops = {
 
 static int __init wakeup_sources_debugfs_init(void)
 {
-	//ASUS_BSP +++ jeff_gu add timer to dump wakeup_sources
-	asus_create_pms_print_switch_dev();
-	//ASUS_BSP --- jeff_gu add timer to dump wakeup_sources
-
 	wakeup_sources_stats_dentry = debugfs_create_file("wakeup_sources",
 			S_IRUGO, NULL, NULL, &wakeup_sources_stats_fops);
 	return 0;

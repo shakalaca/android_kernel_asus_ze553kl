@@ -42,7 +42,7 @@
 #include <linux/irqchip/arm-gic.h>
 #include <linux/syscore_ops.h>
 #include <linux/msm_rtb.h>
-
+#include <linux/wakeup_reason.h>
 #include <asm/cputype.h>
 #include <asm/irq.h>
 #include <asm/exception.h>
@@ -304,12 +304,13 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		}
 		//[---][Power] jeff_gu Add for wakeup debug
 
-		pr_warning("%s: IRQ No.%d triggered %s\n", __func__,
-					irq, name);
+		pr_warning("%s: %d triggered %s\n", __func__,
+					i + gic->irq_offset, name);
+		log_base_wakeup_reason(i + gic->irq_offset);
 
 		//[+++][Power] jeff_gu Add for wakeup debug
 		if (gic_irq_cnt < 8) {
-			gic_resume_irq[gic_irq_cnt] = irq;
+			gic_resume_irq[gic_irq_cnt]=i + gic->irq_offset;
 			gic_irq_cnt++;
 		}
 		//[---][Power] jeff_gu Add for wakeup debug
@@ -476,6 +477,14 @@ static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 			writel_relaxed_no_log(irqstat, cpu_base + GIC_CPU_EOI);
 			uncached_logk(LOGK_IRQ, (void *)(uintptr_t)irqnr);
 #ifdef CONFIG_SMP
+			/*
+			 * Ensure any shared data written by the CPU sending
+			 * the IPI is read after we've read the ACK register
+			 * on the GIC.
+			 *
+			 * Pairs with the write barrier in gic_raise_softirq
+			 */
+			smp_rmb();
 			handle_IPI(irqnr, regs);
 #endif
 			continue;
@@ -484,12 +493,13 @@ static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 	} while (1);
 }
 
-static void gic_handle_cascade_irq(unsigned int irq, struct irq_desc *desc)
+static bool gic_handle_cascade_irq(unsigned int irq, struct irq_desc *desc)
 {
 	struct gic_chip_data *chip_data = irq_get_handler_data(irq);
 	struct irq_chip *chip = irq_get_chip(irq);
 	unsigned int cascade_irq, gic_irq;
 	unsigned long status;
+	int handled = false;
 
 	chained_irq_enter(chip, desc);
 
@@ -505,10 +515,12 @@ static void gic_handle_cascade_irq(unsigned int irq, struct irq_desc *desc)
 	if (unlikely(gic_irq < 32 || gic_irq > 1020))
 		handle_bad_irq(cascade_irq, desc);
 	else
-		generic_handle_irq(cascade_irq);
+		handled = generic_handle_irq(cascade_irq);
+
 
  out:
 	chained_irq_exit(chip, desc);
+	return handled == true;
 }
 
 static struct irq_chip gic_chip = {

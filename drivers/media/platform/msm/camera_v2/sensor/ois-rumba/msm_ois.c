@@ -584,7 +584,7 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 			break;
 		}
 
-		if(is_i2c_seq_setting_address_valid(&conf_array,0x04FC))
+		//if(is_i2c_seq_setting_address_valid(&conf_array,0x04FC))
 		{
 			conf_array.reg_setting = reg_setting;
 
@@ -648,10 +648,10 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 		}
 #endif
 		}
-		else
+		/*else
 		{
 			pr_err("Invalid address detected for Rumba!\n");
-		}
+		}*/
 		kfree(reg_setting);
 		break;
 	}

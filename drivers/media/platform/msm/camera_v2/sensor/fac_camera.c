@@ -752,10 +752,18 @@ int common_create_sysfs_file(struct kobject **kobj,char* file_name,struct device
 }
 //common--
 //vcm++
-char g_vcm_proc_file_names_hades[MAX_CAMERAS][50]=
-{VCM_PROC_FILES_REAR,VCM_PROC_FILES_REAR_2,VCM_PROC_FILES_FRONT,VCM_PROC_FILES_FRONT_2};
-char g_vcm_proc_file_names_phoenix[MAX_CAMERAS][50]=
-{VCM_PROC_FILES_REAR,VCM_PROC_FILES_FRONT,VCM_PROC_FILES_FRONT_2,VCM_PROC_FILES_REAR_2};
+char g_vcm_proc_file_names[MAX_CAMERAS][50]=
+{VCM_PROC_FILES_REAR,
+#ifdef ZE553KL
+VCM_PROC_FILES_REAR_2,VCM_PROC_FILES_FRONT,VCM_PROC_FILES_FRONT_2
+#endif
+#ifdef ZD552KL_PHOENIX
+VCM_PROC_FILES_FRONT,VCM_PROC_FILES_FRONT_2,VCM_PROC_FILES_REAR_2
+#endif
+#ifdef ZS550KL
+VCM_PROC_FILES_FRONT
+#endif
+};
 
 static struct proc_dir_entry *vcm_pdes[MAX_CAMERAS];
 static int vcm_show(struct seq_file *buf, void *v)
@@ -788,14 +796,8 @@ static struct file_operations vcm_fops = {
 };
 void vcm_create_proc_file(struct msm_actuator_ctrl_t *vcm_ctrl)
 {
-	char* target_file_name=NULL;
-	CDBG("sz_cam_fac E vcm_ctrl=%p\n",vcm_ctrl);	
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_vcm_proc_file_names_hades[vcm_ctrl->cam_name];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_vcm_proc_file_names_phoenix[vcm_ctrl->cam_name];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
+	char* target_file_name=g_vcm_proc_file_names[vcm_ctrl->cam_name];
+	CDBG("sz_cam_fac E vcm_ctrl=%p\n",vcm_ctrl);
 	if(strlen(target_file_name)>0)
 		common_craete_proc_file(
 		&vcm_pdes[vcm_ctrl->cam_name]
@@ -806,24 +808,23 @@ void vcm_create_proc_file(struct msm_actuator_ctrl_t *vcm_ctrl)
 void vcm_remove_file(struct msm_actuator_ctrl_t *vcm_ctrl)
 {
     extern struct proc_dir_entry proc_root;
-	char* target_file_name=NULL;
+	char* target_file_name=g_vcm_proc_file_names[vcm_ctrl->cam_name];
     CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_vcm_proc_file_names_hades[vcm_ctrl->cam_name];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_vcm_proc_file_names_phoenix[vcm_ctrl->cam_name];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
     remove_proc_entry(target_file_name, &proc_root);
 }
 
 //vcm--
 //eeprom++
-char g_eeprom_proc_file_names_hades[MAX_CAMERAS][50]=
-{EEPROM_PROC_FILE_REAR,EEPROM_PROC_FILE_FRONT,EEPROM_PROC_FILE_REAR_2,"invalid_eeprom"};
-char g_eeprom_proc_file_names_phoenix[MAX_CAMERAS][50]=
-{EEPROM_PROC_FILE_REAR,EEPROM_PROC_FILE_FRONT,EEPROM_PROC_FILE_FRONT_2,"invalid_eeprom"};
+char g_eeprom_proc_file_names[MAX_CAMERAS][50]=
+{EEPROM_PROC_FILE_REAR,EEPROM_PROC_FILE_FRONT,
+#ifdef ZE553KL
+EEPROM_PROC_FILE_REAR_2,
+#endif
+#ifdef ZD552KL_PHOENIX
+EEPROM_PROC_FILE_FRONT_2,
+#endif
+"invalid_eeprom"};
 struct msm_eeprom_ctrl_t * g_ectrls[MAX_CAMERAS];
 static struct proc_dir_entry *eeprom_pdes[MAX_CAMERAS];
 static int eeprom_proc_read(struct seq_file *buf, void *v)
@@ -860,14 +861,8 @@ static struct file_operations eeprom_proc_fops = {
 };
 void eeprom_create_proc_file(struct msm_eeprom_ctrl_t * e_ctrl)
 {
-	char* target_file_name=NULL;
-	CDBG("sz_cam_fac E e_ctrl=%p\n",e_ctrl);	
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_eeprom_proc_file_names_hades[e_ctrl->subdev_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_eeprom_proc_file_names_phoenix[e_ctrl->subdev_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
+	char* target_file_name=g_eeprom_proc_file_names[e_ctrl->subdev_id];
+	CDBG("sz_cam_fac E e_ctrl=%p\n",e_ctrl);
 	if(strlen(target_file_name)>0)
 	{
 		g_ectrls[e_ctrl->subdev_id]=e_ctrl;
@@ -881,14 +876,8 @@ void eeprom_create_proc_file(struct msm_eeprom_ctrl_t * e_ctrl)
 void eeprom_remove_file(uint32_t subdev_id)
 {
     extern struct proc_dir_entry proc_root;
-	char* target_file_name=NULL;
+	char* target_file_name=g_vcm_proc_file_names[subdev_id];
     CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_eeprom_proc_file_names_hades[subdev_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_vcm_proc_file_names_phoenix[subdev_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 		remove_proc_entry(target_file_name, &proc_root);
 }
@@ -960,10 +949,15 @@ void arcsoft_dualCali_remove_file(void)
 // Sheldon_Li add for  eeprom map to OTP--
 
 //eeprom_thermal++
-char g_eeprom_thermal_proc_file_names_hades[MAX_CAMERAS][50]=
-{PROC_FILE_EEPEOM_THERMAL_REAR,PROC_FILE_EEPEOM_THERMAL_FRONT,PROC_FILE_EEPEOM_THERMAL_REAR_2,"invalid_eeprom_thermal"};
-char g_eeprom_thermal_proc_file_names_phoenix[MAX_CAMERAS][50]=
-{PROC_FILE_EEPEOM_THERMAL_REAR,PROC_FILE_EEPEOM_THERMAL_FRONT,PROC_FILE_EEPEOM_THERMAL_REAR_2,"invalid_eeprom_thermal"};
+char g_eeprom_thermal_proc_file_names[MAX_CAMERAS][50]=
+{PROC_FILE_EEPEOM_THERMAL_REAR,PROC_FILE_EEPEOM_THERMAL_FRONT,
+#ifdef ZE553KL
+PROC_FILE_EEPEOM_THERMAL_REAR_2,
+#endif
+#ifdef ZD552KL_PHOENIX
+PROC_FILE_EEPEOM_THERMAL_REAR_2,
+#endif
+"invalid_eeprom_thermal"};
 
 static struct proc_dir_entry *eeprom_thermal_pdes[MAX_CAMERAS];
 static int eeprom_temp_hades_rear(struct msm_eeprom_memory_block_t eeprom_block,struct seq_file *buf, void *v)
@@ -1045,27 +1039,15 @@ struct file_operations eeprom_thermal_fops = {
 void eeprom_thermal_remove_proc_files(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	extern struct proc_dir_entry proc_root;
-	char* target_file_name=NULL;
+	char* target_file_name=g_eeprom_thermal_proc_file_names[s_ctrl->sensordata->cam_slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_eeprom_thermal_proc_file_names_hades[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_eeprom_thermal_proc_file_names_phoenix[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 		remove_proc_entry(target_file_name,&proc_root);
 }
 void eeprom_thermal_create_proc_files(struct msm_camera_sensor_slave_info *slave_info)
 {
-	char* target_file_name=NULL;
+	char* target_file_name=g_eeprom_thermal_proc_file_names[slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_eeprom_thermal_proc_file_names_hades[slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_eeprom_thermal_proc_file_names_phoenix[slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 		common_craete_proc_file(
 		&eeprom_thermal_pdes[slave_info->camera_id]
@@ -1078,8 +1060,14 @@ void eeprom_thermal_create_proc_files(struct msm_camera_sensor_slave_info *slave
 //otp++
 static struct proc_dir_entry *g_otp_pdes[MAX_CAMERAS]={0};
 u8 g_otp_data_banks[MAX_CAMERAS][OTP_DATA_LEN_BYTE*3];
-char *g_otp_proc_file_name_hades[50]={PROC_FILE_OTP_REAR_1,PROC_FILE_OTP_FRONT,PROC_FILE_OTP_REAR_2,"invalid_otp"};
-char *g_otp_proc_file_name_phoenix[50]={PROC_FILE_OTP_REAR_1,PROC_FILE_OTP_FRONT,PROC_FILE_OTP_FRONT_2,"invalid_otp"};
+char *g_otp_proc_file_name[50]={PROC_FILE_OTP_REAR_1,PROC_FILE_OTP_FRONT,
+#ifdef ZE553KL
+PROC_FILE_OTP_REAR_2
+#endif
+#ifdef ZD552KL_PHOENIX
+PROC_FILE_OTP_FRONT_2
+#endif
+"invalid_otp"};
 int sensor_otp_initial_read(struct msm_sensor_ctrl_t *s_ctrl,u8* out_buffer)
 {
 	CDBG("sz_cam_fac E\n");
@@ -1175,14 +1163,8 @@ struct file_operations otp_fops = {
 void otp_remove_proc_files(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	extern struct proc_dir_entry proc_root;
-	char* target_file_name=NULL;
+	char* target_file_name=g_otp_proc_file_name[s_ctrl->sensordata->cam_slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_otp_proc_file_name_hades[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_otp_proc_file_name_phoenix[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 	{
 		remove_proc_entry(target_file_name, &proc_root);
@@ -1190,14 +1172,8 @@ void otp_remove_proc_files(struct msm_sensor_ctrl_t *s_ctrl)
 }
 void otp_create_proc_files(struct msm_camera_sensor_slave_info *slave_info)
 {
-	char* target_file_name=NULL;
+	char* target_file_name=g_otp_proc_file_name[slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_otp_proc_file_name_hades[slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_otp_proc_file_name_phoenix[slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 	{
 		sensor_otp_initial_read(g_sensor_ctrl[slave_info->camera_id],&g_otp_data_banks[slave_info->camera_id][0]);
@@ -1304,8 +1280,14 @@ int sensor_read_temperature_sony(struct msm_sensor_ctrl_t *s_ctrl)
 }
 
 static struct proc_dir_entry *g_thermal_pdes[MAX_CAMERAS]={0};
-char *g_thermal_proc_file_name_hades[50]={PROC_FILE_THERMAL_REAR,PROC_FILE_THERMAL_FRONT,PROC_FILE_THERMAL_REAR_2,"invalid_thermal"};
-char *g_thermal_proc_file_name_phoenix[50]={PROC_FILE_THERMAL_REAR,PROC_FILE_THERMAL_FRONT,PROC_FILE_THERMAL_FRONT_2,"invalid_thermal"};
+char *g_thermal_proc_file_name[50]={PROC_FILE_THERMAL_REAR,PROC_FILE_THERMAL_FRONT,
+#ifdef ZE553KL
+PROC_FILE_THERMAL_REAR_2,
+#endif
+#ifdef ZD552KL_PHOENIX
+PROC_FILE_THERMAL_FRONT_2,
+#endif
+"invalid_thermal"};
 
 int sensor_read_temperature(struct msm_sensor_ctrl_t *s_ctrl)
 {
@@ -1342,14 +1324,8 @@ struct file_operations thermal_fops = {
 void thermal_remove_proc_files(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	extern struct proc_dir_entry proc_root;
-	char* target_file_name=NULL;
+	char* target_file_name=g_thermal_proc_file_name[s_ctrl->sensordata->cam_slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_thermal_proc_file_name_hades[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_thermal_proc_file_name_phoenix[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 	{
 		remove_proc_entry(target_file_name, &proc_root);
@@ -1357,15 +1333,9 @@ void thermal_remove_proc_files(struct msm_sensor_ctrl_t *s_ctrl)
 }
 void thermal_create_proc_files(struct msm_camera_sensor_slave_info *slave_info)
 {
-	char* target_file_name=NULL;
+	char* target_file_name=g_thermal_proc_file_name[slave_info->camera_id];
 	int ret=0;
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_thermal_proc_file_name_hades[slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_thermal_proc_file_name_phoenix[slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 	{
 		ret=common_craete_proc_file(
@@ -1543,8 +1513,14 @@ struct thermal_zone_device_ops psy_tzd_front_ops ={
 
 //module++
 static struct proc_dir_entry *g_module_pdes[MAX_CAMERAS]={0};
-char *g_module_proc_file_name_hades[50]={PROC_FILE_REARMODULE_1,PROC_FILE_FRONTMODULE,PROC_FILE_REARMODULE_2,"module_invalid"};
-char *g_module_proc_file_name_phoenix[50]={PROC_FILE_REARMODULE_1,PROC_FILE_FRONTMODULE,PROC_FILE_FRONTMODULE_2,"module_invalid"};
+char *g_module_proc_file_name[50]={PROC_FILE_REARMODULE_1,PROC_FILE_FRONTMODULE,
+#ifdef ZE553KL
+PROC_FILE_REARMODULE_2,
+#endif
+#ifdef ZD552KL_PHOENIX
+PROC_FILE_FRONTMODULE_2,
+#endif
+"module_invalid"};
 
 int sensor_module_read(struct seq_file *buf, uint16_t sensor_id)
 {
@@ -1590,27 +1566,15 @@ struct file_operations camera_module_fops = {
 void module_remove_proc_files(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	extern struct proc_dir_entry proc_root;
-	char* target_file_name=NULL;
+	char* target_file_name=g_module_proc_file_name[s_ctrl->sensordata->cam_slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_module_proc_file_name_hades[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_module_proc_file_name_phoenix[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 		remove_proc_entry(target_file_name, &proc_root);
 }
 void module_create_proc_files(struct msm_camera_sensor_slave_info *slave_info)
 {
-	char* target_file_name=NULL;
+	char* target_file_name=g_module_proc_file_name[slave_info->camera_id];
 	CDBG("creating module procfs entry\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_module_proc_file_name_hades[slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_module_proc_file_name_phoenix[slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 		common_craete_proc_file(
 		&g_module_pdes[slave_info->camera_id]
@@ -1623,9 +1587,14 @@ void module_create_proc_files(struct msm_camera_sensor_slave_info *slave_info)
 //resolution++
 struct kobject *g_kobj_camera_resolutions[MAX_CAMERAS];
 ssize_t resolutions_read(struct device *dev, struct device_attribute *attr, char *buf);
-char *g_resolution_sysfs_name_hades[50]={SYSFS_FILE_RESOLUTION_REAR_0,SYSFS_FILE_RESOLUTION_FRONT,SYSFS_FILE_RESOLUTION_REAR_2,"resolution_invalid"};
-char *g_resolution_sysfs_name_phoenix[50]={SYSFS_FILE_RESOLUTION_REAR_0,SYSFS_FILE_RESOLUTION_FRONT,SYSFS_FILE_RESOLUTION_FRONT_2,"resolution_invalid"};
-
+char *g_resolution_sysfs_name[50]={SYSFS_FILE_RESOLUTION_REAR_0,SYSFS_FILE_RESOLUTION_FRONT,
+#ifdef ZE553KL
+SYSFS_FILE_RESOLUTION_REAR_2,
+#endif
+#ifdef ZD552KL_PHOENIX
+SYSFS_FILE_RESOLUTION_FRONT_2,
+#endif
+"resolution_invalid"};
 
 static struct device_attribute dev_attr_camera_resolutions[MAX_CAMERAS] ={
 	__ATTR(camera_resolution, S_IRUGO | S_IWUSR | S_IWGRP, resolutions_read, NULL),
@@ -1675,14 +1644,8 @@ ssize_t resolutions_read(struct device *dev, struct device_attribute *attr, char
 }
 void resolution_create_sysfs_files(struct msm_camera_sensor_slave_info *slave_info)
 {
-	char*target_file_name;
+	char*target_file_name = g_resolution_sysfs_name[slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_resolution_sysfs_name_hades[slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_resolution_sysfs_name_phoenix[slave_info->camera_id];break;break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 		common_create_sysfs_file(
 		&g_kobj_camera_resolutions[slave_info->camera_id]
@@ -1691,14 +1654,8 @@ void resolution_create_sysfs_files(struct msm_camera_sensor_slave_info *slave_in
 }
 void resolution_remove_sysfs_files(struct msm_sensor_ctrl_t *s_ctrl)
 {
-	char* target_file_name=NULL;
+	char* target_file_name=g_resolution_sysfs_name[s_ctrl->sensordata->cam_slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_resolution_sysfs_name_hades[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_resolution_sysfs_name_phoenix[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 		common_remove_sysfs_file(
 		g_kobj_camera_resolutions[s_ctrl->sensordata->cam_slave_info->camera_id]
@@ -1708,8 +1665,14 @@ void resolution_remove_sysfs_files(struct msm_sensor_ctrl_t *s_ctrl)
 //status++
 struct kobject *g_kobj_camera_status[MAX_CAMERAS];
 ssize_t status_read(struct device *dev, struct device_attribute *attr, char *buf);
-char *g_status_sysfs_name_hades[50]={SYSFS_FILE_STATUS_REAR_1,SYSFS_FILE_STATUS_FRONT,SYSFS_FILE_STATUS_REAR_2,"status_invalid"};
-char *g_status_sysfs_name_phoenix[50]={SYSFS_FILE_STATUS_REAR_1,SYSFS_FILE_STATUS_FRONT,SYSFS_FILE_STATUS_FRONT_2,"status_invalid"};
+char *g_status_sysfs_name[50]={SYSFS_FILE_STATUS_REAR_1,SYSFS_FILE_STATUS_FRONT,
+#ifdef ZE553KL
+SYSFS_FILE_STATUS_REAR_2,
+#endif
+#ifdef ZD552KL_PHOENIX
+SYSFS_FILE_STATUS_FRONT_2,
+#endif
+"status_invalid"};
 
 struct device_attribute dev_attr_camera_status[MAX_CAMERAS] = 
 {
@@ -1761,14 +1724,8 @@ ssize_t status_read(struct device *dev, struct device_attribute *attr, char *buf
 }
 void status_create_sysfs_files(struct msm_camera_sensor_slave_info *slave_info)
 {
-	char *target_file_name;
+	char *target_file_name = g_status_sysfs_name[slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_status_sysfs_name_hades[slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_status_sysfs_name_phoenix[slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 		common_create_sysfs_file(
 		&g_kobj_camera_status[slave_info->camera_id]
@@ -1777,14 +1734,8 @@ void status_create_sysfs_files(struct msm_camera_sensor_slave_info *slave_info)
 }
 void status_remove_sysfs_files(struct msm_sensor_ctrl_t *s_ctrl)
 {
-	char *target_file_name;
+	char *target_file_name = g_status_sysfs_name[s_ctrl->sensordata->cam_slave_info->camera_id];
 	CDBG("sz_cam_fac E\n");
-	switch(asus_project_id)
-	{
-		case ASUS_ZE553KL:target_file_name=g_status_sysfs_name_hades[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		case ASUS_ZD552KL_PHOENIX:target_file_name=g_status_sysfs_name_phoenix[s_ctrl->sensordata->cam_slave_info->camera_id];break;
-		default:pr_err("sz_cam_fac invalid projectId:%d\n",asus_project_id);break;
-	}
 	if(strlen(target_file_name)>0)
 		common_remove_sysfs_file(
 		g_kobj_camera_status[s_ctrl->sensordata->cam_slave_info->camera_id],
@@ -2179,6 +2130,228 @@ static const struct file_operations pdaf_i2c_debug_fops = {
 	.release = single_release,
 };
 
+//ASUS_BSP++, LLHDR
+static uint32_t preisp_vhdr_mode;
+static int preisp_vhdr_mode_read(struct seq_file *buf, void *v)
+{
+	seq_printf(buf,"%d\n",preisp_vhdr_mode);
+	return 0;
+}
+
+static int preisp_vhdr_mode_open(struct inode *inode, struct  file *file)
+{
+	return single_open(file, preisp_vhdr_mode_read, NULL);
+}
+
+static ssize_t preisp_vhdr_mode_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	ssize_t ret_len;
+	char messages[32]="";
+	uint32_t val;
+
+	ret_len = len;
+	if (len > 32) {
+		len = 32;
+	}
+	if (copy_from_user(messages, buff, len)) {
+		pr_err("%s command fail !!\n", __func__);
+		return -EFAULT;
+	}
+
+	sscanf(messages,"%d",&val);
+
+	preisp_vhdr_mode = val;
+
+	pr_info("preisp_vhdr_mode set to %d\n",preisp_vhdr_mode);
+
+	return ret_len;
+}
+static const struct file_operations preisp_vhdr_mode_debug_fops = {
+	.owner = THIS_MODULE,
+	.open = preisp_vhdr_mode_open,
+	.read = seq_read,
+	.write = preisp_vhdr_mode_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static uint32_t preisp_cframe_id;
+static int preisp_cframe_id_read(struct seq_file *buf, void *v)
+{
+	seq_printf(buf,"%d\n",preisp_cframe_id);
+	return 0;
+}
+
+static int preisp_cframe_id_open(struct inode *inode, struct  file *file)
+{
+	return single_open(file, preisp_cframe_id_read, NULL);
+}
+
+static ssize_t preisp_cframe_id_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	ssize_t ret_len;
+	char messages[32]="";
+	uint32_t val;
+
+	ret_len = len;
+	if (len > 32) {
+		len = 32;
+	}
+	if (copy_from_user(messages, buff, len)) {
+		pr_err("%s command fail !!\n", __func__);
+		return -EFAULT;
+	}
+
+	sscanf(messages,"%d",&val);
+
+	preisp_cframe_id = val;
+
+	pr_info("preisp_cframe_id set to %d\n",preisp_cframe_id);
+
+	return ret_len;
+}
+static const struct file_operations preisp_cframe_id_debug_fops = {
+	.owner = THIS_MODULE,
+	.open = preisp_cframe_id_open,
+	.read = seq_read,
+	.write = preisp_cframe_id_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static uint32_t preisp_pframe_id;
+static int preisp_pframe_id_read(struct seq_file *buf, void *v)
+{
+	seq_printf(buf,"%d\n",preisp_pframe_id);
+	return 0;
+}
+
+static int preisp_pframe_id_open(struct inode *inode, struct  file *file)
+{
+	return single_open(file, preisp_pframe_id_read, NULL);
+}
+
+static ssize_t preisp_pframe_id_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	ssize_t ret_len;
+	char messages[32]="";
+	uint32_t val;
+
+	ret_len = len;
+	if (len > 32) {
+		len = 32;
+	}
+	if (copy_from_user(messages, buff, len)) {
+		pr_err("%s command fail !!\n", __func__);
+		return -EFAULT;
+	}
+
+	sscanf(messages,"%d",&val);
+
+	preisp_pframe_id = val;
+
+	pr_info("preisp_pframe_id set to %d\n",preisp_pframe_id);
+
+	return ret_len;
+}
+static const struct file_operations preisp_pframe_id_debug_fops = {
+	.owner = THIS_MODULE,
+	.open = preisp_pframe_id_open,
+	.read = seq_read,
+	.write = preisp_pframe_id_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static uint32_t preisp_sframe_id;
+static int preisp_sframe_id_read(struct seq_file *buf, void *v)
+{
+	seq_printf(buf,"%d\n",preisp_sframe_id);
+	return 0;
+}
+
+static int preisp_sframe_id_open(struct inode *inode, struct  file *file)
+{
+	return single_open(file, preisp_sframe_id_read, NULL);
+}
+
+static ssize_t preisp_sframe_id_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	ssize_t ret_len;
+	char messages[32]="";
+	uint32_t val;
+
+	ret_len = len;
+	if (len > 32) {
+		len = 32;
+	}
+	if (copy_from_user(messages, buff, len)) {
+		pr_err("%s command fail !!\n", __func__);
+		return -EFAULT;
+	}
+
+	sscanf(messages,"%d",&val);
+
+	preisp_sframe_id = val;
+
+	pr_info("preisp_sframe_id set to %d\n",preisp_sframe_id);
+
+	return ret_len;
+}
+static const struct file_operations preisp_sframe_id_debug_fops = {
+	.owner = THIS_MODULE,
+	.open = preisp_sframe_id_open,
+	.read = seq_read,
+	.write = preisp_sframe_id_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+//ASUS_BSP--, LLHDR
+
+static uint32_t iface_process_frame_id;
+static int iface_process_frame_id_read(struct seq_file *buf, void *v)
+{
+	seq_printf(buf,"%d\n",iface_process_frame_id);
+	return 0;
+}
+
+static int iface_process_frame_id_open(struct inode *inode, struct  file *file)
+{
+	return single_open(file, iface_process_frame_id_read, NULL);
+}
+
+static ssize_t iface_process_frame_id_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	ssize_t ret_len;
+	char messages[32]="";
+	uint32_t val;
+
+	ret_len = len;
+	if (len > 32) {
+		len = 32;
+	}
+	if (copy_from_user(messages, buff, len)) {
+		pr_err("%s command fail !!\n", __func__);
+		return -EFAULT;
+	}
+
+	sscanf(messages,"%d",&val);
+
+	iface_process_frame_id = val;
+
+	//pr_info("iface_process_frame_id set to %d\n",iface_process_frame_id);
+
+	return ret_len;
+}
+static const struct file_operations iface_process_frame_id_debug_fops = {
+	.owner = THIS_MODULE,
+	.open = iface_process_frame_id_open,
+	.read = seq_read,
+	.write = iface_process_frame_id_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 static void create_proc_file(const char *PATH,const struct file_operations* f_ops)
 {
 	struct proc_dir_entry *fd;
@@ -2217,6 +2390,73 @@ static void pdaf_i2c_create_proc_file(void)
 	else
 		pr_err("proc file %s already created!\n",PROC_PDAF_I2C_R);
 }
+
+static void iface_process_frame_id_create_proc_file(void)
+{
+	static uint8_t has_created = 0;
+
+	if(!has_created)
+	{
+		create_proc_file(PROC_IFACE_PROCESS_FRAME_ID,&iface_process_frame_id_debug_fops);
+		has_created = 1;
+	}
+	else
+		pr_info("proc file %s already created!\n",PROC_IFACE_PROCESS_FRAME_ID);
+}
+
+//ASUS_BSP++, LLHDR
+static void preisp_vhdr_mode_create_proc_file(void)
+{
+	static uint8_t has_created = 0;
+
+	if(!has_created)
+	{
+		create_proc_file(PROC_PREISP_VHDR_MODE,&preisp_vhdr_mode_debug_fops);
+		has_created = 1;
+	}
+	else
+		pr_info("proc file %s already created!\n",PROC_PREISP_VHDR_MODE);
+}
+
+static void preisp_cframe_id_create_proc_file(void)
+{
+	static uint8_t has_created = 0;
+
+	if(!has_created)
+	{
+		create_proc_file(PROC_PREISP_CFRAME_ID,&preisp_cframe_id_debug_fops);
+		has_created = 1;
+	}
+	else
+		pr_info("proc file %s already created!\n",PROC_PREISP_CFRAME_ID);
+}
+
+static void preisp_pframe_id_create_proc_file(void)
+{
+	static uint8_t has_created = 0;
+
+	if(!has_created)
+	{
+		create_proc_file(PROC_PREISP_PFRAME_ID,&preisp_pframe_id_debug_fops);
+		has_created = 1;
+	}
+	else
+		pr_info("proc file %s already created!\n",PROC_PREISP_PFRAME_ID);
+}
+
+static void preisp_sframe_id_create_proc_file(void)
+{
+	static uint8_t has_created = 0;
+
+	if(!has_created)
+	{
+		create_proc_file(PROC_PREISP_SFRAME_ID,&preisp_sframe_id_debug_fops);
+		has_created = 1;
+	}
+	else
+		pr_info("proc file %s already created!\n",PROC_PREISP_SFRAME_ID);
+}
+//ASUS_BSP--, LLHDR
 #endif
 
 void create_sensor_proc_files(struct msm_sensor_ctrl_t *s_ctrl,struct msm_camera_sensor_slave_info *slave_info)
@@ -2242,6 +2482,13 @@ void create_sensor_proc_files(struct msm_sensor_ctrl_t *s_ctrl,struct msm_camera
 	eeprom_thermal_create_proc_files(slave_info);
 	arcsoft_dualCali_create_proc_file(slave_info);
 #ifdef ZD552KL_PHOENIX
+	iface_process_frame_id_create_proc_file();
+//ASUS_BSP++, LLHDR
+	preisp_vhdr_mode_create_proc_file();
+	preisp_cframe_id_create_proc_file();
+	preisp_pframe_id_create_proc_file();
+	preisp_sframe_id_create_proc_file();
+//ASUS_BSP--, LLHDR
 	if(g_sensor_ctrl[CAMERA_2])
 	{
 		sensor_i2c_rw_create_proc_file();

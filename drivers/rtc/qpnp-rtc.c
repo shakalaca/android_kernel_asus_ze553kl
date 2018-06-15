@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015,2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,7 +20,6 @@
 #include <linux/spmi.h>
 #include <linux/spinlock.h>
 #include <linux/spmi.h>
-#include <linux/alarmtimer.h>
 
 /* RTC/ALARM Register offsets */
 #define REG_OFFSET_ALARM_RW	0x40
@@ -377,13 +376,18 @@ qpnp_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alarm)
 				alarm->time.tm_sec, alarm->time.tm_mday,
 				alarm->time.tm_mon, alarm->time.tm_year);
 
+	rc = qpnp_read_wrapper(rtc_dd, value,
+		rtc_dd->alarm_base + REG_OFFSET_ALARM_CTRL1, 1);
+	if (rc) {
+		dev_err(dev, "Read from ALARM CTRL1 failed\n");
+		return rc;
+	}
+
+	alarm->enabled = !!(value[0] & BIT_RTC_ALARM_ENABLE);
+
 	return 0;
 }
 
-#ifdef ASUS_FACTORY_BUILD
-extern unsigned char fac_wakeup_sign;
-static unsigned char fac_contrl_sign = 1;
-#endif
 
 static int
 qpnp_rtc_alarm_irq_enable(struct device *dev, unsigned int enabled)
@@ -393,11 +397,6 @@ qpnp_rtc_alarm_irq_enable(struct device *dev, unsigned int enabled)
 	struct qpnp_rtc *rtc_dd = dev_get_drvdata(dev);
 	u8 ctrl_reg;
 	u8 value[4] = {0};
-
-#ifdef ASUS_FACTORY_BUILD
-	if(fac_wakeup_sign && fac_contrl_sign)
-		return 0;
-#endif
 
 	spin_lock_irqsave(&rtc_dd->alarm_ctrl_lock, irq_flags);
 	ctrl_reg = rtc_dd->alarm_ctrl_reg1;
@@ -426,17 +425,6 @@ rtc_rw_fail:
 	spin_unlock_irqrestore(&rtc_dd->alarm_ctrl_lock, irq_flags);
 	return rc;
 }
-
-#ifdef ASUS_FACTORY_BUILD
-struct device *fac_alarm_dev;
-void alarm_irq_disable(void)
-{
-	fac_contrl_sign = 0;
-	qpnp_rtc_alarm_irq_enable(fac_alarm_dev, 0);
-	fac_contrl_sign = 1;
-}
-EXPORT_SYMBOL_GPL(alarm_irq_disable);
-#endif
 
 static struct rtc_class_ops qpnp_rtc_ops = {
 	.read_time = qpnp_rtc_read_time,
@@ -492,9 +480,6 @@ static int qpnp_rtc_probe(struct spmi_device *spmi)
 	struct resource *resource;
 	struct spmi_resource *spmi_resource;
 
-#ifdef ASUS_FACTORY_BUILD
-	fac_alarm_dev = &spmi->dev;
-#endif
 	rtc_dd = devm_kzalloc(&spmi->dev, sizeof(*rtc_dd), GFP_KERNEL);
 	if (rtc_dd == NULL) {
 		dev_err(&spmi->dev, "Unable to allocate memory!\n");
@@ -618,9 +603,6 @@ static int qpnp_rtc_probe(struct spmi_device *spmi)
 		rc = PTR_ERR(rtc_dd->rtc);
 		goto fail_rtc_enable;
 	}
-
-	/* Init power_on_alarm after adding rtc device */
-	power_on_alarm_init();
 
 	/* Request the alarm IRQ */
 	rc = request_any_context_irq(rtc_dd->rtc_alarm_irq,

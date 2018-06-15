@@ -48,10 +48,10 @@
 #include <linux/ctype.h>
 
 #include <asm/uaccess.h>
-//thomas_chu +++
+//bsp +++
 #include <linux/asus_global.h>
 #include <linux/wakeup_reason.h>
-//thomas_chu ---
+//bsp ---
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/printk.h>
@@ -319,6 +319,7 @@ static u32 clear_idx;
 static char __log_buf[__LOG_BUF_LEN] __aligned(LOG_ALIGN);
 static char *log_buf = __log_buf;
 static u32 log_buf_len = __LOG_BUF_LEN;
+
 int nSuspendInProgress;
 /* Return log buffer address */
 char *log_buf_addr_get(void)
@@ -897,8 +898,7 @@ static void __init log_buf_len_update(unsigned size)
 	if (size > log_buf_len)
 		new_log_buf_len = size;
 }
-
-//thomas_chu +++
+//bsp add by jojo from thomas_chu +++
 struct _asus_global asus_global =
 {
 	.asus_global_magic = ASUS_GLOBAL_MAGIC,
@@ -907,7 +907,7 @@ struct _asus_global asus_global =
 	.kernel_log_size = __LOG_BUF_LEN,
 //	.kernel_version = ASUS_SW_VER,
 };
-//thomas_chu ---
+//bsp add by jojo from  thomas_chu ---
 
 /* save requested log_buf_len since it's too early to process it */
 static int __init log_buf_len_setup(char *str)
@@ -1067,7 +1067,6 @@ static inline void boot_delay_msec(int level)
 
 static bool printk_time = IS_ENABLED(CONFIG_PRINTK_TIME);
 module_param_named(time, printk_time, bool, S_IRUGO | S_IWUSR);
-
 #include <linux/rtc.h>
 extern struct timezone sys_tz;
 static void myrtc_time_to_tm(unsigned long time, struct rtc_time *tm)
@@ -1078,9 +1077,10 @@ static void myrtc_time_to_tm(unsigned long time, struct rtc_time *tm)
 	tm->tm_min = time / 60;
 	tm->tm_sec = time - tm->tm_min * 60;
 }
-
 extern int rtc_ready;
 int boot_after_60sec = 0;
+int boot_delay_complete = 0;
+
 static size_t print_time(u64 ts, char *buf)
 {
 	unsigned long rem_nsec;
@@ -1099,6 +1099,9 @@ static size_t print_time(u64 ts, char *buf)
 
 	if (boot_after_60sec == 0 && ts >= 60)
 		boot_after_60sec = 1;
+
+	if (boot_delay_complete == 0 && ts >= 15)
+		boot_delay_complete = 1;
 
 	if (rtc_ready && !nSuspendInProgress) {
 
@@ -1126,9 +1129,7 @@ static size_t print_time(u64 ts, char *buf)
 		}
 		return sprintf(buf, "[%5lu.%06lu] ",
 		       (unsigned long)ts, rem_nsec / 1000);
-
 	}
-
 }
 
 static size_t print_prefix(const struct printk_log *msg, bool syslog, char *buf)
@@ -1833,7 +1834,6 @@ asmlinkage int vprintk_emit(int facility, int level,
 #ifdef CONFIG_EARLY_PRINTK_DIRECT
 	printascii(text1);
 #endif
-
 	ts = local_clock();
 	time_size = print_time(ts, time_buf);
 	strncpy(text, time_buf, time_size);
@@ -1845,7 +1845,6 @@ asmlinkage int vprintk_emit(int facility, int level,
 
 	if (dict)
 		lflags |= LOG_PREFIX|LOG_NEWLINE;
-
 	if (is_logging_to_asus_buffer) {
 		write_to_asus_log_buffer(text, text_len, lflags);
 	}
@@ -1974,7 +1973,6 @@ asmlinkage __visible int printk(const char *fmt, ...)
 
 	if ( g_user_klog_mode==0 )
 		return 0;
-
 #ifdef CONFIG_KGDB_KDB
 	if (unlikely(kdb_trap_printk)) {
 		va_start(args, fmt);
@@ -1990,31 +1988,6 @@ asmlinkage __visible int printk(const char *fmt, ...)
 	return r;
 }
 EXPORT_SYMBOL(printk);
-
-asmlinkage __visible int highlevel_printk(const char *fmt, ...)
-{
-	va_list args;
-	int r;
-
-	if (asusdebug_enable==0x11223344)
-		return 0;
-
-#ifdef CONFIG_KGDB_KDB
-	if (unlikely(kdb_trap_printk)) {
-		va_start(args, fmt);
-		r = vkdb_printf(fmt, args);
-		va_end(args);
-		return r;
-	}
-#endif
-	va_start(args, fmt);
-	r = vprintk_emit(0, -1, NULL, 0, fmt, args);
-	va_end(args);
-
-	return r;
-
-}
-EXPORT_SYMBOL(highlevel_printk);
 
 #else /* CONFIG_PRINTK */
 
@@ -2199,7 +2172,7 @@ MODULE_PARM_DESC(console_suspend, "suspend console during suspend"
  */
 void suspend_console(void)
 {
-	ASUSEvtlog("[UTS] System Suspend");
+	ASUSEvtlog("[UTS] System Suspend\n");
 	nSuspendInProgress = 1;
 	if (!console_suspend_enabled)
 		return;
@@ -2212,12 +2185,13 @@ void suspend_console(void)
 void resume_console(void)
 {
 	int i;
-	nSuspendInProgress = 0;	
-	ASUSEvtlog("[UTS] System Resume");
+
+	nSuspendInProgress = 0;
+	ASUSEvtlog("[UTS] System Resume\n");
+
 	//ASUS_BSP [+++] jeff_gu Add GPIO wakeup information
 	if (pm_pwrcs_ret)
 	{
-		ASUSEvtlog("[PM] Suspended for %d.%02d secs \n", pwrcs_time/100,pwrcs_time%100);
 		if (gpio_irq_cnt>0)
 		{
 			gpio_irq_cnt = gpio_irq_cnt>7?7:gpio_irq_cnt;
@@ -2230,7 +2204,6 @@ void resume_console(void)
 			gic_irq_cnt = gic_irq_cnt>7?7:gic_irq_cnt;
 			for (i=0;i<gic_irq_cnt;i++)
 			{
-				log_wakeup_reason(gic_resume_irq[i]);
 				ASUSEvtlog("[PM] IRQs triggered: %d\n", gic_resume_irq[i]);
 			}
 			gic_irq_cnt=0;	//clear log count
@@ -2238,6 +2211,7 @@ void resume_console(void)
 		pm_pwrcs_ret=0;
 	}
 	//ASUS_BSP [---] jeff_gu Add GPIO wakeup information
+
 	if (!console_suspend_enabled)
 		return;
 	down_console_sem();
@@ -3308,7 +3282,6 @@ void show_regs_print_info(const char *log_lvl)
 }
 
 #endif
-
 void printk_buffer_rebase(void)
 {
 /*
@@ -3375,4 +3348,3 @@ out:
 #endif
 }
 EXPORT_SYMBOL(printk_buffer_rebase);
-

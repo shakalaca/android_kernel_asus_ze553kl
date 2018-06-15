@@ -196,7 +196,6 @@ extern bool vgacon_text_force(void);
 //ASUS_BSP +++ [Power] jeff_gu Add for wakeup debug
 extern int gpio_irq_cnt, gpio_resume_irq[8], gic_irq_cnt, gic_resume_irq[8];
 extern unsigned int pm_pwrcs_ret;
-extern unsigned int pwrcs_time;
 //ASUS_BSP --- [Power] jeff_gu Add for wakeup debug
 
 #endif /* _LINUX_CONSOLE_H */

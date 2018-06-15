@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -72,6 +72,7 @@ int sky81296_current_set_high(struct msm_flash_ctrl_t *fctrl, int intensity1, in
 
 #ifdef ZD552KL_PHOENIX
 extern int is_msm_dwc_in_otg_host_state(void);
+int g_client_count = 0;//fix for multi-clients init/release
 #endif
 void msm_torch_brightness_set(struct led_classdev *led_cdev,
 				enum led_brightness value)
@@ -170,6 +171,12 @@ static int32_t msm_flash_get_subdev_id(
 	conf_array.reg_setting = settings->reg_setting_a;
 	conf_array.size = settings->size;
 	flash_ctrl->flash_i2c_client.addr_type = conf_array.addr_type;
+
+	/* Validate the settings size */
+	if ((!conf_array.size) || (conf_array.size > MAX_I2C_REG_SET)) {
+		pr_err("failed: invalid size %d", conf_array.size);
+		return -EINVAL;
+	}
 
 	return flash_ctrl->flash_i2c_client.i2c_func_tbl->i2c_write_table(
 		&flash_ctrl->flash_i2c_client, &conf_array);
@@ -436,46 +443,6 @@ int32_t msm_flash_i2c_release(
 		pr_err("%s:%d failed: flash_data Null pointer\n", __func__, __LINE__);
 		return -EFAULT;
 	}
-	//seperate control behave for sky81296,  TT 781243
-	/*if(asus_project_id==ASUS_ZD552KL)
-	{
-		if(flash_ctrl->flash_i2c_client.cci_client->sid!=0x37)
-		{
-			pr_err("%s:%d unknown sid=0x%x\n"
-				, __func__, __LINE__,flash_ctrl->flash_i2c_client.cci_client->sid);
-			return -EFAULT;
-		}else
-		//TODO:device name would be better solution
-		//strncmp(flash_ctrl->pdev->name,name,sizeof(name)-1)==0)
-		{
-			uint32_t curr0=0,curr1=0;
-			curr0=flash_data->flash_current[0];
-			curr1=flash_data->flash_current[1];
-			printk("%s:%d cfg_type=%d,curr0=%d,curr1=%d\n"
-				, __func__, __LINE__,flash_data->cfg_type,curr0,curr1);
-			if(flash_data->cfg_type==CFG_FLASH_LOW)
-			{
-				curr0=curr0>g_rear_torch_max_current?g_rear_torch_max_current:curr0;
-				curr1=curr1>g_rear_torch_max_current?g_rear_torch_max_current:curr1;
-				if(!sky81296_current_set_low(flash_ctrl,curr0,curr1))
-					flash_ctrl->active=1;
-			}
-			if(flash_data->cfg_type==CFG_FLASH_HIGH)
-			{
-				curr0=curr0>g_rear_flash_max_current?g_rear_flash_max_current:curr0;
-				curr1=curr1>g_rear_flash_max_current?g_rear_flash_max_current:curr1;
-				sky81296_current_set_high(flash_ctrl,curr0,curr1);
-			}
-			if(flash_data->cfg_type==CFG_FLASH_OFF)
-			{
-				flash_ctrl->active=0;
-				sky81296_off(flash_ctrl);
-				//msm_flash_i2c_release(flash_ctrl);
-			}
-			return 0;
-		}
-	}*/
-	//asus bsp ralf--
 	if (!flash_data->cfg.settings) {
 		pr_err("%s:%d failed: Null pointer\n", __func__, __LINE__);
 		return -EFAULT;
@@ -583,7 +550,8 @@ static int32_t msm_flash_init_prepare(
 	struct msm_flash_cfg_data_t flash_data_k;
 	struct msm_flash_init_info_t flash_init_info;
 	int32_t i = 0;
-	if(!is_compat_task()) {
+
+	if (!is_compat_task()) {
 		/*for 64-bit usecase,it need copy the data to local memory*/
 		flash_data_k.cfg_type = flash_data->cfg_type;
 		for (i = 0; i < MAX_LED_TRIGGERS; i++) {
@@ -595,7 +563,7 @@ static int32_t msm_flash_init_prepare(
 
 		flash_data_k.cfg.flash_init_info = &flash_init_info;
 		if (copy_from_user(&flash_init_info,
-			(void *)(flash_data->cfg.flash_init_info),
+			(void __user *)(flash_data->cfg.flash_init_info),
 			sizeof(struct msm_flash_init_info_t))) {
 			pr_err("%s copy_from_user failed %d\n",
 				__func__, __LINE__);
@@ -623,12 +591,12 @@ static int32_t msm_flash_init_prepare(
 
 	flash_data_k.cfg.flash_init_info = &flash_init_info;
 	if (copy_from_user(&flash_init_info,
-		(void *)(flash_data->cfg.flash_init_info),
+		(void __user *)(flash_data->cfg.flash_init_info),
 		sizeof(struct msm_flash_init_info_t))) {
-			pr_err("%s copy_from_user failed %d\n",
-				__func__, __LINE__);
-			return -EFAULT;
-		}
+		pr_err("%s copy_from_user failed %d\n",
+			__func__, __LINE__);
+		return -EFAULT;
+	}
 	return msm_flash_init(flash_ctrl, &flash_data_k);
 #endif
 }
@@ -661,12 +629,6 @@ static int32_t msm_flash_init_prepare(
 					curr);
 			}
 			//asus bsp ralf++
-			
-			/*if(asus_project_id==ASUS_ZD552KL)
-			{
-				if(curr>g_front_torch_max_current)curr=g_front_torch_max_current;
-			}
-			else*/
 			{
 #ifdef ZD552KL_PHOENIX
 				if(is_msm_dwc_in_otg_host_state() && flash_data->ctrl_state == CTRL_FRONT_LED1_OFF_REAR_LED_ON_ON)
@@ -730,12 +692,6 @@ static int32_t msm_flash_init_prepare(
 				pr_debug("LED flash_current[%d] clamped %d\n",
 					i, curr);
 			}
-			//asus bsp ralf++
-			/*if(asus_project_id==ASUS_ZD552KL)
-			{
-				curr=curr>g_front_flash_max_current?g_front_flash_max_current:curr;
-			}
-			else*/
 			{
 #ifdef ZD552KL_PHOENIX
 				pr_debug("sz_cam_flash, flash_max_current[%d] is %d mA\n",i,flash_ctrl->flash_max_current[i]);
@@ -761,15 +717,10 @@ static int32_t msm_flash_init_prepare(
 	struct msm_flash_ctrl_t *flash_ctrl)
 {
 	int32_t rc = 0;
-	if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_RELEASE) {
-		pr_err("%s:%d Invalid flash state = %d\n",
-			__func__, __LINE__, flash_ctrl->flash_state);
-		return 0;
-	}
 
 	rc = flash_ctrl->func_tbl->camera_flash_off(flash_ctrl, NULL);
 	if (rc < 0) {
-		pr_err("%s:%d camera_flash_init failed rc = %d",
+		pr_err("%s:%d camera_flash_init failed rc = %d\n",
 			__func__, __LINE__, rc);
 		return rc;
 	}
@@ -781,10 +732,12 @@ static int32_t msm_flash_init_prepare(
 static int32_t msm_flash_config(struct msm_flash_ctrl_t *flash_ctrl,
 	void __user *argp)
 {
-	int32_t rc = -EINVAL;
+	int32_t rc = 0;
 	struct msm_flash_cfg_data_t *flash_data =
 		(struct msm_flash_cfg_data_t *) argp;
+#ifndef ZS550KL
 	uint32_t temp_current=0;//asus bsp ralf:exchange current by dit spec
+#endif
 
 	mutex_lock(flash_ctrl->flash_mutex);
 
@@ -792,43 +745,101 @@ static int32_t msm_flash_config(struct msm_flash_ctrl_t *flash_ctrl,
 
 	switch (flash_data->cfg_type) {
 	case CFG_FLASH_INIT:
+#ifdef ZD552KL_PHOENIX
+		if(g_client_count >= 1 && flash_ctrl->flash_state == MSM_CAMERA_FLASH_RELEASE)
+		{
+			pr_err("sz_cam_flash, previous user crashed? set client count from %d to 0\n",g_client_count);
+			g_client_count = 0;
+		}
+		g_client_count++;
+
+		if(g_client_count == 1)
+			rc = msm_flash_init_prepare(flash_ctrl, flash_data);
+		else
+		{
+			pr_info("sz_cam_flash, g_client_count %d, not init flash",g_client_count);
+			rc = 0;
+		}
+#else
 		rc = msm_flash_init_prepare(flash_ctrl, flash_data);
+#endif
 		break;
 	case CFG_FLASH_RELEASE:
-		if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)
+		if (flash_ctrl->flash_state != MSM_CAMERA_FLASH_RELEASE) {
+#ifdef ZD552KL_PHOENIX
+			g_client_count--;
+			if(g_client_count == 0)
+				rc = flash_ctrl->func_tbl->camera_flash_release(
+					flash_ctrl);
+			else
+			{
+				pr_info("sz_cam_flash, g_client_count %d, not release flash",g_client_count);
+				rc = 0;
+			}
+#else
 			rc = flash_ctrl->func_tbl->camera_flash_release(
 				flash_ctrl);
+#endif
+		} else {
+			CDBG(pr_fmt("Invalid state : %d\n"),
+				flash_ctrl->flash_state);
+		}
 		break;
 	case CFG_FLASH_OFF:
-		if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)
+		if ((flash_ctrl->flash_state != MSM_CAMERA_FLASH_RELEASE) &&
+			(flash_ctrl->flash_state != MSM_CAMERA_FLASH_OFF)) {
 			rc = flash_ctrl->func_tbl->camera_flash_off(
 				flash_ctrl, flash_data);
+			if (!rc)
+				flash_ctrl->flash_state = MSM_CAMERA_FLASH_OFF;
+		} else {
+			CDBG(pr_fmt("Invalid state : %d\n"),
+				flash_ctrl->flash_state);
+		}
 		break;
 	case CFG_FLASH_LOW:
+#ifndef ZS550KL
 		//asus bsp ralf:exchange current by dit spec>>
-		if(flash_data  &&  asus_project_id==ASUS_ZE553KL)
+		if (flash_data && asus_project_id != ASUS_ZD552KL_PHOENIX)
 		{
 			temp_current=flash_data->flash_current[0];
 			flash_data->flash_current[0]=flash_data->flash_current[1];
 			flash_data->flash_current[1]=temp_current;
 		}
 		//asus bsp ralf:exchange current by dit spec<<
-		if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)
+#endif
+		if ((flash_ctrl->flash_state == MSM_CAMERA_FLASH_OFF) ||
+			(flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)) {
 			rc = flash_ctrl->func_tbl->camera_flash_low(
 				flash_ctrl, flash_data);
+			if (!rc)
+				flash_ctrl->flash_state = MSM_CAMERA_FLASH_LOW;
+		} else {
+			CDBG(pr_fmt("Invalid state : %d\n"),
+				flash_ctrl->flash_state);
+		}
 		break;
 	case CFG_FLASH_HIGH:
+#ifndef ZS550KL
 		//asus bsp ralf:exchange current by dit spec>>
-		if(flash_data  &&  asus_project_id==ASUS_ZE553KL)
+		if (flash_data && asus_project_id != ASUS_ZD552KL_PHOENIX)
 		{
 			temp_current=flash_data->flash_current[0];
 			flash_data->flash_current[0]=flash_data->flash_current[1];
 			flash_data->flash_current[1]=temp_current;
 		}
 		//asus bsp ralf:exchange current by dit spec<<
-		if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)
+#endif
+		if ((flash_ctrl->flash_state == MSM_CAMERA_FLASH_OFF) ||
+			(flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)) {
 			rc = flash_ctrl->func_tbl->camera_flash_high(
 				flash_ctrl, flash_data);
+			if (!rc)
+				flash_ctrl->flash_state = MSM_CAMERA_FLASH_HIGH;
+		} else {
+			CDBG(pr_fmt("Invalid state : %d\n"),
+				flash_ctrl->flash_state);
+		}
 		break;
 	default:
 		rc = -EFAULT;
@@ -1127,9 +1138,11 @@ static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 	/* Read the gpio information from device tree */
 	rc = msm_sensor_driver_get_gpio_data(
 		&(fctrl->power_info.gpio_conf), of_node);
-	if (rc < 0) {
-		pr_err("%s:%d msm_sensor_driver_get_gpio_data failed rc %d\n",
-			__func__, __LINE__, rc);
+	if (-ENODEV == rc) {
+		pr_notice("No valid flash GPIOs data\n");
+		rc = 0;
+	} else if (rc < 0) {
+		pr_err("Error flash GPIOs rc %d\n", rc);
 		return rc;
 	}
 
@@ -1164,13 +1177,13 @@ static long msm_flash_subdev_do_ioctl(
 	sd = vdev_to_v4l2_subdev(vdev);
 	u32 = (struct msm_flash_cfg_data_t32 *)arg;
 
-	flash_data.cfg_type = u32->cfg_type;
-	for (i = 0; i < MAX_LED_TRIGGERS; i++) {
-		flash_data.flash_current[i] = u32->flash_current[i];
-		flash_data.flash_duration[i] = u32->flash_duration[i];
-	}
 	switch (cmd) {
 	case VIDIOC_MSM_FLASH_CFG32:
+		flash_data.cfg_type = u32->cfg_type;
+		for (i = 0; i < MAX_LED_TRIGGERS; i++) {
+			flash_data.flash_current[i] = u32->flash_current[i];
+			flash_data.flash_duration[i] = u32->flash_duration[i];
+		}
 		cmd = VIDIOC_MSM_FLASH_CFG;
 		switch (flash_data.cfg_type) {
 		case CFG_FLASH_OFF:
@@ -1203,6 +1216,9 @@ static long msm_flash_subdev_do_ioctl(
 			break;
 		}
 		break;
+	case VIDIOC_MSM_FLASH_CFG:
+		pr_err("invalid cmd 0x%x received\n", cmd);
+		return -EINVAL;
 	default:
 		return msm_flash_subdev_ioctl(sd, cmd, arg);
 	}

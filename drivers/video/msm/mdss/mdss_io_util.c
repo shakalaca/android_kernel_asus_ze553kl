@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -217,6 +217,51 @@ vreg_get_fail:
 } /* msm_dss_config_vreg */
 EXPORT_SYMBOL(msm_dss_config_vreg);
 
+int msm_dss_config_vreg_opt_mode(struct dss_vreg *in_vreg, int num_vreg,
+				 enum dss_vreg_mode mode)
+{
+	int i = 0, rc = 0;
+
+	if (mode >= DSS_REG_MODE_MAX) {
+		pr_err("%pS->%s: invalid mode %d\n",
+			 __builtin_return_address(0), __func__, mode);
+		rc = -EINVAL;
+		goto error;
+	}
+
+	for (i = 0; i < num_vreg; i++) {
+		rc = PTR_RET(in_vreg[i].vreg);
+		if (rc) {
+			DEV_ERR("%pS->%s: %s regulator error. rc=%d\n",
+				__builtin_return_address(0), __func__,
+				in_vreg[i].vreg_name, rc);
+			goto error;
+		}
+
+		DEV_DBG("%s: Setting optimum mode %d for %s (load=%d)\n",
+			__func__, mode, in_vreg[i].vreg_name,
+			in_vreg[i].load[mode]);
+		rc = regulator_set_optimum_mode(in_vreg[i].vreg,
+					in_vreg[i].load[mode]);
+		if (rc < 0) {
+			DEV_ERR("%pS->%s: %s set opt mode failed. rc=%d\n",
+				__builtin_return_address(0), __func__,
+				in_vreg[i].vreg_name, rc);
+			goto error;
+		} else {
+			/*
+			 * regulator_set_optimum_mode can return non-zero
+			 * value for success. However, this API is expected
+			 * to return 0 for success.
+			 */
+			rc = 0;
+		}
+	}
+
+error:
+	return rc;
+}
+EXPORT_SYMBOL(msm_dss_config_vreg_opt_mode);
 
 int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 {
@@ -237,31 +282,31 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 				usleep_range(in_vreg[i].pre_on_sleep * 1000,
 					in_vreg[i].pre_on_sleep * 1000);
 			rc = regulator_set_optimum_mode(in_vreg[i].vreg,
-				in_vreg[i].enable_load);
+				in_vreg[i].load[DSS_REG_MODE_ENABLE]);
 			if (rc < 0) {
 				DEV_ERR("%pS->%s: %s set opt m fail\n",
 					__builtin_return_address(0), __func__,
 					in_vreg[i].vreg_name);
 				goto vreg_set_opt_mode_fail;
-			}
+			}	
 //<ASUS-BSP Hank2_Liu 20160420> Add Boe panel reset seq setup before +/-5.5v power on ++++++	
-			/*if(!(strcmp(in_vreg[i].vreg_name, "lab")))
+/*			if(!(strcmp(in_vreg[i].vreg_name, "lab")))
 			{
 				if(gdata!=NULL)
 				{
 					if(!regulator_is_enabled(in_vreg[i].vreg)){
 						ret = mdss_dsi_panel_reset(gdata, 1);
 						if (ret) {
-								pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
-								ret = 0;
-							}
+							pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+							ret = 0;
+						}
 						usleep_range(150000,150000);
 					}
 				}else
 				{
 					pr_err("%s: fail!!!!!!\n",__func__);
 				}
-
+			
 			}*/
 //<ASUS-BSP Hank2_Liu 20160420> Add Boe panel reset seq setup before +/-5.5v power on ------	
 			rc = regulator_enable(in_vreg[i].vreg);
@@ -274,6 +319,7 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 					in_vreg[i].vreg_name);
 				goto disable_vreg;
 			}
+			
 		}
 	} else {
 		for (i = num_vreg-1; i >= 0; i--) {
@@ -281,13 +327,15 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 				usleep_range(in_vreg[i].pre_off_sleep * 1000,
 					in_vreg[i].pre_off_sleep * 1000);
 			regulator_set_optimum_mode(in_vreg[i].vreg,
-				in_vreg[i].disable_load);
-
-			/*follow qcom code flow:disable vddio for ASUS_ZD552KL_PHOENIX*/
-			if(!(strcmp(in_vreg[i].vreg_name, "vddio")) && (ASUS_ZD552KL_PHOENIX != asus_project_id) && (ASUS_ZE553KL != asus_project_id)){
+				in_vreg[i].load[DSS_REG_MODE_DISABLE]);
+#ifdef ZS550KL
+			if(!(strcmp(in_vreg[i].vreg_name, "vddio"))){
 				continue;
 			}
-			regulator_disable(in_vreg[i].vreg);
+#endif
+			if (regulator_is_enabled(in_vreg[i].vreg))
+				regulator_disable(in_vreg[i].vreg);
+
 			if (in_vreg[i].post_off_sleep)
 				usleep_range(in_vreg[i].post_off_sleep * 1000,
 					in_vreg[i].post_off_sleep * 1000);
@@ -296,7 +344,8 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 	return rc;
 
 disable_vreg:
-	regulator_set_optimum_mode(in_vreg[i].vreg, in_vreg[i].disable_load);
+	regulator_set_optimum_mode(in_vreg[i].vreg,
+					in_vreg[i].load[DSS_REG_MODE_DISABLE]);
 
 vreg_set_opt_mode_fail:
 	for (i--; i >= 0; i--) {
@@ -304,7 +353,7 @@ vreg_set_opt_mode_fail:
 			usleep_range(in_vreg[i].pre_off_sleep * 1000,
 				in_vreg[i].pre_off_sleep * 1000);
 		regulator_set_optimum_mode(in_vreg[i].vreg,
-			in_vreg[i].disable_load);
+			in_vreg[i].load[DSS_REG_MODE_DISABLE]);
 		regulator_disable(in_vreg[i].vreg);
 		if (in_vreg[i].post_off_sleep)
 			usleep_range(in_vreg[i].post_off_sleep * 1000,

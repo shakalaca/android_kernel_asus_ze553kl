@@ -82,7 +82,8 @@
                 qcom,slave-id = <0x98 0x0328 0x1AD>;
                 compatible = "qcom,ois1";
                 label = "tof";
-                qcom,cci-master = <0>;                
+                qcom,cci-master = <0>;   
+                //clock-names = "cam_src_clk", "cam_clk";             
                 qcom,clock-rates = <19200000 0>;
         };
 
@@ -99,6 +100,9 @@
 		qcom,cam-vreg-max-voltage = <2800000>;
 		qcom,cam-vreg-op-mode = <80000>;
 		
+		clock-names = "cam_src_clk", "cam_clk";
+		clocks = <&clock_gcc clk_mclk0_clk_src>,
+				<&clock_gcc clk_gcc_camss_mclk0_clk>;
 		qcom,clock-rates = <19200000 0>;
 
 		pinctrl-names = "cam_default", "cam_suspend";

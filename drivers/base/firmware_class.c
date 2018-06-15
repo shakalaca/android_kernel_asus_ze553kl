@@ -46,8 +46,6 @@ MODULE_LICENSE("GPL");
 extern struct builtin_fw __start_builtin_fw[];
 extern struct builtin_fw __end_builtin_fw[];
 
-extern int asus_project_id;
-
 static bool fw_get_builtin_firmware(struct firmware *fw, const char *name)
 {
 	struct builtin_fw *b_fw;
@@ -304,7 +302,9 @@ static const char * const fw_path[] = {
 	"/lib/firmware/updates/" UTS_RELEASE,
 	"/lib/firmware/updates",
 	"/lib/firmware/" UTS_RELEASE,
-	"/lib/firmware"
+	"/lib/firmware",
+	"/lib64/firmware",
+	"/lib/firmware/image"
 };
 
 /*
@@ -1947,6 +1947,7 @@ static void __init fw_cache_init(void)
 	register_pm_notifier(&fw_cache.pm_notify);
 
 	register_syscore_ops(&fw_syscore_ops);
+
 
        if(asus_project_id == ASUS_ZS550KL) // Aquarius ZS550KL
        {

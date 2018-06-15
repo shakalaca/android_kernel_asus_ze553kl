@@ -25,6 +25,8 @@
 #include <linux/usb/phy.h>
 #include <linux/usb/msm_hsusb.h>
 
+#include <soc/qcom/scm.h>
+
 /* TCSR_PHY_CLK_SCHEME_SEL bit mask */
 #define PHY_CLK_SCHEME_SEL BIT(0)
 
@@ -63,7 +65,7 @@
 #define FREEZIO_N			BIT(1)
 #define POWER_DOWN			BIT(0)
 
-//#define QUSB2PHY_PORT_TEST_CTRL		0xB8
+#define QUSB2PHY_PORT_TEST_CTRL		0xB8
 
 #define QUSB2PHY_PORT_UTMI_CTRL1	0xC0
 #define SUSPEND_N			BIT(5)
@@ -101,9 +103,6 @@
 #define LINESTATE_DP			BIT(0)
 #define LINESTATE_DM			BIT(1)
 
-#define HS_PHY_CTRL_REG			0x10
-#define UTMI_OTG_VBUS_VALID             BIT(20)
-#define SW_SESSVLD_SEL                  BIT(28)
 
 #define QUSB2PHY_1P8_VOL_MIN           1800000 /* uV */
 #define QUSB2PHY_1P8_VOL_MAX           1800000 /* uV */
@@ -114,6 +113,8 @@
 #define QUSB2PHY_3P3_HPM_LOAD		30000	/* uA */
 
 #define QUSB2PHY_REFCLK_ENABLE		BIT(0)
+
+#define QUSB2PHY_LVL_SHIFTER_CMD_ID	0x1B
 
 unsigned int tune1;
 module_param(tune1, uint, S_IRUGO | S_IWUSR);
@@ -134,7 +135,6 @@ MODULE_PARM_DESC(tune4, "QUSB PHY TUNE4");
 struct qusb_phy {
 	struct usb_phy		phy;
 	void __iomem		*base;
-	void __iomem		*qscratch_base;
 	void __iomem		*tune2_efuse_reg;
 	void __iomem		*ref_clk_base;
 	void __iomem		*tcsr_phy_clk_scheme_sel;
@@ -182,7 +182,40 @@ struct qusb_phy {
 	int			emu_dcm_reset_seq_len;
 	spinlock_t		pulse_lock;
 	bool			put_into_high_z_state;
+	bool			scm_lvl_shifter_update;
 };
+
+static void qusb_phy_update_tcsr_level_shifter(struct qusb_phy *qphy, u32 val)
+{
+	int scm_ret, resp_ret = 0;
+	int dummy = 0;
+
+	dev_dbg(qphy->phy.dev, "%s(): update tcsr lvl shift value:%d\n",
+				__func__, val);
+	if (qphy->tcsr_phy_lvl_shift_keeper)
+		writel_relaxed(val, qphy->tcsr_phy_lvl_shift_keeper);
+
+	else if (qphy->scm_lvl_shifter_update) {
+		if (!is_scm_armv8()) {
+			scm_ret = scm_call(SCM_SVC_BOOT,
+					QUSB2PHY_LVL_SHIFTER_CMD_ID, &val,
+					sizeof(val), &resp_ret,
+					sizeof(resp_ret));
+		} else {
+			struct scm_desc desc = {0};
+
+			desc.arginfo = SCM_ARGS(2);
+			desc.args[0] = val;
+			desc.args[1] = dummy;
+
+			scm_ret = scm_call2(SCM_SIP_FNID(SCM_SVC_BOOT,
+					QUSB2PHY_LVL_SHIFTER_CMD_ID),
+					&desc);
+		}
+		dev_dbg(qphy->phy.dev, "%s(): scm_ret:%d resp_ret:%d\n",
+				__func__, scm_ret, resp_ret);
+	}
+}
 
 static void qusb_phy_enable_clocks(struct qusb_phy *qphy, bool on)
 {
@@ -427,10 +460,7 @@ static int qusb_phy_update_dpdm(struct usb_phy *phy, int value)
 			}
 
 			if (qphy->put_into_high_z_state) {
-				if (qphy->tcsr_phy_lvl_shift_keeper)
-					writel_relaxed(0x1,
-					       qphy->tcsr_phy_lvl_shift_keeper);
-
+				qusb_phy_update_tcsr_level_shifter(qphy, 0x1);
 				qusb_phy_gdsc(qphy, true);
 				qusb_phy_enable_clocks(qphy, true);
 
@@ -502,9 +532,7 @@ static int qusb_phy_update_dpdm(struct usb_phy *phy, int value)
 			}
 
 			if (!qphy->cable_connected) {
-				if (qphy->tcsr_phy_lvl_shift_keeper)
-					writel_relaxed(0x0,
-					       qphy->tcsr_phy_lvl_shift_keeper);
+				qusb_phy_update_tcsr_level_shifter(qphy, 0x0);
 				dev_dbg(phy->dev, "turn off for HVDCP case\n");
 				ret = qusb_phy_enable_power(qphy, false);
 			}
@@ -1038,26 +1066,22 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 			writel_relaxed(intr_mask,
 				qphy->base + QUSB2PHY_PORT_INTR_CTRL);
 
-/* <ASUS-Lotta_Lu-20170515>
-	Some OTG Mouse connect with devices may have a short DP drop and up (remote wakeup signal)
-	after device side drive it high , so it could affect the mouse enumeration.
-	The remote wakeup signal causes auto resume mechanism.
-	
-			// enable phy auto-resume
-			writel_relaxed(0x0C,
+			if (linestate & (LINESTATE_DP | LINESTATE_DM)) {
+				/* enable phy auto-resume */
+				writel_relaxed(0x0C,
 					qphy->base + QUSB2PHY_PORT_TEST_CTRL);
-			// flush the previous write before next write 
-			wmb();
-			writel_relaxed(0x04,
-				qphy->base + QUSB2PHY_PORT_TEST_CTRL);
+				/* flush the previous write before next write */
+				wmb();
+				writel_relaxed(0x04,
+					qphy->base + QUSB2PHY_PORT_TEST_CTRL);
+			}
 
 
 			dev_dbg(phy->dev, "%s: intr_mask = %x\n",
-			__func__, intr_mask);
+				__func__, intr_mask);
 
-			// Makes sure that above write goes through
+			/* Makes sure that above write goes through */
 			wmb();
-*/
 
 			qusb_phy_enable_clocks(qphy, false);
 		} else { /* Disconnect case */
@@ -1069,9 +1093,7 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 			wmb();
 
 			qusb_phy_enable_clocks(qphy, false);
-			if (qphy->tcsr_phy_lvl_shift_keeper)
-				writel_relaxed(0x0,
-					qphy->tcsr_phy_lvl_shift_keeper);
+			qusb_phy_update_tcsr_level_shifter(qphy, 0x0);
 			/* Do not disable power rails if there is vote for it */
 			if (!qphy->rm_pulldown)
 				qusb_phy_enable_power(qphy, false);
@@ -1098,33 +1120,13 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 				qphy->base + QUSB2PHY_PORT_INTR_CTRL);
 		} else {
 			qusb_phy_enable_power(qphy, true);
-			if (qphy->tcsr_phy_lvl_shift_keeper)
-				writel_relaxed(0x1,
-					qphy->tcsr_phy_lvl_shift_keeper);
+			qusb_phy_update_tcsr_level_shifter(qphy, 0x1);
 			qusb_phy_enable_clocks(qphy, true);
 		}
 		qphy->suspended = false;
 	}
 
 	return 0;
-}
-
-static void qusb_write_readback(void *base, u32 offset,
-					const u32 mask, u32 val)
-{
-	u32 write_val, tmp = readl_relaxed(base + offset);
-	tmp &= ~mask; /* retain other bits */
-	write_val = tmp | val;
-
-	writel_relaxed(write_val, base + offset);
-
-	/* Read back to see if val was written */
-	tmp = readl_relaxed(base + offset);
-	tmp &= mask; /* clear other bits */
-
-	if (tmp != val)
-		pr_err("%s: write: %x to QSCRATCH: %x FAILED\n",
-			__func__, val, offset);
 }
 
 static int qusb_phy_notify_connect(struct usb_phy *phy,
@@ -1134,18 +1136,8 @@ static int qusb_phy_notify_connect(struct usb_phy *phy,
 
 	qphy->cable_connected = true;
 
-	dev_dbg(phy->dev, " cable_connected=%d\n", qphy->cable_connected);
-
-	/* Set OTG VBUS Valid from HSPHY to controller */
-	qusb_write_readback(qphy->qscratch_base, HS_PHY_CTRL_REG,
-				UTMI_OTG_VBUS_VALID,
-				UTMI_OTG_VBUS_VALID);
-
-	/* Indicate value is driven by UTMI_OTG_VBUS_VALID bit */
-	qusb_write_readback(qphy->qscratch_base, HS_PHY_CTRL_REG,
-				SW_SESSVLD_SEL, SW_SESSVLD_SEL);
-
-	dev_dbg(phy->dev, "QUSB2 phy connect notification\n");
+	dev_dbg(phy->dev, "QUSB PHY: connect notification cable_connected=%d\n",
+							qphy->cable_connected);
 	return 0;
 }
 
@@ -1156,17 +1148,8 @@ static int qusb_phy_notify_disconnect(struct usb_phy *phy,
 
 	qphy->cable_connected = false;
 
-	dev_dbg(phy->dev, " cable_connected=%d\n", qphy->cable_connected);
-
-	/* Set OTG VBUS Valid from HSPHY to controller */
-	qusb_write_readback(qphy->qscratch_base, HS_PHY_CTRL_REG,
-				UTMI_OTG_VBUS_VALID, 0);
-
-	/* Indicate value is driven by UTMI_OTG_VBUS_VALID bit */
-	qusb_write_readback(qphy->qscratch_base, HS_PHY_CTRL_REG,
-				SW_SESSVLD_SEL, 0);
-
-	dev_dbg(phy->dev, "QUSB2 phy disconnect notification\n");
+	dev_dbg(phy->dev, "QUSB PHY: connect notification cable_connected=%d\n",
+							qphy->cable_connected);
 	return 0;
 }
 
@@ -1191,16 +1174,6 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	qphy->base = devm_ioremap_resource(dev, res);
 	if (IS_ERR(qphy->base))
 		return PTR_ERR(qphy->base);
-
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
-							"qscratch_base");
-	if (res) {
-		qphy->qscratch_base = devm_ioremap_resource(dev, res);
-		if (IS_ERR(qphy->qscratch_base)) {
-			dev_dbg(dev, "couldn't ioremap qscratch_base\n");
-			qphy->qscratch_base = NULL;
-		}
-	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 							"emu_phy_base");
@@ -1265,6 +1238,9 @@ static int qusb_phy_probe(struct platform_device *pdev)
 			qphy->tcsr_phy_lvl_shift_keeper = NULL;
 		}
 	}
+
+	qphy->scm_lvl_shifter_update = of_property_read_bool(dev->of_node,
+					"qcom,secure-level-shifter-update");
 
 	qphy->dpdm_pulsing_enabled = of_property_read_bool(dev->of_node,
 					"qcom,enable-dpdm-pulsing");
@@ -1380,8 +1356,52 @@ static int qusb_phy_probe(struct platform_device *pdev)
 			dev_dbg(dev, "error allocating memory for emu_dcm_reset_seq\n");
 		}
 	}
+#ifdef ZS550KL
+	of_get_property(dev->of_node, "qcom,qusb-phy-init-seq", &size);
+	if (size) {
+		qphy->qusb_phy_init_seq = devm_kzalloc(dev,
+						size, GFP_KERNEL);
+		if (qphy->qusb_phy_init_seq) {
+			qphy->init_seq_len =
+				(size / sizeof(*qphy->qusb_phy_init_seq));
+			if (qphy->init_seq_len % 2) {
+				dev_err(dev, "invalid init_seq_len\n");
+				return -EINVAL;
+			}
 
-	switch (asus_rf_id)
+			of_property_read_u32_array(dev->of_node,
+				"qcom,qusb-phy-init-seq",
+				qphy->qusb_phy_init_seq,
+				qphy->init_seq_len);
+		} else {
+			dev_err(dev, "error allocating memory for phy_init_seq\n");
+		}
+	}
+
+	// ASUS_BSP "Support using different set of PHY parameters for USB Host"
+	of_get_property(dev->of_node, "qcom,qusb-phy-init-seq-host", &size);
+	if (size) {
+		qphy->qusb_phy_init_seq_host = devm_kzalloc(dev,
+						size, GFP_KERNEL);
+		if (qphy->qusb_phy_init_seq_host) {
+			qphy->init_seq_len_host =
+				(size / sizeof(*qphy->qusb_phy_init_seq_host));
+			if (qphy->init_seq_len_host % 2) {
+				dev_err(dev, "invalid init_seq_len_host\n");
+				return -EINVAL;
+			}
+
+			of_property_read_u32_array(dev->of_node,
+				"qcom,qusb-phy-init-seq-host",
+				qphy->qusb_phy_init_seq_host,
+				qphy->init_seq_len_host);
+		} else {
+			dev_err(dev, "error allocating memory for phy_init_seq_host\n");
+		}
+	}
+#endif
+#ifdef ZE553KL
+		switch (asus_rf_id)
 	{
 		case ASUS_WW_HADES:
 		case ASUS_ID_IN:
@@ -1398,7 +1418,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 						dev_err(dev, "invalid init_seq_len\n");
 						return -EINVAL;
 					}
-			
+
 					of_property_read_u32_array(dev->of_node,
 						"qcom,qusb-phy-init-seq-noca-device",
 						qphy->qusb_phy_init_seq,
@@ -1407,7 +1427,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 					dev_err(dev, "error allocating memory for phy_init_seq\n");
 				}
 			}
-			
+
 			// ASUS_BSP "Support using different set of PHY parameters for USB Host"
 			of_get_property(dev->of_node, "qcom,qusb-phy-init-seq-noca-host", &size);
 			if (size) {
@@ -1420,7 +1440,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 						dev_err(dev, "invalid init_seq_len_host\n");
 						return -EINVAL;
 					}
-			
+
 					of_property_read_u32_array(dev->of_node,
 						"qcom,qusb-phy-init-seq-noca-host",
 						qphy->qusb_phy_init_seq_host,
@@ -1444,7 +1464,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 						dev_err(dev, "invalid init_seq_len\n");
 						return -EINVAL;
 					}
-			
+
 					of_property_read_u32_array(dev->of_node,
 						"qcom,qusb-phy-init-seq-ca-device",
 						qphy->qusb_phy_init_seq,
@@ -1453,7 +1473,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 					dev_err(dev, "error allocating memory for phy_init_seq\n");
 				}
 			}
-			
+
 			// ASUS_BSP "Support using different set of PHY parameters for USB Host"
 			of_get_property(dev->of_node, "qcom,qusb-phy-init-seq-ca-host", &size);
 			if (size) {
@@ -1466,7 +1486,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 						dev_err(dev, "invalid init_seq_len_host\n");
 						return -EINVAL;
 					}
-			
+
 					of_property_read_u32_array(dev->of_node,
 						"qcom,qusb-phy-init-seq-ca-host",
 						qphy->qusb_phy_init_seq_host,
@@ -1480,9 +1500,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 			dev_dbg(dev, "asus_rf_id is %d , None this USB init seq\n",asus_rf_id);
 			break;
 	}
-	
-
-
+#endif
 	qphy->ulpi_mode = false;
 	ret = of_property_read_string(dev->of_node, "phy_type", &phy_type);
 
@@ -1530,11 +1548,8 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	qphy->phy.change_dpdm		= qusb_phy_update_dpdm;
 	qphy->phy.type			= USB_PHY_TYPE_USB2;
 	qphy->phy.dpdm_with_idp_src	= qusb_phy_linestate_with_idp_src;
-
-	if (qphy->qscratch_base) {
-		qphy->phy.notify_connect        = qusb_phy_notify_connect;
-		qphy->phy.notify_disconnect     = qusb_phy_notify_disconnect;
-	}
+	qphy->phy.notify_connect        = qusb_phy_notify_connect;
+	qphy->phy.notify_disconnect     = qusb_phy_notify_disconnect;
 
 	/*
 	 * On some platforms multiple QUSB PHYs are available. If QUSB PHY is

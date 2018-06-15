@@ -26,9 +26,10 @@
 #include <linux/power_supply.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/qpnp/qpnp-revid.h>
-#include "leds.h"
+#include <linux/leds-qpnp-flash.h>
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
+#include "leds.h"
 
 #define FLASH_LED_PERIPHERAL_SUBTYPE(base)			(base + 0x05)
 #define FLASH_SAFETY_TIMER(base)				(base + 0x40)
@@ -79,6 +80,7 @@
 #define FLASH_LED_HDRM_SNS_ENABLE_MASK				0x81
 #define	FLASH_MASK_MODULE_CONTRL_MASK				0xE0
 #define FLASH_FOLLOW_OTST2_RB_MASK				0x08
+#define FLASH_PREPARE_OPTIONS_MASK				0x07
 
 #define FLASH_LED_TRIGGER_DEFAULT				"none"
 #define FLASH_LED_HEADROOM_DEFAULT_MV				500
@@ -188,6 +190,7 @@ struct flash_node_data {
 	u8				trigger;
 	u8				enable;
 	u8				num_regulators;
+	bool				regulators_on;
 	bool				flash_on;
 };
 
@@ -222,11 +225,13 @@ struct flash_led_platform_data {
 };
 
 struct qpnp_flash_led_buffer {
-	struct mutex debugfs_lock; /* Prevent thread concurrency */
-	size_t rpos;
-	size_t wpos;
-	size_t len;
-	char data[0];
+	struct		mutex debugfs_lock; /* Prevent thread concurrency */
+	size_t		rpos;
+	size_t		wpos;
+	size_t		len;
+	struct		qpnp_flash_led *led;
+	u32		buffer_cnt;
+	char		data[0];
 };
 
 /*
@@ -244,10 +249,8 @@ struct qpnp_flash_led {
 	struct workqueue_struct		*ordered_workq;
 	struct qpnp_vadc_chip		*vadc_dev;
 	struct mutex			flash_led_lock;
-	struct qpnp_flash_led_buffer	*log;
 	struct dentry			*dbgfs_root;
 	int				num_leds;
-	u32				buffer_cnt;
 	u16				base;
 	u16				current_addr;
 	u16				current2_addr;
@@ -279,10 +282,10 @@ static int flash_led_dbgfs_file_open(struct qpnp_flash_led *led,
 	log->wpos = 0;
 	log->len = logbufsize - sizeof(*log);
 	mutex_init(&log->debugfs_lock);
-	led->log = log;
+	log->led = led;
 
-	led->buffer_cnt = 1;
-	file->private_data = led;
+	log->buffer_cnt = 1;
+	file->private_data = log;
 
 	return 0;
 }
@@ -296,12 +299,12 @@ static int flash_led_dfs_open(struct inode *inode, struct file *file)
 
 static int flash_led_dfs_close(struct inode *inode, struct file *file)
 {
-	struct qpnp_flash_led *led = file->private_data;
+	struct qpnp_flash_led_buffer *log = file->private_data;
 
-	if (led && led->log) {
+	if (log) {
 		file->private_data = NULL;
-		mutex_destroy(&led->log->debugfs_lock);
-		kfree(led->log);
+		mutex_destroy(&log->debugfs_lock);
+		kfree(log);
 	}
 
 	return 0;
@@ -330,15 +333,21 @@ static int print_to_log(struct qpnp_flash_led_buffer *log,
 
 static ssize_t flash_led_dfs_latched_reg_read(struct file *fp, char __user *buf,
 					size_t count, loff_t *ppos) {
-	struct qpnp_flash_led *led = fp->private_data;
-	struct qpnp_flash_led_buffer *log = led->log;
+	struct qpnp_flash_led_buffer *log = fp->private_data;
+	struct qpnp_flash_led *led;
 	u8 val;
 	int rc = 0;
 	size_t len;
 	size_t ret;
 
+	if (!log) {
+		pr_err("error: file private data is NULL\n");
+		return -EFAULT;
+	}
+	led = log->led;
+
 	mutex_lock(&log->debugfs_lock);
-	if ((log->rpos >= log->wpos && led->buffer_cnt == 0) ||
+	if ((log->rpos >= log->wpos && log->buffer_cnt == 0) ||
 			((log->len - log->wpos) < MIN_BUFFER_WRITE_LEN))
 		goto unlock_mutex;
 
@@ -350,7 +359,7 @@ static ssize_t flash_led_dfs_latched_reg_read(struct file *fp, char __user *buf,
 				INT_LATCHED_STS(led->base), rc);
 		goto unlock_mutex;
 	}
-	led->buffer_cnt--;
+	log->buffer_cnt--;
 
 	rc = print_to_log(log, "0x%05X ", INT_LATCHED_STS(led->base));
 	if (rc == 0)
@@ -385,18 +394,24 @@ unlock_mutex:
 
 static ssize_t flash_led_dfs_fault_reg_read(struct file *fp, char __user *buf,
 					size_t count, loff_t *ppos) {
-	struct qpnp_flash_led *led = fp->private_data;
-	struct qpnp_flash_led_buffer *log = led->log;
+	struct qpnp_flash_led_buffer *log = fp->private_data;
+	struct qpnp_flash_led *led;
 	int rc = 0;
 	size_t len;
 	size_t ret;
 
+	if (!log) {
+		pr_err("error: file private data is NULL\n");
+		return -EFAULT;
+	}
+	led = log->led;
+
 	mutex_lock(&log->debugfs_lock);
-	if ((log->rpos >= log->wpos && led->buffer_cnt == 0) ||
+	if ((log->rpos >= log->wpos && log->buffer_cnt == 0) ||
 			((log->len - log->wpos) < MIN_BUFFER_WRITE_LEN))
 		goto unlock_mutex;
 
-	led->buffer_cnt--;
+	log->buffer_cnt--;
 
 	rc = print_to_log(log, "0x%05X ", FLASH_LED_FAULT_STATUS(led->base));
 	if (rc == 0)
@@ -438,10 +453,17 @@ static ssize_t flash_led_dfs_fault_reg_enable(struct file *file,
 	int data;
 	size_t ret = 0;
 
-	struct qpnp_flash_led *led = file->private_data;
+	struct qpnp_flash_led_buffer *log = file->private_data;
+	struct qpnp_flash_led *led;
 	char *kbuf;
 
-	mutex_lock(&led->log->debugfs_lock);
+	if (!log) {
+		pr_err("error: file private data is NULL\n");
+		return -EFAULT;
+	}
+	led = log->led;
+
+	mutex_lock(&log->debugfs_lock);
 	kbuf = kmalloc(count + 1, GFP_KERNEL);
 	if (!kbuf) {
 		ret = -ENOMEM;
@@ -476,7 +498,7 @@ static ssize_t flash_led_dfs_fault_reg_enable(struct file *file,
 free_buf:
 	kfree(kbuf);
 unlock_mutex:
-	mutex_unlock(&led->log->debugfs_lock);
+	mutex_unlock(&log->debugfs_lock);
 	return ret;
 }
 
@@ -488,10 +510,17 @@ static ssize_t flash_led_dfs_dbg_enable(struct file *file,
 	int cnt = 0;
 	int data;
 	size_t ret = 0;
-	struct qpnp_flash_led *led = file->private_data;
+	struct qpnp_flash_led_buffer *log = file->private_data;
+	struct qpnp_flash_led *led;
 	char *kbuf;
 
-	mutex_lock(&led->log->debugfs_lock);
+	if (!log) {
+		pr_err("error: file private data is NULL\n");
+		return -EFAULT;
+	}
+	led = log->led;
+
+	mutex_lock(&log->debugfs_lock);
 	kbuf = kmalloc(count + 1, GFP_KERNEL);
 	if (!kbuf) {
 		ret = -ENOMEM;
@@ -525,7 +554,7 @@ static ssize_t flash_led_dfs_dbg_enable(struct file *file,
 free_buf:
 	kfree(kbuf);
 unlock_mutex:
-	mutex_unlock(&led->log->debugfs_lock);
+	mutex_unlock(&log->debugfs_lock);
 	return ret;
 }
 
@@ -1182,6 +1211,9 @@ static int flash_regulator_enable(struct qpnp_flash_led *led,
 {
 	int i, rc = 0;
 
+	if (flash_node->regulators_on == on)
+		return 0;
+
 	if (on == false) {
 		i = flash_node->num_regulators;
 		goto error_regulator_enable;
@@ -1196,12 +1228,71 @@ static int flash_regulator_enable(struct qpnp_flash_led *led,
 		}
 	}
 
+	flash_node->regulators_on = true;
 	return rc;
 
 error_regulator_enable:
 	while (i--)
 		regulator_disable(flash_node->reg_data[i].regs);
 
+	flash_node->regulators_on = false;
+	return rc;
+}
+
+int qpnp_flash_led_prepare(struct led_trigger *trig, int options,
+					int *max_current)
+{
+	struct led_classdev *led_cdev = trigger_to_lcdev(trig);
+	struct flash_node_data *flash_node;
+	struct qpnp_flash_led *led;
+	int rc;
+
+	if (!led_cdev) {
+		pr_err("Invalid led_trigger provided\n");
+		return -EINVAL;
+	}
+
+	flash_node = container_of(led_cdev, struct flash_node_data, cdev);
+	led = dev_get_drvdata(&flash_node->spmi_dev->dev);
+
+	if (!(options & FLASH_PREPARE_OPTIONS_MASK)) {
+		dev_err(&led->spmi_dev->dev, "Invalid options %d\n", options);
+		return -EINVAL;
+	}
+
+	mutex_lock(&led->flash_led_lock);
+
+	if (options & ENABLE_REGULATOR) {
+		rc = flash_regulator_enable(led, flash_node, true);
+		if (rc < 0) {
+			dev_err(&led->spmi_dev->dev,
+				"enable regulator failed, rc=%d\n", rc);
+			goto out;
+		}
+	}
+
+	if (options & DISABLE_REGULATOR) {
+		rc = flash_regulator_enable(led, flash_node, false);
+		if (rc < 0) {
+			dev_err(&led->spmi_dev->dev,
+				"disable regulator failed, rc=%d\n", rc);
+			goto out;
+		}
+	}
+
+	if (options & QUERY_MAX_CURRENT) {
+		rc = qpnp_flash_led_get_max_avail_current(flash_node, led);
+		if (rc < 0) {
+			dev_err(&led->spmi_dev->dev,
+				"query max current failed, rc=%d\n", rc);
+			goto out;
+		}
+		*max_current = rc;
+		rc = 0;
+	}
+
+out:
+	mutex_unlock(&led->flash_led_lock);
 	return rc;
 }
 
@@ -1307,9 +1398,22 @@ static void qpnp_flash_led_work(struct work_struct *work)
 		}
 
 		if (flash_node->id == FLASH_LED_SWITCH) {
+		#if 0
 			val = (u8)(flash_node->prgm_current *
 						FLASH_TORCH_MAX_LEVEL
 						/ flash_node->max_current);
+		#else
+			if(flash_node->prgm_current >= FLASH_LED_MIN_CURRENT_MA)
+				val = (flash_node->prgm_current*(FLASH_TORCH_MAX_LEVEL+1)/flash_node->max_current)-1;
+			else
+				val = 0;
+		#endif
+			pr_debug("sz_cam_flash, Torch set current1 %d mA, max current %d mA, Max level %d, convert level %d\n",
+				flash_node->prgm_current,
+				flash_node->max_current,
+				FLASH_TORCH_MAX_LEVEL,
+				val
+			);
 			rc = qpnp_led_masked_write(led->spmi_dev,
 						led->current_addr,
 						FLASH_CURRENT_MASK, val);
@@ -1318,10 +1422,22 @@ static void qpnp_flash_led_work(struct work_struct *work)
 					"Torch reg write failed\n");
 				goto exit_flash_led_work;
 			}
-
+		#if 0
 			val = (u8)(flash_node->prgm_current2 *
 						FLASH_TORCH_MAX_LEVEL
 						/ flash_node->max_current);
+		#else
+			if(flash_node->prgm_current2 >= FLASH_LED_MIN_CURRENT_MA)
+				val = (flash_node->prgm_current2*(FLASH_TORCH_MAX_LEVEL+1)/flash_node->max_current)-1;
+			else
+				val = 0;
+		#endif
+			pr_debug("sz_cam_flash, Torch set current2 %d mA, max current %d mA, Max level %d, convert level %d\n",
+				flash_node->prgm_current2,
+				flash_node->max_current,
+				FLASH_TORCH_MAX_LEVEL,
+				val
+			);
 			rc = qpnp_led_masked_write(led->spmi_dev,
 					led->current2_addr,
 					FLASH_CURRENT_MASK, val);
@@ -1503,9 +1619,21 @@ static void qpnp_flash_led_work(struct work_struct *work)
 					(flash_node->prgm_current2 *
 					max_curr_avail_ma) / total_curr_ma;
 			}
-
+		#if 0
 			val = (u8)(flash_node->prgm_current *
 				FLASH_MAX_LEVEL / flash_node->max_current);
+		#else
+			if(flash_node->prgm_current >= FLASH_LED_MIN_CURRENT_MA)
+				val = (flash_node->prgm_current*(FLASH_MAX_LEVEL+1)/flash_node->max_current)-1;
+			else
+				val = 0;
+		#endif
+			pr_debug("sz_cam_flash, Flash set current1 %d mA, max current %d mA, Max level %d, convert level %d\n",
+				flash_node->prgm_current,
+				flash_node->max_current,
+				FLASH_MAX_LEVEL,
+				val
+			);
 			rc = qpnp_led_masked_write(led->spmi_dev,
 				led->current_addr, FLASH_CURRENT_MASK, val);
 			if (rc) {
@@ -1513,9 +1641,21 @@ static void qpnp_flash_led_work(struct work_struct *work)
 					"Current register write failed\n");
 				goto exit_flash_led_work;
 			}
-
+		#if 0
 			val = (u8)(flash_node->prgm_current2 *
 				FLASH_MAX_LEVEL / flash_node->max_current);
+		#else
+			if(flash_node->prgm_current2 >= FLASH_LED_MIN_CURRENT_MA)
+				val = (flash_node->prgm_current2*(FLASH_MAX_LEVEL+1)/flash_node->max_current)-1;
+			else
+				val = 0;
+		#endif
+			pr_debug("sz_cam_flash, Flash set current2 %d mA, max current %d mA, Max level %d, convert level %d\n",
+				flash_node->prgm_current2,
+				flash_node->max_current,
+				FLASH_MAX_LEVEL,
+				val
+			);
 			rc = qpnp_led_masked_write(led->spmi_dev,
 				led->current2_addr, FLASH_CURRENT_MASK, val);
 			if (rc) {

@@ -490,14 +490,15 @@ static void android_work(struct work_struct *data)
 		}
 		pr_info("%s: sent uevent %s\n", __func__, uevent_envp[0]);
 	} else {
-		pr_info("%s: did not send uevent (%d %d %p)\n", __func__,
+		pr_info("%s: did not send uevent (%d %d %pK)\n", __func__,
 			 dev->connected, dev->sw_connected, cdev->config);
 	}
 }
 
 #define MIN_DISCONNECT_DELAY_MS	30
-
+#ifdef ZS550KL
 extern void dpNotify(void);
+#endif
 static int android_enable(struct android_dev *dev)
 {
 	struct usb_composite_dev *cdev = dev->cdev;
@@ -536,7 +537,9 @@ static int android_enable(struct android_dev *dev)
 		else
 			pr_debug("defer gadget connect until usersapce opens video device\n");
 	}
+#ifdef ZS550KL
 	dpNotify();
+#endif
 	return err;
 }
 
@@ -2123,6 +2126,7 @@ static int serial_function_bind_config(struct android_usb_function *f,
 	err = gport_setup(c);
 	if (err) {
 		pr_err("serial: Cannot setup transports");
+		gserial_deinit_port();
 		goto out;
 	}
 
@@ -2791,7 +2795,7 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	struct mass_storage_function_config *config;
 	struct fsg_opts *fsg_opts;
 	struct fsg_config m_config;
-	int ret;
+	int ret, i;
 
 	pr_debug("%s(): Inside\n", __func__);
 	config = kzalloc(sizeof(struct mass_storage_function_config),
@@ -2807,6 +2811,8 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	}
 
 	fsg_mod_data.removable[0] = true;
+	fsg_mod_data.cdrom[0] = true;
+	fsg_mod_data.ro[0] = true;
 	fsg_config_from_params(&m_config, &fsg_mod_data, fsg_num_buffers);
 	fsg_opts = fsg_opts_from_func_inst(config->f_ms_inst);
 	ret = fsg_common_set_num_buffers(fsg_opts->common, fsg_num_buffers);
@@ -2839,9 +2845,10 @@ static int mass_storage_function_init(struct android_usb_function *f,
 		goto err_create_luns;
 	}
 
-	/* use default one currently */
-	fsg_common_set_inquiry_string(fsg_opts->common, m_config.vendor_name,
-							m_config.product_name);
+	i = get_default_bcdDevice();
+	snprintf(config->inquiry_string, sizeof(config->inquiry_string),
+			"%-16s%-16s%04x", m_config.vendor_name ?: "ASUS android",
+			m_config.product_name ?: "Device CD-ROM", i);
 
 	ret = fsg_sysfs_update(fsg_opts->common, f->dev, true);
 	if (ret)
@@ -4244,7 +4251,7 @@ static int usb_diag_update_pid_and_serial_num(u32 pid, const char *snum)
 		return -ENODEV;
 	}
 
-	pr_debug("%s: dload:%p pid:%x serial_num:%s\n",
+	pr_debug("%s: dload:%pK pid:%x serial_num:%s\n",
 				__func__, diag_dload, pid, snum);
 
 	/* update pid */

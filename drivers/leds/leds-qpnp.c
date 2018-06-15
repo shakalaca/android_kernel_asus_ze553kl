@@ -874,7 +874,6 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 	int rc;
 	u8 val;
 	int duty_us, duty_ns, period_us;
-
 	if((global_brightness == led->cdev.brightness) && !strcmp(global_name,led->cdev.name)){
 		printk("[LED] %s skip!\n", __func__);
 		return 0;
@@ -1842,29 +1841,12 @@ void set_button_backlight(bool status)
 	if(status)
 	{
 		printk("[LED] : Virtual Key LED ON\n");
-//<ASUS-BSP Robert_He 20170411> fix nullpointer in SR for there is no led in dtsi  ++++++
-
-		if (copy_led != NULL)
-		{
-			qpnp_led_set(&copy_led->cdev,LED_FULL);
-		}
-		else
-		{
-			printk("[LED]:led point is null, can not set button backlight on\n");
-		}
+		qpnp_led_set(&copy_led->cdev,LED_FULL);
 	}
 	else
 	{
 		printk("[LED] : Virtual Key LED OFF\n");
-		if (copy_led != NULL)
-		{
-			qpnp_led_set(&copy_led->cdev,LED_OFF);
-		}
-		else
-		{
-			printk("[LED]:led point is null, can not set button backlight off\n");
-		}
-//<ASUS-BSP Robert_He 20170411> fix nullpointer in SR for there is no led in dtsi  ------			
+		qpnp_led_set(&copy_led->cdev,LED_OFF);
 	}
 }
 EXPORT_SYMBOL_GPL(set_button_backlight);
@@ -1938,7 +1920,7 @@ static void qpnp_led_work(struct work_struct *work)
 	if(led->id==QPNP_ID_LED_MPP)
 		mutex_lock(&green_red_lock);
 	pr_debug("[LED] %s lock\n", led->cdev.name);
-
+	
 	__qpnp_led_work(led, led->cdev.brightness);
 
 	if(led->id==QPNP_ID_LED_MPP)

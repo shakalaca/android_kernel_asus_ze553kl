@@ -40,7 +40,7 @@
 #include <linux/gpio.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
-#include <linux/input/synaptics_dsx.h>
+#include <linux/input/synaptics_dsx_ze553kl.h>
 #include "synaptics_dsx_core.h"
 #include <linux/i2c.h>
 #ifdef KERNEL_ABOVE_2_6_38
@@ -6201,9 +6201,6 @@ static struct platform_driver synaptics_rmi4_driver = {
 	.remove = synaptics_rmi4_remove,
 };
 
-//<ASUS-BSP Robert_He 20170330> add project_id and lcd_id to choose touch ++++++
-extern int asus_lcd_id;
-//<ASUS-BSP Robert_He 20170330> add project_id and lcd_id to choose touch ------
 static int __init synaptics_rmi4_init(void)
 {
 	int retval;
@@ -6213,14 +6210,6 @@ static int __init synaptics_rmi4_init(void)
 	//	printk("[Power] %s: skip this driver in charger mode\n", __func__);
 	//	return 0;
 	//}
-//<ASUS-BSP Robert_He 20170330> add project_id and lcd_id to choose touch ++++++
-       if (ASUS_ZD552KL_PHOENIX == asus_project_id)
-       {
-               if (asus_lcd_id == 0)
-                       return 0;
-       }
-//<ASUS-BSP Robert_He 20170330> add project_id and lcd_id to choose touch ------
-
 	retval = synaptics_rmi4_bus_init();
 	if (retval)
 		return retval;

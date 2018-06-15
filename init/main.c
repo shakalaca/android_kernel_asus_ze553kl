@@ -85,21 +85,20 @@
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
 
-#include <linux/gpio.h>
-extern int g_gpio_audio_debug;
-
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/smp.h>
 #endif
+
+//ASUS BSP ++++
+#include <linux/gpio.h>
+extern int g_gpio_audio_debug;
+//ASUS BSP ++
 
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
 extern void fork_init(unsigned long);
 extern void radix_tree_init(void);
-#ifndef CONFIG_DEBUG_RODATA
-static inline void mark_rodata_ro(void) { }
-#endif
 
 /*
  * Debug helper: via this flag we know that we are in 'early bootup code'
@@ -164,7 +163,6 @@ static int set_project_id(char *str)
 }
 __setup("PRJ_ID=",set_project_id);
 
-#ifdef ZE553KL
 int asus_fp_id = 0;
 EXPORT_SYMBOL(asus_fp_id);
 
@@ -193,7 +191,6 @@ static int set_asus_fp_id(char *str)
 	return 0;
 }
 __setup("ASUS_FP_ID=",set_asus_fp_id);
-#endif
 
 int asus_hw_id = 0;
 EXPORT_SYMBOL(asus_hw_id);
@@ -258,9 +255,6 @@ static int set_hw_id(char *str)
 			case 7:
 				asus_hw_id = ASUS_MP;
 #elif defined(ZD552KL_PHOENIX)
-			case 0:
-				asus_hw_id = ASUS_EVB;
-				break;
 			case 1:
 				asus_hw_id = ASUS_SR1;
 				break;
@@ -278,6 +272,12 @@ static int set_hw_id(char *str)
 				break;
 			case 7:
 				asus_hw_id = ASUS_MP;
+				break;
+			case 0:
+				asus_hw_id = ASUS_MP2;
+				break;
+			case 3:
+				asus_hw_id = ASUS_RSRVD;
 #else
 			case 0:
 				asus_hw_id = ASUS_EVB;
@@ -541,12 +541,7 @@ static int __init loglevel(char *str)
 early_param("loglevel", loglevel);
 
 //+++ ASUS_BSP : miniporting : Add for uart / kernel log
-#ifdef  CONFIG_USER_BUILD
 int g_user_klog_mode = 0;
-#else
-int g_user_klog_mode = 1;
-#endif
-
 EXPORT_SYMBOL(g_user_klog_mode);
 
 static int set_user_klog_mode(char *str)
@@ -569,7 +564,7 @@ EXPORT_SYMBOL(g_user_dbg_mode);
 
 static int set_user_dbg_mode(char *str)
 {
-//ASUS_BSP Freeman +++
+//ASUS_BSP younger +++
 	int ret;
 	ret = gpio_request(g_gpio_audio_debug, "AUDIO_DEBUG");
 	if (ret)
@@ -584,15 +579,15 @@ static int set_user_dbg_mode(char *str)
 if ( strcmp("y", str) == 0 )
     {
         g_user_dbg_mode = 1;
-        gpio_direction_output(g_gpio_audio_debug, 0); /* enable uart log, disable audio */
+       gpio_direction_output(g_gpio_audio_debug, 0); /* enable uart log, disable audio */
     }
     else
     {
         g_user_dbg_mode = 0;
-        gpio_direction_output(g_gpio_audio_debug, 1); /* disable uart log, enable audio */
+       gpio_direction_output(g_gpio_audio_debug, 1); /* disable uart log, enable audio */
     }
 
-    //printk("Kernel uart dbg mode = %d\n", g_user_dbg_mode);
+    printk("Kernel uart dbg mode = %d\n", g_user_dbg_mode);
     return 0;
 }
 early_param("dbg", set_user_dbg_mode);
@@ -619,21 +614,10 @@ static int set_user_rtb_mode(char *str)
 early_param("rtb_enable", set_user_rtb_mode);
 //ASUS_BSP Freeman : Add for rtb log  ---
 
-// ASUS_BSP johnchain+++ block disable qpst if qpst=y exists in cmdline when bootup
-int g_origin_qpst_flag = 0;
-static int set_origin_qpst_flag(char *str){
-    if ( strcmp("y", str) == 0 ){
-        g_origin_qpst_flag = 1;
-    }else{
-        g_origin_qpst_flag = 0;
-    }
-    return 0;
-}
-early_param("qpst", set_origin_qpst_flag);
-// ASUS_BSP johnchain+++ block disable qpst if qpst=y exists in cmdline when bootup
 
 /* Change NUL term back to "=", to make "param" the whole string. */
-static int __init repair_env_string(char *param, char *val, const char *unused)
+static int __init repair_env_string(char *param, char *val,
+				    const char *unused, void *arg)
 {
 	if (val) {
 		/* param=val or param="val"? */
@@ -650,14 +634,15 @@ static int __init repair_env_string(char *param, char *val, const char *unused)
 }
 
 /* Anything after -- gets handed straight to init. */
-static int __init set_init_arg(char *param, char *val, const char *unused)
+static int __init set_init_arg(char *param, char *val,
+			       const char *unused, void *arg)
 {
 	unsigned int i;
 
 	if (panic_later)
 		return 0;
 
-	repair_env_string(param, val, unused);
+	repair_env_string(param, val, unused, NULL);
 
 	for (i = 0; argv_init[i]; i++) {
 		if (i == MAX_INIT_ARGS) {
@@ -674,9 +659,10 @@ static int __init set_init_arg(char *param, char *val, const char *unused)
  * Unknown boot options get handed to init, unless they look like
  * unused parameters (modprobe will find them in /proc/cmdline).
  */
-static int __init unknown_bootoption(char *param, char *val, const char *unused)
+static int __init unknown_bootoption(char *param, char *val,
+				     const char *unused, void *arg)
 {
-	repair_env_string(param, val, unused);
+	repair_env_string(param, val, unused, NULL);
 
 	/* Handle obsolete-style parameters */
 	if (obsolete_checksetup(param))
@@ -817,7 +803,8 @@ static noinline void __init_refok rest_init(void)
 }
 
 /* Check for early params. */
-static int __init do_early_param(char *param, char *val, const char *unused)
+static int __init do_early_param(char *param, char *val,
+				 const char *unused, void *arg)
 {
 	const struct obs_kernel_param *p;
 
@@ -836,7 +823,8 @@ static int __init do_early_param(char *param, char *val, const char *unused)
 
 void __init parse_early_options(char *cmdline)
 {
-	parse_args("early options", cmdline, NULL, 0, 0, 0, do_early_param);
+	parse_args("early options", cmdline, NULL, 0, 0, 0, NULL,
+		   do_early_param);
 }
 
 /* Arch code calls this early on, or if not, just before other parsing. */
@@ -940,10 +928,10 @@ asmlinkage __visible void __init start_kernel(void)
 	after_dashes = parse_args("Booting kernel",
 				  static_command_line, __start___param,
 				  __stop___param - __start___param,
-				  -1, -1, &unknown_bootoption);
+				  -1, -1, NULL, &unknown_bootoption);
 	if (!IS_ERR_OR_NULL(after_dashes))
 		parse_args("Setting init args", after_dashes, NULL, 0, -1, -1,
-			   set_init_arg);
+			   NULL, set_init_arg);
 
 	jump_label_init();
 
@@ -974,6 +962,10 @@ asmlinkage __visible void __init start_kernel(void)
 		local_irq_disable();
 	idr_init_cache();
 	rcu_init();
+
+	/* trace_printk() and trace points may be used after this */
+	trace_init();
+
 	context_tracking_init();
 	radix_tree_init();
 	/* init some links before init_ISA_irqs() */
@@ -1248,7 +1240,7 @@ static void __init do_initcall_level(int level)
 		   initcall_command_line, __start___param,
 		   __stop___param - __start___param,
 		   level, level,
-		   &repair_env_string);
+		   NULL, &repair_env_string);
 
 	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
 		do_one_initcall(*fn);
@@ -1262,6 +1254,23 @@ static void __init do_initcalls(void)
 		do_initcall_level(level);
 }
 
+//ASUS BSP++++
+static void setGpio64High(void)
+{
+    int ret = gpio_request(64,"GPIO64");
+    if(ret)
+        printk("setGpio64High : error to gpio_request\n");
+    else
+        printk("setGpio64High : sus to gpio_request\n");
+    ret = gpio_direction_output(64,1);
+    if(ret)
+        printk("setGpio64High : error to gpio_direction_output\n");
+    else
+        printk("setGpio64High : sus to gpio_direction_output\n");
+    gpio_set_value(64, 1); //Set high_level
+}
+//ASUS BSP++
+
 /*
  * Ok, the machine is now initialized. None of the devices
  * have been touched yet, but the CPU subsystem is up and
@@ -1271,15 +1280,20 @@ static void __init do_initcalls(void)
  */
 static void __init do_basic_setup(void)
 {
-	cpuset_init_smp();
-	usermodehelper_init();
-	shmem_init();
-	driver_init();
-	init_irq_proc();
-	do_ctors();
-	usermodehelper_enable();
-	do_initcalls();
-	random_int_secret_init();
+    cpuset_init_smp();
+    usermodehelper_init();
+    shmem_init();
+    driver_init();
+    init_irq_proc();
+    do_ctors();
+    usermodehelper_enable();
+    do_initcalls();
+    random_int_secret_init();
+    //ASUS BSP++++
+    if (asus_project_id == ASUS_ZS550KL) {
+        setGpio64High();
+    }
+    //ASUS BSP---
 }
 
 static void __init do_pre_smp_initcalls(void)
@@ -1325,6 +1339,28 @@ static int try_to_run_init_process(const char *init_filename)
 
 static noinline void __init kernel_init_freeable(void);
 
+#ifdef CONFIG_DEBUG_RODATA
+static bool rodata_enabled = true;
+static int __init set_debug_rodata(char *str)
+{
+	return strtobool(str, &rodata_enabled);
+}
+__setup("rodata=", set_debug_rodata);
+
+static void mark_readonly(void)
+{
+	if (rodata_enabled)
+		mark_rodata_ro();
+	else
+		pr_info("Kernel memory protection disabled.\n");
+}
+#else
+static inline void mark_readonly(void)
+{
+	pr_warn("This architecture does not have kernel memory protection.\n");
+}
+#endif
+
 static int __ref kernel_init(void *unused)
 {
 	int ret;
@@ -1333,7 +1369,7 @@ static int __ref kernel_init(void *unused)
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
 	free_initmem();
-	mark_rodata_ro();
+	mark_readonly();
 	system_state = SYSTEM_RUNNING;
 	numa_default_policy();
 

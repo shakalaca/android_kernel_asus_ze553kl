@@ -142,8 +142,6 @@ source "drivers/staging/Kconfig"
 
 source "drivers/platform/Kconfig"
 
-source "drivers/soc/Kconfig"
-
 source "drivers/clk/Kconfig"
 
 source "drivers/hwspinlock/Kconfig"
@@ -201,19 +199,19 @@ source "drivers/firmware/Kconfig"
 source "drivers/bif/Kconfig"
 
 config TEXURA_USERDEBUG
-	bool "Texura userdebug module for ASUS ZS550KL"
-	depends on NLS_UTF8
-	default n
-	help
-	  Say Y here if you want support Texura userdebug module at ZS550KL
-	  Say N here if you want support Texura user module at ZS550KL
+       bool "Texura userdebug module for ASUS ZS550KL"
+       depends on NLS_UTF8
+       default n
+       help
+         Say Y here if you want support Texura userdebug module at ZS550KL
+         Say N here if you want support Texura user module at ZS550KL
 
 config TEXURA_ARM64
-	bool "Texura userdebug module for QCOM ARM64"
-	depends on NLS_UTF8
-	default n
-	help
-	  Say Y here if you want support Texura userdebug module at QCOM ARM64
-	  Say N here if you want support Texura user module at ACOM ARM32
+       bool "Texura userdebug module for QCOM ARM64"
+       depends on NLS_UTF8
+       default n
+       help
+         Say Y here if you want support Texura userdebug module at QCOM ARM64
+         Say N here if you want support Texura user module at ACOM ARM32
 
 endmenu

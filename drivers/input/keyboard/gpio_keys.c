@@ -340,10 +340,7 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	int state;
 
 	state = (__gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
-#ifdef ZE553KL
-	printk("[Gpio_keys] %s:keycode=%d  state=%s \n",__func__,
-			button->code,state ? "press" : "release");
-#endif
+
 	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
@@ -732,44 +729,6 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 
 #endif
 
-#ifdef ASUS_FACTORY_BUILD//add by stone1_wang for factory build +++
-ssize_t printklog_write (struct file *filp, const char __user *userbuf, size_t size, loff_t *loff_p)
-{
-	char str[128];
-	if(size < 128)
-	{
-		strncpy(str,userbuf,size);
-		str[size]='\0';
-	}
-	else
-	{
-		strncpy(str,userbuf,127);
-		str[127]='\0';
-	}
-	printk(KERN_ERR"[factool log]:%s",str);
-	return size;
-}
-
-struct file_operations printklog_fops = {
-	.write=printklog_write,
-};
-unsigned char fac_wakeup_sign = 0;
-extern void release_wakeup_source(void);
-extern void alarm_irq_disable(void);
-ssize_t fac_sleep_node_write(struct file *filp, const char __user *userbuf, size_t size, loff_t *loff_p)
-{
-	printk(KERN_ERR"[factool log]:fac node cmd:%c\n",userbuf[0]);
-	switch(userbuf[0]) {
-		case '0':fac_wakeup_sign = 0;break;
-		case '1':fac_wakeup_sign = 1;release_wakeup_source();alarm_irq_disable();break;
-	}
-	return size;
-}
-struct file_operations fac_sleep_node_fops = {
-	.write=fac_sleep_node_write,
-};
-#endif					//add by stone1_wang for factory builds ---
-
 static int gpio_keys_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -841,16 +800,6 @@ static int gpio_keys_probe(struct platform_device *pdev)
 			return error;
 		}
 	}
-#ifdef ASUS_FACTORY_BUILD//add by stone1_wang for factory build +++
-	if(proc_create("fac_printklog", 0777, NULL, &printklog_fops)==NULL)
-	{
-		printk(KERN_ERR"create printklog node is error\n");
-	}
-	if(proc_create("fac_sleep_node", 0777, NULL, &fac_sleep_node_fops)==NULL)
-	{
-		printk(KERN_ERR"create fac_sleep_node is error\n");
-	}
-#endif					//add by stone1_wang for factory build ---
 
 	for (i = 0; i < pdata->nbuttons; i++) {
 		const struct gpio_keys_button *button = &pdata->buttons[i];

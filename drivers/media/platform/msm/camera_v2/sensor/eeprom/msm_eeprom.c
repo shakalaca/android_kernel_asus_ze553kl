@@ -1514,7 +1514,8 @@ static int msm_eeprom_config32(struct msm_eeprom_ctrl_t *e_ctrl,
 		(struct msm_eeprom_cfg_data32 *)argp;
 	int rc = 0;
 	size_t length = 0;
-	//CDBG("vicent %s cfgtype:%d E: \n", __func__, cdata->cfgtype);
+
+	CDBG("%s E\n", __func__);
 	switch (cdata->cfgtype) {
 	case CFG_EEPROM_GET_INFO:
 		if (e_ctrl->userspace_probe == 1) {
