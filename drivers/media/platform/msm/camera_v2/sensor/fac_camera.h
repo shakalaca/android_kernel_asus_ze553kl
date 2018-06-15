@@ -77,6 +77,8 @@
 #define REAR_PROC_FILE_PDAF_INFO	"driver/PDAF_value_more_info"
 #define FRONT_PROC_FILE_PDAF_INFO	"driver/PDAF_value_more_info_1"
 
+#define PROC_FILE_CAMERA_RES_INFO	"driver/camera_res"
+
 //for thermal team
 
 //for DIT

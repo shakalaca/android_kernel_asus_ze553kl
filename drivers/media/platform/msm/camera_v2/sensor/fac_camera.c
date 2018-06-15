@@ -2459,6 +2459,185 @@ static void preisp_sframe_id_create_proc_file(void)
 //ASUS_BSP--, LLHDR
 #endif
 
+//camera_res +++
+#ifdef ZE553KL
+static void create_proc_file(const char *PATH,const struct file_operations* f_ops)
+{
+		struct proc_dir_entry *fd;
+		fd = proc_create(PATH, 0666, NULL, f_ops);
+		if(fd)
+		{
+			pr_info("%s(%s) succeeded!\n", __func__,PATH);
+		}
+		else
+		{
+			pr_err("%s(%s) failed!\n", __func__,PATH);
+		}
+}
+
+void camera_res_remove_file(void)
+{
+	  extern struct proc_dir_entry proc_root;
+	  CDBG("sz_cam_fac E\n");
+	  remove_proc_entry(PROC_FILE_CAMERA_RES_INFO, &proc_root);
+}
+
+#define MAX_CAMERA_ID 2
+typedef struct
+{
+	uint16_t id;
+	char     name[8];
+	uint8_t  resolution;//M
+	uint32_t test_reg_addr;//reg to do i2c R/W test
+}sensor_db_t;
+
+static sensor_db_t g_sensor_info[] =
+{
+	{SENSOR_ID_IMX214, "IMX214", 13, 0x0340},
+	//{SENSOR_ID_IMX298, "IMX298", 16, 0x0340},
+	//{SENSOR_ID_IMX351, "IMX351", 16, 0x0340},
+	{SENSOR_ID_IMX362, "IMX362", 12, 0x0340},
+	//{SENSOR_ID_IMX363, "IMX363", 12, 0x0340},
+	//{SENSOR_ID_OV5670, "OV5670", 5, 0x380e},
+	//{SENSOR_ID_OV8856, "OV8856", 8, 0x380e},
+	{SENSOR_ID_S5K3M3, "S5K3M3", 13, 0x0340},
+};
+
+typedef enum
+{
+	DIRECTION_REAR,
+	DIRECTION_FRONT
+}sensor_direct_t;
+
+typedef struct
+{
+	uint16_t         sensor_id;
+	sensor_direct_t  direction;
+}sensor_define_t;
+
+
+static void sort_cam_res(uint8_t* cam_res, int size)
+{
+	int i,j;
+	uint8_t temp;
+	for(i=0;i<size-1;i++)
+	{
+		for(j=0;j<size-1-i;j++)//little to tail
+		{
+			if(cam_res[j]<cam_res[j+1])
+			{
+				temp = cam_res[j];
+				cam_res[j] = cam_res[j+1];
+				cam_res[j+1] = temp;
+			}
+		}
+	}
+}
+
+static uint8_t get_sensor_resolution(uint16_t sensor_id)
+{
+	int i;
+	for(i=0;i<sizeof(g_sensor_info)/sizeof(sensor_db_t);i++)
+	{
+		if(g_sensor_info[i].id == sensor_id)
+		{
+			return g_sensor_info[i].resolution;
+		}
+	}
+	return 0;
+}
+
+static sensor_define_t project_camera[MAX_CAMERA_ID+1] = {
+	{SENSOR_ID_IMX362, DIRECTION_REAR},
+	{SENSOR_ID_IMX214, DIRECTION_FRONT},
+	{SENSOR_ID_S5K3M3, DIRECTION_REAR},
+};
+static char g_sensors_res_string[64];
+
+static void fill_sensors_res_string(void)
+{
+	//asume each side has MAX_CAMERA_ID+1 cameras
+	uint8_t front_cam_res[MAX_CAMERA_ID+1];
+	uint8_t rear_cam_res[MAX_CAMERA_ID+1];
+
+	int i;
+	int front_count=0;
+	int rear_count=0;
+
+	char *p = g_sensors_res_string;
+	int offset = 0;
+
+	memset(front_cam_res,0,sizeof(front_cam_res));
+	memset(rear_cam_res,0,sizeof(rear_cam_res));
+
+	for(i=0;i<MAX_CAMERA_ID+1;i++)
+	{
+		if(project_camera[i].direction == DIRECTION_FRONT)
+		{
+			front_cam_res[front_count++] = get_sensor_resolution(project_camera[i].sensor_id);
+		}
+		else if(project_camera[i].direction == DIRECTION_REAR)
+		{
+			rear_cam_res[rear_count++] = get_sensor_resolution(project_camera[i].sensor_id);
+		}
+	}
+
+	sort_cam_res(front_cam_res,front_count);
+	sort_cam_res(rear_cam_res,rear_count);
+
+	//format: front0+front1+...+frontN-rear0+rear2+...+rearN
+	for(i=0;i<front_count;i++)
+	{
+		if(i==0)
+			offset+=sprintf(p+offset, "%dM",front_cam_res[i]);
+		else
+			offset+=sprintf(p+offset, "+%dM",front_cam_res[i]);
+	}
+
+	for(i=0;i<rear_count;i++)
+	{
+		if(i==0)
+			offset+=sprintf(p+offset, "-%dM",rear_cam_res[i]);
+		else
+			offset+=sprintf(p+offset, "+%dM",rear_cam_res[i]);
+	}
+
+	offset+=sprintf(p+offset,"\n");
+}
+
+static int sensors_res_proc_read(struct seq_file *buf, void *v)
+{
+	seq_printf(buf, "%s",g_sensors_res_string);
+	return 0;
+}
+
+static int sensors_res_proc_open(struct inode *inode, struct  file *file)
+{
+	return single_open(file, sensors_res_proc_read, NULL);
+}
+
+static struct file_operations sensors_res_fops = {
+	.owner = THIS_MODULE,
+	.open = sensors_res_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static void sensors_res_create(void)
+{
+	static uint8_t has_created = 0;
+	fill_sensors_res_string();
+	if(!has_created)
+	{
+		create_proc_file(PROC_FILE_CAMERA_RES_INFO,&sensors_res_fops);
+		has_created = 1;
+	}
+}
+
+//camera_res ---
+#endif
+
 void create_sensor_proc_files(struct msm_sensor_ctrl_t *s_ctrl,struct msm_camera_sensor_slave_info *slave_info)
 {
 	static int first_init=1;
@@ -2481,6 +2660,9 @@ void create_sensor_proc_files(struct msm_sensor_ctrl_t *s_ctrl,struct msm_camera
 	otp_create_proc_files(slave_info);
 	eeprom_thermal_create_proc_files(slave_info);
 	arcsoft_dualCali_create_proc_file(slave_info);
+#ifdef ZE553KL
+	sensors_res_create();
+#endif
 #ifdef ZD552KL_PHOENIX
 	iface_process_frame_id_create_proc_file();
 //ASUS_BSP++, LLHDR
@@ -2505,6 +2687,9 @@ void remove_sensor_proc_files(struct msm_sensor_ctrl_t *s_ctrl)
 	status_remove_sysfs_files(s_ctrl);
 	module_remove_proc_files(s_ctrl);
 	thermal_remove_proc_files(s_ctrl);
+#ifdef ZE553KL
+	camera_res_remove_file();
+#endif
 }
 //asus bsp ralf:porting camera sensor related proc files<<
 
