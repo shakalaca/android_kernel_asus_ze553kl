@@ -5,9 +5,9 @@ ccflags-y += -Idrivers/media/platform/msm/camera_v2/camera
 ccflags-y += -Idrivers/media/platform/msm/camera_v2/sensor/io
 ccflags-y += -Idrivers/media/platform/msm/camera_v2/sensor/cci
 obj-$(CONFIG_MSMB_CAMERA) += cci/ io/ csiphy/ csid/ actuator/ eeprom/ flash/ #ois/ ir_led/ ir_cut/
-ifeq ($(TARGET_PRODUCT), Z01H)
+#ifeq ($(TARGET_PRODUCT), Z01H)
 obj-$(CONFIG_MSMB_CAMERA) += ois-rumba/ laser_focus/
-endif
+#endif
 ifeq ($(TARGET_PRODUCT), Z018)
 obj-$(CONFIG_MSMB_CAMERA) += ois/ laser_focus/
 endif
