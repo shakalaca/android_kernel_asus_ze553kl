@@ -816,6 +816,18 @@ int fat_sync_inode(struct inode *inode)
 
 EXPORT_SYMBOL_GPL(fat_sync_inode);
 
+
+static int fat_sync_fs (struct super_block *sb,int wait)
+{
+	printk("fat_sops: %s entry!\n",__func__);
+	mutex_lock(&MSDOS_SB(sb)->s_lock);
+	fat_clusters_flush(sb);
+        mutex_unlock(&MSDOS_SB(sb)->s_lock);
+	return 0;
+}
+
+
+
 static int fat_show_options(struct seq_file *m, struct dentry *root);
 static const struct super_operations fat_sops = {
 	.alloc_inode	= fat_alloc_inode,
@@ -824,6 +836,7 @@ static const struct super_operations fat_sops = {
 	.evict_inode	= fat_evict_inode,
 	.put_super	= fat_put_super,
 	.statfs		= fat_statfs,
+	.sync_fs           = fat_sync_fs,
 	.remount_fs	= fat_remount,
 
 	.show_options	= fat_show_options,

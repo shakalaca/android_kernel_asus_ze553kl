@@ -53,6 +53,8 @@ int asus_charge_type;
 struct smbchg_chip *the_chip;
 int otgdcp;
 int otgoc_count;
+bool g_ubatterylife_enable_flag = 0;
+struct delayed_work charging_limit_work;
 
 bool charger_limit_enable;
 bool chg_limit_charge_flag;	
@@ -9254,9 +9256,69 @@ static bool Check_ADF_Value(void)
 //<asus demonapp>
 #endif
 
+#define CHGLimit_PATH "/cache/charger/CHGLimit_kernel"
+static bool check_ultrabatterylife_enable(void)
+{
+	struct file *fp = NULL;
+	mm_segment_t old_fs;
+	loff_t pos_lsts = 0;
+	int count = 5;
+	char buf[8] = "";
+	int l_result = -1;
+
+retry_open:
+	fp = filp_open(CHGLimit_PATH, O_RDONLY, 0);
+	if (IS_ERR_OR_NULL(fp)) {
+		if(--count > 0){
+			msleep(50);
+			goto retry_open;
+		}
+		pr_err("open (%s) fail\n", CHGLimit_PATH);
+		return false;	/*No such file or directory*/
+	}
+
+	/*For purpose that can use read/write system call*/
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	vfs_read(fp,buf,6,&pos_lsts);
+
+	set_fs(old_fs);
+	filp_close(fp, NULL);
+
+	sscanf(buf, "%d", &l_result);
+	pr_info("%s: %d",__func__, l_result);
+
+	if(l_result == 1){
+		return true;
+	}else{
+		return false;
+	}
+}
+
+void update_ubatterylife_info(void){
+	bool prev_ubat_flag = g_ubatterylife_enable_flag;
+	g_ubatterylife_enable_flag = check_ultrabatterylife_enable();
+
+	if(prev_ubat_flag == g_ubatterylife_enable_flag)
+		return;
+
+	// handle ubatterylife cancel
+	if(prev_ubat_flag && !g_ubatterylife_enable_flag) {
+		charger_limit_enable = false;
+		charger_flag = true;
+		cancel_delayed_work(&charging_limit_work);
+		vote(the_chip->battchg_suspend_votable, DEMO_APP_VOTER, 0, 0);
+		vote(the_chip->usb_suspend_votable, DEMO_APP_USB_VOTER, 0, 0);
+	}
+
+	if(g_ubatterylife_enable_flag)
+		pr_info("ultrabatterylife triggered\n");
+}
+//ASUS_BSP ---
+
 #define	CHARGING_LIMIT_PROC_FILE "driver/charging_limit"
 
-struct delayed_work charging_limit_work;
 void charger_limit_update_work(int time)
 {
 		cancel_delayed_work(&charging_limit_work);
@@ -9289,14 +9351,18 @@ static ssize_t charger_limit_proc_write(struct file *filp, const char __user *bu
 		charger_limit_setting=10;
 	else if(charger_limit_setting>100)
 		charger_limit_setting=100;
+
+	if(!charger_limit_enable){ //demo app not work can start ubatterylife
+		update_ubatterylife_info();
+	}
 	
 	pr_info("[Charger]%s charger_limit_setting=%d charger_limit_enable=%d\n",__FUNCTION__,charger_limit_setting,charger_limit_enable);
-	if (charger_limit_enable)
+	if (charger_limit_enable || g_ubatterylife_enable_flag)
 		charger_limit_update_work(0);
 	else{
 		cancel_delayed_work(&the_chip->asus_batt_temp_work);
 		schedule_delayed_work(&the_chip->asus_batt_temp_work,0*HZ);
-		}
+	}
 
 	return len;
 }
@@ -9414,7 +9480,7 @@ void asus_battery_charging_limit(struct work_struct *dat)
 	static bool enable_usb_suspend = false;
 	printk("[%s],charger_limit_enable = %d,charger_limit_setting=%d\n",__FUNCTION__,charger_limit_enable,charger_limit_setting);
 	percentage = get_prop_batt_capacity(the_chip);
-	if (charger_limit_enable) {
+	if (charger_limit_enable || g_ubatterylife_enable_flag) {
 			if (percentage < charger_limit_setting-5) {
 				charger_flag = true;
 			}else if(percentage > charger_limit_setting){//if percentage>60 usb suspend
